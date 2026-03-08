@@ -1,0 +1,117 @@
+<div class="page-header">
+  <div>
+    <h1>Comunicazione</h1>
+    <p class="subtitle">Genera il link di prenotazione e configura le tue tariffe</p>
+  </div>
+</div>
+
+<div class="comm-grid">
+
+  <!-- Link generator -->
+  <section class="card">
+    <h2>Link di prenotazione</h2>
+
+    <div class="alert-info" *ngIf="!musicianCode">
+      ⚠ Completa prima il <a routerLink="/profile">profilo musicista</a> per ottenere il tuo codice univoco.
+    </div>
+
+    <div class="link-box" *ngIf="musicianCode">
+      <div class="link-code">
+        <span class="link-label">Il tuo link di prenotazione:</span>
+        <div class="link-value">{{ bookingLink }}</div>
+      </div>
+      <div class="share-buttons">
+        <button class="share-btn copy" (click)="copyLink()">
+          {{ copied ? '✓ Copiato!' : '📋 Copia link' }}
+        </button>
+        <button class="share-btn whatsapp" (click)="shareWhatsApp()">
+          💬 WhatsApp
+        </button>
+        <button class="share-btn native" (click)="shareNative()">
+          🔗 Condividi
+        </button>
+      </div>
+    </div>
+
+    <div class="preview-box">
+      <div class="preview-header">👁 Anteprima form cliente</div>
+      <div class="preview-body">
+        <div class="preview-field"><label>Nome</label><div class="preview-input">Mario Rossi</div></div>
+        <div class="preview-field"><label>Email</label><div class="preview-input">mario&#64;email.com</div></div>
+        <div class="preview-field"><label>Data richiesta</label><div class="preview-input">15/04/2025</div></div>
+        <div class="preview-field"><label>Tipo evento</label><div class="preview-input">Serata privata</div></div>
+        <div class="preview-field span-2"><label>Messaggio</label><div class="preview-input preview-textarea">Ciao, ti vorrei contattare per una serata...</div></div>
+        <div class="preview-actions">
+          <div class="preview-btn">Invia richiesta →</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section class="card" [formGroup]="settingsForm">
+    <h2>Impostazioni tariffe e disponibilità</h2>
+
+    <div class="settings-group">
+      <h3>💶 Tariffa serata</h3>
+      <div class="row">
+        <label>Minimo (€)
+          <input type="number" formControlName="minFee" min="0" step="50">
+        </label>
+        <label>Massimo (€)
+          <input type="number" formControlName="maxFee" min="0" step="50">
+        </label>
+      </div>
+      <label>Note sulla tariffa
+        <textarea formControlName="feeNotes" rows="2"
+          placeholder="es. Prezzi variabili in base alla durata e al tipo di evento"></textarea>
+      </label>
+    </div>
+
+    <div class="settings-group">
+      <h3>📅 Disponibilità</h3>
+      <div class="check-row">
+        <label class="check-label">
+          <input type="checkbox" formControlName="availWeekdays">
+          <span>Giorni feriali</span>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" formControlName="availWeekends">
+          <span>Weekend (Sab/Dom)</span>
+        </label>
+      </div>
+      <div class="row">
+        <label>Dalle
+          <input type="time" formControlName="availTimeFrom">
+        </label>
+        <label>Alle
+          <input type="time" formControlName="availTimeTo">
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>👤 Visibilità profilo</h3>
+      <div class="check-row">
+        <label class="check-label">
+          <input type="checkbox" formControlName="showInstrument">
+          <span>Mostra strumento</span>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" formControlName="showStyles">
+          <span>Mostra stili musicali</span>
+        </label>
+      </div>
+    </div>
+
+    <label>Messaggio personalizzato
+      <textarea formControlName="customMessage" rows="3"
+        placeholder="Messaggio di benvenuto mostrato nel form di prenotazione..."></textarea>
+    </label>
+
+    <button class="btn-primary" (click)="saveSettings()">
+      {{ saved ? '✓ Salvato!' : 'Salva impostazioni' }}
+    </button>
+  </section>
+
+</div>

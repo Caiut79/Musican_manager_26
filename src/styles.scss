@@ -1,0 +1,106 @@
+@use "sass:color";
+
+:root {
+  --color-lesson: #2e7d32;
+  --color-concert: #1565c0;
+
+  /* Design system */
+  --clr-primary: #7c3aed;
+  --clr-primary-hover: #6d28d9;
+  --clr-primary-light: #ede9fe;
+  --clr-primary-ring: rgba(167, 139, 250, 0.18);
+
+  --clr-success: #059669;
+  --clr-success-light: #ecfdf5;
+  --clr-success-ring: rgba(5, 150, 105, 0.15);
+
+  --clr-danger: #dc2626;
+  --clr-danger-light: #fef2f2;
+  --clr-danger-ring: rgba(220, 38, 38, 0.12);
+
+  --bg: #f5f3ff;
+  --surface: #ffffff;
+  --border: #e5e7eb;
+  --border-focus: #a78bfa;
+
+  --text: #111827;
+  --text-muted: #6b7280;
+  --text-light: #9ca3af;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 8px 16px -4px rgba(0, 0, 0, 0.08);
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --transition: 0.15s ease;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* Global focus ring for inputs */
+input:not([type='checkbox']):not([type='color']):not([type='radio']),
+select,
+textarea {
+  font-family: inherit;
+  font-size: 14px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--border-focus) !important;
+    box-shadow: 0 0 0 3px var(--clr-primary-ring) !important;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+/* Badge classes (used by agenda) */
+.agenda-badge-lesson {
+  background: var(--color-lesson);
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.agenda-badge-concert {
+  background: var(--color-concert);
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}

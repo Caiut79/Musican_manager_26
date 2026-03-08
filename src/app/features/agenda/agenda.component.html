@@ -1,0 +1,73 @@
+<div class="page-header">
+  <div class="page-header-left">
+    <h1>Agenda</h1>
+    <p class="subtitle">Gestisci lezioni e concerti</p>
+  </div>
+  <a routerLink="/" class="btn-outline">← Profilo</a>
+</div>
+
+<!-- Legend -->
+<div class="legend-bar">
+  <span class="legend-item">
+    <span class="legend-dot" [style.background]="lessonColor"></span>
+    Lezioni
+  </span>
+  <span class="legend-item">
+    <span class="legend-dot" [style.background]="concertColor"></span>
+    Concerti
+  </span>
+  <span class="legend-hint">I colori si personalizzano nel profilo</span>
+</div>
+
+<!-- Add event form -->
+<section class="add-section">
+  <h2>Aggiungi evento</h2>
+  <form [formGroup]="form" (ngSubmit)="add()">
+    <div class="form-row">
+      <label>Titolo
+        <input type="text" formControlName="title" placeholder="es. Lezione con Mario">
+      </label>
+      <label>Data
+        <input type="date" formControlName="date">
+      </label>
+      <label>Tipo
+        <select formControlName="type">
+          <option value="lesson">Lezione</option>
+          <option value="concert">Concerto</option>
+        </select>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">+ Aggiungi</button>
+    </div>
+  </form>
+</section>
+
+<!-- Events list -->
+<section class="events-section">
+  <h2>
+    Eventi
+    <span class="events-count" *ngIf="events.length > 0">{{ events.length }}</span>
+  </h2>
+
+  <div class="empty-state" *ngIf="events.length === 0">
+    <span class="empty-icon">📅</span>
+    <p>Nessun evento aggiunto</p>
+  </div>
+
+  <div class="events-list">
+    <div class="event-card" *ngFor="let e of events">
+      <div class="event-accent" [ngStyle]="{ background: e.type === 'lesson' ? lessonColor : concertColor }"></div>
+      <div class="event-body">
+        <div class="event-title">{{ e.title }}</div>
+        <div class="event-meta">
+          <span class="event-date">{{ e.date }}</span>
+          <span class="event-badge"
+            [ngStyle]="{ background: e.type === 'lesson' ? lessonColor : concertColor }">
+            {{ e.type === 'lesson' ? 'Lezione' : 'Concerto' }}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

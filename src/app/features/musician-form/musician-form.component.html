@@ -1,0 +1,316 @@
+<div class="page-header">
+  <h1>Profilo musicista</h1>
+  <p class="subtitle">Configura il tuo profilo e i dati fiscali</p>
+</div>
+
+<form [formGroup]="form" (ngSubmit)="submit()">
+
+  <!-- Stepper -->
+  <div class="stepper">
+    <button type="button" class="step" *ngFor="let step of steps; index as i"
+      [class.active]="i === currentStep"
+      [class.done]="i < currentStep"
+      (click)="goToStep(i)">
+      <span class="step-circle">
+        <span *ngIf="i >= currentStep">{{ i + 1 }}</span>
+        <span *ngIf="i < currentStep">✓</span>
+      </span>
+      <span class="step-label">{{ step }}</span>
+    </button>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="progress">
+    <div class="progress-bar" [style.width.%]="progressPercent"></div>
+  </div>
+
+  <!-- ── Step 0: Anagrafica ── -->
+  <section *ngIf="currentStep === 0">
+    <h2>Dati anagrafici</h2>
+    <div class="row">
+      <label>Nome *
+        <input type="text" formControlName="firstName" placeholder="es. Marco" [class.invalid]="controlInvalid('firstName')">
+        <small class="field-error" *ngIf="controlInvalid('firstName')">Campo obbligatorio</small>
+      </label>
+      <label>Cognome *
+        <input type="text" formControlName="lastName" placeholder="es. Rossi" [class.invalid]="controlInvalid('lastName')">
+        <small class="field-error" *ngIf="controlInvalid('lastName')">Campo obbligatorio</small>
+      </label>
+      <label>Telefono
+        <input type="tel" formControlName="phone" placeholder="es. +39 333 1234567">
+      </label>
+      <label>Codice fiscale
+        <input type="text" formControlName="fiscalCode" placeholder="es. RSSMRC80A01H501Z" class="uppercase-input">
+      </label>
+      <label>Data di nascita
+        <input type="date" formControlName="birthDate">
+      </label>
+      <label>Luogo di nascita
+        <input type="text" formControlName="birthPlace" placeholder="es. Milano (MI)">
+      </label>
+      <label>Residenza
+        <input type="text" formControlName="residence" placeholder="es. Via Roma 1, Milano">
+      </label>
+      <label>Luogo di partenza (homeBase)
+        <input type="text" formControlName="homeBase" placeholder="es. Milano">
+      </label>
+    </div>
+  </section>
+
+  <!-- ── Step 1: Profilo musicale ── -->
+  <section *ngIf="currentStep === 1">
+    <h2>Profilo musicale</h2>
+    <div class="row">
+      <label>Strumento principale
+        <select formControlName="instrument">
+          <option value="">Seleziona strumento</option>
+          <option *ngFor="let s of instruments" [value]="s">{{ s }}</option>
+        </select>
+      </label>
+      <label>Livello
+        <select formControlName="level">
+          <option value="">Seleziona livello</option>
+          <option *ngFor="let l of levels" [value]="l">{{ l }}</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <label>Stili suonati
+        <span class="field-hint">Tieni premuto Ctrl per selezionare più stili</span>
+        <select formControlName="stylesPlayed" multiple size="6">
+          <option *ngFor="let st of styles" [value]="st">{{ st }}</option>
+        </select>
+      </label>
+      <label>Stili per ricerca
+        <span class="field-hint">Stili con cui vuoi essere trovato</span>
+        <select formControlName="searchableStyles" multiple size="6">
+          <option *ngFor="let st of styles" [value]="st">{{ st }}</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <!-- ── Step 2: Social ── -->
+  <section *ngIf="currentStep === 2">
+    <h2>Profili social</h2>
+    <div class="row">
+      <label>Instagram
+        <input type="text" formControlName="instagram" placeholder="&#64;nomeutente">
+      </label>
+      <label>Facebook
+        <input type="text" formControlName="facebook" placeholder="Profilo o pagina">
+      </label>
+      <label>YouTube
+        <input type="text" formControlName="youtube" placeholder="Canale YouTube">
+      </label>
+      <label>TikTok
+        <input type="text" formControlName="tiktok" placeholder="&#64;nomeutente">
+      </label>
+      <label>Sito web
+        <input type="text" formControlName="website" placeholder="https://...">
+      </label>
+    </div>
+  </section>
+
+  <!-- ── Step 3: ENPALS & Fiscale ── -->
+  <section *ngIf="currentStep === 3">
+    <h2>Posizione ENPALS (Gestione Spettacolo INPS)</h2>
+    <div class="row">
+      <label class="span-2">Categoria
+        <select formControlName="empalsPosition">
+          <option *ngFor="let c of enpalsCategories" [value]="c.value">{{ c.label }}</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="section-divider"></div>
+    <h2>Tipo di attività</h2>
+    <p class="field-hint field-hint-spaced">Seleziona come operi professionalmente come musicista</p>
+
+    <div class="worker-type-grid">
+      <label class="worker-card" [class.selected]="workerType === 'cooperativa'">
+        <input type="radio" formControlName="workerType" value="cooperativa">
+        <span class="wc-icon">🏢</span>
+        <span class="wc-title">Cooperativa</span>
+        <span class="wc-desc">Lavoro attraverso una cooperativa di musica/spettacolo</span>
+      </label>
+      <label class="worker-card" [class.selected]="workerType === 'libero_professionista'">
+        <input type="radio" formControlName="workerType" value="libero_professionista">
+        <span class="wc-icon">💼</span>
+        <span class="wc-title">Libero professionista</span>
+        <span class="wc-desc">Ho partita IVA e fattura direttamente le serate</span>
+      </label>
+      <label class="worker-card" [class.selected]="workerType === 'insegnante_piva'">
+        <input type="radio" formControlName="workerType" value="insegnante_piva">
+        <span class="wc-icon">🎓</span>
+        <span class="wc-title">Insegnante + serate</span>
+        <span class="wc-desc">Uso la stessa P.IVA per lezioni e serate dal vivo</span>
+      </label>
+      <label class="worker-card" [class.selected]="workerType === 'esente'">
+        <input type="radio" formControlName="workerType" value="esente">
+        <span class="wc-icon">🛡</span>
+        <span class="wc-title">Esente ENPALS</span>
+        <span class="wc-desc">Ho un altro lavoro principale che versa contributi INPS</span>
+      </label>
+    </div>
+
+    <!-- Info boxes per tipo -->
+    <div class="info-box info-blue" *ngIf="workerType === 'cooperativa'">
+      <h4>🏢 Cooperativa di spettacolo</h4>
+      <p>La cooperativa è il tuo datore di lavoro e gestisce i contributi ENPALS:</p>
+      <ul>
+        <li>Contributo a carico del <strong>lavoratore</strong>: ~9,19% del lordo</li>
+        <li>Contributo a carico della <strong>cooperativa</strong>: ~24% del lordo</li>
+        <li>Totale Gestione Spettacolo INPS: circa 33% del lordo</li>
+      </ul>
+    </div>
+
+    <div class="info-box info-green" *ngIf="workerType === 'libero_professionista'">
+      <h4>💼 Libero professionista con P.IVA</h4>
+      <p>Come libero professionista nel settore spettacolo:</p>
+      <ul>
+        <li>Richiedi l'<strong>agibilità INPS</strong> per ogni scrittura</li>
+        <li>Contributi Gestione Spettacolo INPS: ~33% del compenso lordo</li>
+        <li>IVA 22% sulle fatture (o regime forfettario se idoneo)</li>
+      </ul>
+    </div>
+
+    <div class="info-box info-amber" *ngIf="workerType === 'insegnante_piva'">
+      <h4>🎓 Insegnante con P.IVA (doppio uso)</h4>
+      <p>Se usi la stessa P.IVA per lezioni e serate:</p>
+      <ul>
+        <li>Verifica con il commercialista che il codice ATECO copra anche le esibizioni</li>
+        <li><strong>Regime forfettario</strong>: nessuna IVA, imposta sostitutiva 5–15%</li>
+        <li>Obbligatoria l'iscrizione ENPALS se superi le prestazioni occasionali</li>
+        <li>Considera di separare l'attività di insegnamento da quella artistica</li>
+      </ul>
+    </div>
+
+    <!-- ── Sezione esente ── -->
+    <div *ngIf="workerType === 'esente'">
+      <div class="info-box info-purple">
+        <h4>🛡 Esenzione ENPALS (agibilità in esenzione)</h4>
+        <p>Se hai un contratto di lavoro dipendente (o sei pensionato INPS) puoi esibirti presentando il <strong>modulo di esenzione agibilità</strong> per ogni serata. Non versi contributi ENPALS sull'evento.</p>
+        <ul>
+          <li>Nessun contributo ENPALS sull'esibizione singola</li>
+          <li>Compenso soggetto a ritenuta d'acconto 20% (se supera soglia)</li>
+          <li>Il modulo firmato va consegnato all'organizzatore prima dell'esibizione</li>
+        </ul>
+      </div>
+
+      <div class="section-divider"></div>
+      <h2>Dati per il modulo di esenzione</h2>
+
+      <div class="row">
+        <label>Datore di lavoro principale
+          <input type="text" formControlName="exemptEmployer"
+            placeholder="es. Comune di Milano / Istituto Comprensivo…">
+        </label>
+        <label>Tipo di rapporto
+          <select formControlName="exemptEmployerType">
+            <option value="dipendente">Lavoratore dipendente</option>
+            <option value="pensionato">Pensionato INPS</option>
+            <option value="altro">Altro rapporto INPS</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row inps-extra">
+        <label>Numero tessera / matricola INPS
+          <input type="text" formControlName="inpsNumber" placeholder="Opzionale">
+        </label>
+        <label>Validità dal
+          <input type="date" formControlName="inpsStartDate">
+        </label>
+        <label>Validità al
+          <input type="date" formControlName="inpsEndDate">
+        </label>
+      </div>
+
+      <div class="section-divider"></div>
+
+      <!-- Signature pad -->
+      <div class="signature-section">
+        <h3>✍ Firma digitale</h3>
+        <p class="field-hint">La firma viene inserita automaticamente nei PDF del modulo di esenzione generati per ogni serata</p>
+        <div class="sig-wrapper">
+          <canvas #sigCanvas class="sig-canvas"
+            width="560" height="160"
+            (mousedown)="onSigMouseDown($event)"
+            (mousemove)="onSigMouseMove($event)"
+            (mouseup)="onSigMouseUp()"
+            (mouseleave)="onSigMouseUp()"
+            (touchstart)="onSigTouchStart($event)"
+            (touchmove)="onSigTouchMove($event)"
+            (touchend)="onSigTouchEnd()">
+          </canvas>
+        </div>
+        <p class="sig-hint">☝️ Disegna la firma nel riquadro con mouse o dito</p>
+        <div class="sig-actions">
+          <button type="button" class="btn-ghost" (click)="clearSignature()">✕ Cancella</button>
+          <button type="button" class="btn-outline" (click)="saveSignature()">
+            {{ signatureSaved ? '✓ Firma salvata' : '💾 Salva firma' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Step 4: Ruolo ── -->
+  <section *ngIf="currentStep === 4">
+    <h2>Ruolo</h2>
+    <div class="check-row">
+      <label class="check-label">
+        <input type="checkbox" formControlName="isTeacher">
+        <span>Sono anche insegnante</span>
+      </label>
+    </div>
+    <div class="row color-row" *ngIf="isTeacher">
+      <div class="color-field">
+        <label for="lessonColorInput">Colore lezioni</label>
+        <div class="color-input-group">
+          <input id="lessonColorInput" type="color" formControlName="lessonColor">
+          <span class="color-name">Colore per le lezioni in agenda</span>
+        </div>
+      </div>
+      <div class="color-field">
+        <label for="concertColorInput">Colore concerti</label>
+        <div class="color-input-group">
+          <input id="concertColorInput" type="color" formControlName="concertColor">
+          <span class="color-name">Colore per i concerti in agenda</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button type="button" class="btn-ghost" *ngIf="currentStep > 0" (click)="prevStep()">
+      ← Indietro
+    </button>
+    <button type="button" class="btn-primary" *ngIf="currentStep < steps.length - 1" (click)="nextStep()">
+      Avanti →
+    </button>
+    <button type="submit" class="btn-primary" *ngIf="currentStep === steps.length - 1"
+      [disabled]="submitting || form.invalid">
+      {{ submitting ? 'Salvataggio…' : 'Salva profilo' }}
+    </button>
+    <button type="button" class="btn-outline" (click)="goAgenda()">
+      Apri agenda
+    </button>
+  </div>
+
+  <!-- Feedback -->
+  <div class="result-box success" *ngIf="resultCode">
+    <span class="result-icon">✓</span>
+    <div>
+      <strong>Profilo salvato!</strong><br>
+      Codice identificativo: <strong>{{ resultCode }}</strong>
+    </div>
+  </div>
+  <div class="result-box error" *ngIf="error">
+    <span class="result-icon">✕</span>
+    <div>{{ error }}</div>
+  </div>
+
+</form>

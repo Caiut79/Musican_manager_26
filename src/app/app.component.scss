@@ -1,0 +1,87 @@
+/* ── Sidebar widths ── */
+$sidebar-w: 240px;
+$sidebar-w-collapsed: 64px;
+$mobile-header-h: 52px;
+
+/* ── Main layout: offset to the right of the sidebar ── */
+.app-layout {
+  margin-left: $sidebar-w;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: margin-left 0.25s ease;
+
+  &.sidebar-collapsed {
+    margin-left: $sidebar-w-collapsed;
+  }
+}
+
+/* ── Mobile: no margin (sidebar is overlay) ── */
+@media (max-width: 767px) {
+  .app-layout {
+    margin-left: 0 !important;
+  }
+}
+
+/* ── Mobile top bar ── */
+.mobile-header {
+  display: none; /* hidden on desktop */
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: $mobile-header-h;
+  background: #2d1b69;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+
+  @media (max-width: 767px) {
+    display: flex;
+  }
+}
+
+.mobile-brand {
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Hamburger button */
+.hamburger {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+
+  span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 2px;
+    transition: all 0.15s ease;
+  }
+
+  &:hover span {
+    background: #fff;
+  }
+}
+
+/* ── Content area ── */
+.app-content {
+  flex: 1;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px;
+
+  @media (max-width: 767px) {
+    padding: 20px 16px;
+  }
+}

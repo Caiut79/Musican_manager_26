@@ -1,0 +1,100 @@
+<div class="page-header">
+  <div>
+    <h1>Contabilità</h1>
+    <p class="subtitle">Riepilogo entrate e spese per periodo</p>
+  </div>
+  <select class="period-select" [(ngModel)]="selectedPeriod" *ngIf="periods.length > 0">
+    <option value="">Tutto il periodo</option>
+    <option *ngFor="let p of periods" [value]="p.value">{{ p.label }}</option>
+  </select>
+</div>
+
+<!-- Summary cards -->
+<div class="summary-grid">
+  <div class="summary-card income">
+    <span class="summary-icon">💶</span>
+    <div>
+      <div class="summary-label">Totale lordo</div>
+      <div class="summary-value">{{ totalGross | currency:'EUR':'symbol':'1.0-0' }}</div>
+    </div>
+  </div>
+  <div class="summary-card net">
+    <span class="summary-icon">💰</span>
+    <div>
+      <div class="summary-label">Totale netto</div>
+      <div class="summary-value">{{ totalNet | currency:'EUR':'symbol':'1.0-0' }}</div>
+    </div>
+  </div>
+  <div class="summary-card expense">
+    <span class="summary-icon">🗺️</span>
+    <div>
+      <div class="summary-label">Totale spese</div>
+      <div class="summary-value">{{ totalExpenses | currency:'EUR':'symbol':'1.0-2' }}</div>
+    </div>
+  </div>
+  <div class="summary-card balance" [class.positive]="balance >= 0" [class.negative]="balance < 0">
+    <span class="summary-icon">⚖️</span>
+    <div>
+      <div class="summary-label">Bilancio netto</div>
+      <div class="summary-value">{{ balance | currency:'EUR':'symbol':'1.0-2' }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="tables-grid">
+  <!-- Events -->
+  <section class="card">
+    <h2>Entrate ({{ filteredEvents.length }} eventi)</h2>
+    <div class="empty-state" *ngIf="filteredEvents.length === 0">
+      <span>📭</span><p>Nessun evento in questo periodo</p>
+    </div>
+    <table *ngIf="filteredEvents.length > 0">
+      <thead>
+        <tr>
+          <th>Data</th><th>Titolo</th><th>Lordo</th><th>Netto</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let e of filteredEvents">
+          <td class="date-cell">{{ formatDate(e.date) }}</td>
+          <td>{{ e.title }}</td>
+          <td class="amount">{{ e.grossFee | currency:'EUR':'symbol':'1.0-0' }}</td>
+          <td class="amount income-cell">{{ e.netFee | currency:'EUR':'symbol':'1.0-0' }}</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2" class="total-label">Totale</td>
+          <td class="amount">{{ totalGross | currency:'EUR':'symbol':'1.0-0' }}</td>
+          <td class="amount income-cell">{{ totalNet | currency:'EUR':'symbol':'1.0-0' }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </section>
+
+  <!-- Expenses -->
+  <section class="card">
+    <h2>Uscite ({{ filteredExpenses.length }} spese)</h2>
+    <div class="empty-state" *ngIf="filteredExpenses.length === 0">
+      <span>📭</span><p>Nessuna spesa in questo periodo</p>
+    </div>
+    <table *ngIf="filteredExpenses.length > 0">
+      <thead>
+        <tr><th>Data</th><th>Percorso</th><th>Totale</th></tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let ex of filteredExpenses">
+          <td class="date-cell">{{ formatDate(ex.date) }}</td>
+          <td class="route-cell">{{ ex.origin }} → {{ ex.destination }}</td>
+          <td class="amount expense-cell">{{ ex.totalExpense | currency:'EUR':'symbol':'1.2-2' }}</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2" class="total-label">Totale</td>
+          <td class="amount expense-cell">{{ totalExpenses | currency:'EUR':'symbol':'1.2-2' }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </section>
+</div>

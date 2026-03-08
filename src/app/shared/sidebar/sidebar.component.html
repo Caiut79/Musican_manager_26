@@ -1,0 +1,30 @@
+<!-- Mobile overlay backdrop -->
+<div class="sidebar-backdrop" *ngIf="mobileOpen" (click)="sidebarClose.emit()"></div>
+
+<!-- Sidebar panel -->
+<aside class="sidebar" [class.collapsed]="collapsed" [class.mobile-open]="mobileOpen">
+
+  <!-- Header -->
+  <div class="sidebar-header">
+    <span class="brand-icon">♪</span>
+    <span class="brand-name" *ngIf="!collapsed">Musicista</span>
+    <button type="button" class="toggle-btn" (click)="sidebarToggle.emit()" title="Comprimi menu">
+      <span>{{ collapsed ? '▶' : '◀' }}</span>
+    </button>
+  </div>
+
+  <!-- Nav -->
+  <nav class="sidebar-nav">
+    <a
+      *ngFor="let item of navItems"
+      [routerLink]="item.route"
+      routerLinkActive="active"
+      class="nav-item"
+      [title]="collapsed ? item.label : ''"
+      (click)="sidebarClose.emit()">
+      <span class="nav-icon">{{ item.icon }}</span>
+      <span class="nav-label" *ngIf="!collapsed">{{ item.label }}</span>
+    </a>
+  </nav>
+
+</aside>

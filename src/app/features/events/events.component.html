@@ -1,0 +1,145 @@
+<div class="page-header">
+  <div>
+    <h1>Eventi</h1>
+    <p class="subtitle">Gestisci concerti, prove e sessioni con compensi e formazione</p>
+  </div>
+  <button class="btn-primary" (click)="showForm = !showForm">
+    {{ showForm ? '✕ Chiudi' : '+ Nuovo evento' }}
+  </button>
+</div>
+
+<!-- New event form -->
+<section class="card form-card" *ngIf="showForm" [formGroup]="form">
+  <h2>Nuovo evento</h2>
+
+  <div class="form-grid">
+    <label class="span-2">Titolo evento *
+      <input type="text" formControlName="title" placeholder="es. Serata Jazz al Blue Note" [class.invalid]="isInvalid('title')">
+      <small class="field-error" *ngIf="isInvalid('title')">Campo obbligatorio</small>
+    </label>
+
+    <label>Data *
+      <input type="date" formControlName="date" [class.invalid]="isInvalid('date')">
+    </label>
+    <label>Tipo *
+      <select formControlName="type">
+        <option *ngFor="let t of eventTypes" [value]="t.value">{{ t.label }}</option>
+      </select>
+    </label>
+
+    <label class="span-2">Ora inizio *
+      <input type="time" formControlName="timeStart" style="max-width:160px">
+    </label>
+
+    <label>Locale / Venue
+      <input type="text" formControlName="venue" placeholder="es. Blue Note Milano">
+    </label>
+    <label>Indirizzo
+      <input type="text" formControlName="address" placeholder="es. Via Roma 1, Milano">
+    </label>
+
+    <label>Compenso lordo (€)
+      <input type="number" formControlName="grossFee" min="0" step="10">
+    </label>
+    <label>Compenso netto (€)
+      <input type="number" formControlName="netFee" min="0" step="10">
+    </label>
+
+    <label class="span-2">Tipo compenso
+      <select formControlName="compensoType">
+        <option *ngFor="let c of compensoTypes" [value]="c.value">{{ c.label }}</option>
+      </select>
+    </label>
+
+    <label>Stato
+      <select formControlName="status">
+        <option *ngFor="let s of statusOptions" [value]="s.value">{{ s.label }}</option>
+      </select>
+    </label>
+
+    <label class="span-2">Note / Rider
+      <textarea formControlName="notes" rows="2" placeholder="Rider tecnico, note speciali…"></textarea>
+    </label>
+  </div>
+
+  <!-- Band members -->
+  <div class="band-section">
+    <div class="band-header">
+      <h3>Formazione / Band</h3>
+      <button type="button" class="btn-outline" (click)="addBandMember()">+ Aggiungi musicista</button>
+    </div>
+
+    <div class="band-list" [formArrayName]="'band'">
+      <div class="band-member" *ngFor="let m of bandArray.controls; index as i" [formGroupName]="i">
+        <input type="text" formControlName="name" placeholder="Nome musicista">
+        <input type="text" formControlName="instrument" placeholder="Strumento">
+        <button type="button" class="btn-remove" (click)="removeBandMember(i)" title="Rimuovi">✕</button>
+      </div>
+    </div>
+
+    <div class="band-empty" *ngIf="bandArray.length === 0">
+      <span>Nessun musicista aggiunto</span>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <button type="button" class="btn-ghost" (click)="showForm = false">Annulla</button>
+    <button type="button" class="btn-primary" (click)="submit()">Salva evento</button>
+  </div>
+</section>
+
+<!-- Filter -->
+<div class="filter-bar">
+  <button class="filter-btn" [class.active]="filterType === 'all'"       (click)="filterType = 'all'">Tutti</button>
+  <button class="filter-btn" [class.active]="filterType === 'concert'"   (click)="filterType = 'concert'">Concerti</button>
+  <button class="filter-btn" [class.active]="filterType === 'lesson'"    (click)="filterType = 'lesson'">Lezioni</button>
+  <button class="filter-btn" [class.active]="filterType === 'rehearsal'" (click)="filterType = 'rehearsal'">Prove</button>
+</div>
+
+<!-- Events list -->
+<div class="empty-state" *ngIf="filteredEvents.length === 0">
+  <span class="empty-icon">🎵</span>
+  <p>Nessun evento trovato</p>
+  <button class="btn-primary" (click)="showForm = true">Aggiungi il primo evento</button>
+</div>
+
+<div class="events-list">
+  <div class="event-card" *ngFor="let e of filteredEvents">
+    <div class="event-accent" [ngClass]="e.type"></div>
+    <div class="event-body">
+      <div class="event-top">
+        <div>
+          <div class="event-title">{{ e.title }}</div>
+          <div class="event-meta">
+            {{ formatDate(e.date) }}
+            <span *ngIf="e.timeStart"> • {{ e.timeStart }}</span>
+          </div>
+        </div>
+        <div class="event-right">
+          <span class="event-type-badge" [ngClass]="e.type">{{ typeLabel(e.type) }}</span>
+          <span class="event-status" [ngClass]="e.status">{{ statusLabel(e.status) }}</span>
+          <button class="btn-remove" (click)="deleteEvent(e.id)" title="Elimina">🗑</button>
+        </div>
+      </div>
+
+      <div class="event-details">
+        <span *ngIf="e.venue || e.address">📍 {{ e.venue || e.address }}</span>
+        <span *ngIf="e.netFee > 0">💰 {{ e.netFee | currency:'EUR':'symbol':'1.0-0' }} netto</span>
+        <span *ngIf="e.grossFee > 0">💶 {{ e.grossFee | currency:'EUR':'symbol':'1.0-0' }} lordo</span>
+        <span *ngIf="e.compensoType" class="comptype" [ngClass]="e.compensoType">{{ compensoLabel(e.compensoType) }}</span>
+        <span *ngIf="e.band.length > 0">🎸 {{ e.band.length }} musicisti</span>
+      </div>
+
+      <div class="band-chips" *ngIf="e.band.length > 0">
+        <span class="chip" *ngFor="let m of e.band">{{ m.name }}<span *ngIf="m.instrument"> · {{ m.instrument }}</span></span>
+      </div>
+
+      <!-- Navigation buttons -->
+      <div class="event-nav" *ngIf="e.venue || e.address">
+        <button class="nav-btn-sm waze"   (click)="openEventNav(e, 'waze')">🧭 Waze</button>
+        <button class="nav-btn-sm google" (click)="openEventNav(e, 'google')">🗺 Google Maps</button>
+        <button class="nav-btn-sm apple"  (click)="openEventNav(e, 'apple')">🍎 Apple Maps</button>
+      </div>
+    </div>
+  </div>
+</div>

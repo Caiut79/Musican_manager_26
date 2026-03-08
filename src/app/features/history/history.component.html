@@ -1,0 +1,45 @@
+<div class="page-header">
+  <div>
+    <h1>Storico</h1>
+    <p class="subtitle">Tutti gli eventi passati</p>
+  </div>
+</div>
+
+<div class="filters">
+  <select class="filter-select" [(ngModel)]="filterType">
+    <option *ngFor="let t of eventTypes" [value]="t.value">{{ t.label }}</option>
+  </select>
+  <select class="filter-select" [(ngModel)]="filterMonth">
+    <option value="">Tutti i mesi</option>
+    <option *ngFor="let m of months" [value]="m">{{ m }}</option>
+  </select>
+  <span class="count">{{ filtered.length }} eventi</span>
+</div>
+
+<div class="empty-state" *ngIf="filtered.length === 0">
+  <span class="empty-icon">📋</span>
+  <p>Nessun evento nello storico</p>
+  <small>Gli eventi con data passata appariranno qui</small>
+</div>
+
+<div class="history-list">
+  <div class="history-card" *ngFor="let e of filtered">
+    <div class="h-accent" [ngClass]="e.type"></div>
+    <div class="h-body">
+      <div class="h-top">
+        <div>
+          <div class="h-title">{{ e.title }}</div>
+          <div class="h-meta">{{ formatDate(e.date) }}<span *ngIf="e.timeStart"> • {{ e.timeStart }}</span></div>
+        </div>
+        <div class="h-right">
+          <span class="h-type" [ngClass]="e.type">{{ typeLabel(e.type) }}</span>
+          <span class="h-fee" *ngIf="e.netFee > 0">{{ e.netFee | currency:'EUR':'symbol':'1.0-0' }}</span>
+        </div>
+      </div>
+      <div class="h-details" *ngIf="e.venue || e.band.length > 0">
+        <span *ngIf="e.venue">📍 {{ e.venue }}</span>
+        <span *ngIf="e.band.length > 0">🎸 {{ bandNames(e.band) }}</span>
+      </div>
+    </div>
+  </div>
+</div>

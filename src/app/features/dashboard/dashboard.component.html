@@ -1,0 +1,84 @@
+<div class="page-header">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="subtitle" *ngIf="musicianName">Ciao, <strong>{{ musicianName }}</strong> 👋</p>
+    <p class="subtitle" *ngIf="!musicianName">Benvenuto in Musicista Manager</p>
+  </div>
+</div>
+
+<!-- Quick links -->
+<div class="quick-links">
+  <button class="quick-btn" *ngFor="let ql of quickLinks" (click)="go(ql.route)">
+    <span class="quick-icon">{{ ql.icon }}</span>
+    <span class="quick-label">{{ ql.label }}</span>
+  </button>
+</div>
+
+<!-- Grid cards -->
+<div class="dashboard-grid">
+
+  <!-- Today -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Oggi</h2>
+      <span class="badge-date">{{ formatDate(today) }}</span>
+    </div>
+    <div class="empty-state" *ngIf="todayEvents.length === 0">
+      <span>📭</span>
+      <p>Nessun evento oggi</p>
+    </div>
+    <div class="event-item" *ngFor="let e of todayEvents">
+      <div class="event-type-dot" [ngClass]="e.type"></div>
+      <div class="event-info">
+        <div class="event-title">{{ e.title }}</div>
+        <div class="event-meta">{{ e.timeStart }} – {{ e.timeEnd }} • {{ eventTypeLabel(e.type) }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upcoming events -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Prossimi eventi</h2>
+      <a routerLink="/events" class="card-link">Tutti →</a>
+    </div>
+    <div class="empty-state" *ngIf="upcomingEvents.length === 0">
+      <span>📅</span>
+      <p>Nessun evento programmato</p>
+    </div>
+    <div class="event-item" *ngFor="let e of upcomingEvents">
+      <div class="event-date-badge">
+        <span class="edb-day">{{ formatDate(e.date).split(' ')[1] }}</span>
+        <span class="edb-month">{{ formatDate(e.date).split(' ')[2] }}</span>
+      </div>
+      <div class="event-info">
+        <div class="event-title">{{ e.title }}</div>
+        <div class="event-meta">{{ e.venue || e.address || '—' }} • {{ eventTypeLabel(e.type) }}</div>
+      </div>
+      <span class="event-status" [ngClass]="e.status">{{ e.status }}</span>
+    </div>
+  </div>
+
+  <!-- Notifications -->
+  <div class="card">
+    <div class="card-header">
+      <h2>
+        Notifiche
+        <span class="badge-count" *ngIf="unreadCount > 0">{{ unreadCount }}</span>
+      </h2>
+      <button class="card-link" *ngIf="unreadCount > 0" (click)="markAllRead()">Segna lette</button>
+    </div>
+    <div class="empty-state" *ngIf="notifications.length === 0">
+      <span>🔔</span>
+      <p>Nessuna notifica</p>
+    </div>
+    <div class="notif-item" *ngFor="let n of notifications" [class.unread]="!n.read">
+      <div class="notif-dot" *ngIf="!n.read"></div>
+      <div class="notif-body">
+        <div class="notif-title">{{ n.title }}</div>
+        <div class="notif-msg">{{ n.message }}</div>
+      </div>
+    </div>
+  </div>
+
+</div>

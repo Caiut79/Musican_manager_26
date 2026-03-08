@@ -1,0 +1,146 @@
+/* ── Backdrop (mobile) ── */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 199;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: 240px;
+  background: #2d1b69;
+  display: flex;
+  flex-direction: column;
+  z-index: 200;
+  transition: width 0.25s ease, transform 0.25s ease;
+  overflow: hidden;
+
+  &.collapsed {
+    width: 64px;
+
+    .brand-name { display: none; }
+    .nav-label  { display: none; }
+    .toggle-btn span { transform: rotate(0); }
+  }
+}
+
+/* ── Mobile: hidden off-screen by default ── */
+@media (max-width: 767px) {
+  .sidebar {
+    transform: translateX(-100%);
+    width: 240px !important; /* always full width on mobile */
+
+    &.mobile-open {
+      transform: translateX(0);
+    }
+
+    .nav-label { display: inline !important; }
+  }
+}
+
+/* ── Header ── */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  min-height: 58px;
+  flex-shrink: 0;
+}
+
+.brand-icon {
+  font-size: 22px;
+  color: #c4b5fd;
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.toggle-btn {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  /* Hide on mobile (no collapse on mobile) */
+  @media (max-width: 767px) {
+    display: none;
+  }
+}
+
+/* ── Nav ── */
+.sidebar-nav {
+  flex: 1;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  &.active {
+    background: rgba(167, 139, 250, 0.2);
+    color: #c4b5fd;
+  }
+}
+
+.nav-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.nav-label {
+  flex: 1;
+}
+
+/* ── Tablet: collapsed by default ── */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .sidebar:not(.collapsed) {
+    width: 240px;
+  }
+}

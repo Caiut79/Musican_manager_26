@@ -1,0 +1,28 @@
+<div class="wrap" *ngIf="school; else noSchool">
+  <h1>{{ school.name }}</h1>
+  <p>Codice scuola: <strong>{{ school.code }}</strong></p>
+
+  <section class="card">
+    <h2>Allievi</h2>
+    <div class="list">
+      <div class="item" *ngFor="let s of students">{{ s.fullName }}</div>
+      <div class="empty" *ngIf="!students.length">Nessun allievo associato</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Lezioni e compensi</h2>
+    <div class="list">
+      <div class="item" *ngFor="let l of sessions">
+        {{ l.date }} · {{ l.compensation | currency:'EUR':'symbol':'1.0-0' }} · {{ l.invoiceMode }}
+      </div>
+    </div>
+    <div class="total">Totale compensi: {{ totalCompensation | currency:'EUR':'symbol':'1.0-0' }}</div>
+  </section>
+</div>
+
+<ng-template #noSchool>
+  <div class="wrap">
+    <h1>Scuola non trovata</h1>
+  </div>
+</ng-template>

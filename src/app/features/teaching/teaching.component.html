@@ -1,0 +1,122 @@
+<div class="page-header">
+  <h1>Insegnamento</h1>
+  <p class="subtitle">Gestisci scuole, allievi, lezioni e compensi</p>
+</div>
+
+<div class="grid">
+  <section class="card" [formGroup]="schoolForm">
+    <h2>Nuova scuola</h2>
+    <label>Nome scuola
+      <input type="text" formControlName="name">
+    </label>
+    <label>Compenso orario
+      <input type="number" formControlName="hourlyRate" min="0">
+    </label>
+    <label>Compenso per allievo
+      <input type="number" formControlName="perStudentRate" min="0">
+    </label>
+    <label>Modalità pagamento
+      <select formControlName="invoiceMode">
+        <option value="fattura">In fattura</option>
+        <option value="non_fattura">Fuori fattura</option>
+      </select>
+    </label>
+    <button type="button" class="btn-primary" (click)="createSchool()">Aggiungi scuola</button>
+  </section>
+
+  <section class="card" [formGroup]="studentForm">
+    <h2>Nuovo allievo</h2>
+    <label>Nome allievo
+      <input type="text" formControlName="fullName">
+    </label>
+    <label>Scuola associata
+      <select formControlName="schoolId">
+        <option value="">Nessuna</option>
+        <option *ngFor="let s of schools" [value]="s.id">{{ s.name }}</option>
+      </select>
+    </label>
+    <button type="button" class="btn-primary" (click)="createStudent()">Aggiungi allievo</button>
+  </section>
+
+  <section class="card" [formGroup]="sessionForm">
+    <h2>Nuova lezione</h2>
+    <label>Data
+      <input type="date" formControlName="date">
+    </label>
+    <label>Tipo lezione
+      <select formControlName="lessonType">
+        <option value="private">Privata</option>
+        <option value="school">Con scuola</option>
+        <option value="collaboration">Collaborazione scuola</option>
+      </select>
+    </label>
+    <label>Allievo
+      <select formControlName="studentId">
+        <option value="">Nessuno</option>
+        <option *ngFor="let s of students" [value]="s.id">{{ s.fullName }}</option>
+      </select>
+    </label>
+    <label>Scuola
+      <select formControlName="schoolId">
+        <option value="">Nessuna</option>
+        <option *ngFor="let s of schools" [value]="s.id">{{ s.name }}</option>
+      </select>
+    </label>
+    <label>Ore
+      <input type="number" formControlName="hours" min="0" step="0.5">
+    </label>
+    <label>Metodo calcolo
+      <select formControlName="rateMode">
+        <option value="per_hour">Per ora</option>
+        <option value="per_student">Per allievo</option>
+      </select>
+    </label>
+    <label>Valore unitario
+      <input type="number" formControlName="rateValue" min="0">
+    </label>
+    <label>Numero allievi
+      <input type="number" formControlName="studentsCount" min="1">
+    </label>
+    <label>Pagamento
+      <select formControlName="invoiceMode">
+        <option value="fattura">In fattura</option>
+        <option value="non_fattura">Fuori fattura</option>
+      </select>
+    </label>
+    <label>Note
+      <input type="text" formControlName="notes">
+    </label>
+    <button type="button" class="btn-primary" (click)="createSession()">Salva lezione</button>
+  </section>
+</div>
+
+<div class="grid">
+  <section class="card">
+    <h2>Scuole</h2>
+    <div class="list">
+      <div class="item" *ngFor="let s of schools">
+        <div>
+          <strong>{{ s.name }}</strong>
+          <div class="meta">Codice {{ s.code }}</div>
+          <div class="meta">Link: {{ schoolLink(s.code) }}</div>
+        </div>
+        <button type="button" class="btn-outline" (click)="copySchoolLink(s.code)">
+          {{ codeCopied === s.code ? 'Link copiato' : 'Copia link scuola' }}
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Lezioni registrate</h2>
+    <div class="list">
+      <div class="item" *ngFor="let l of sessions">
+        <div>
+          <strong>{{ l.date }} - {{ l.lessonType }}</strong>
+          <div class="meta">Allievo: {{ studentName(l.studentId) }} | Scuola: {{ schoolName(l.schoolId) }}</div>
+          <div class="meta">Compenso: {{ l.compensation | currency:'EUR':'symbol':'1.0-0' }} ({{ l.invoiceMode }})</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>

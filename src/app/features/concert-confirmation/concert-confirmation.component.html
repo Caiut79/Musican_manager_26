@@ -1,0 +1,21 @@
+<div class="doc" *ngIf="concert; else notFound">
+  <h1>Conferma richiesta concerto</h1>
+  <p>Data: <strong>{{ concert.date }}</strong> ore <strong>{{ concert.timeStart }}</strong></p>
+  <p>Evento: <strong>{{ concert.title }}</strong></p>
+  <p>Venue: <strong>{{ concert.venue || 'N/D' }}</strong></p>
+  <p>Indirizzo: <strong>{{ concert.address || 'N/D' }}</strong></p>
+  <p>Formato: <strong>{{ concert.lineupType }}</strong></p>
+  <p>Compenso pattuito: <strong>{{ concert.agreedFee | currency:'EUR':'symbol':'1.0-0' }}</strong></p>
+  <p>Rimborso spese: <strong>{{ concert.reimbursement | currency:'EUR':'symbol':'1.0-0' }}</strong></p>
+  <p>Totale: <strong>{{ concert.agreedFee + concert.reimbursement | currency:'EUR':'symbol':'1.0-0' }}</strong></p>
+  <p *ngIf="concert.bands.length">Band: <strong>{{ concert.bands.join(', ') }}</strong></p>
+  <p *ngIf="concert.musicians.length">Musicisti: <strong>{{ concert.musicians.join(', ') }}</strong></p>
+  <p *ngIf="concert.notes">Note: {{ concert.notes }}</p>
+  <button type="button" class="btn-primary" (click)="printPdf()">Stampa / Salva PDF</button>
+</div>
+
+<ng-template #notFound>
+  <div class="doc">
+    <h1>Conferma non trovata</h1>
+  </div>
+</ng-template>

@@ -32,7 +32,10 @@ export class MusicianFormComponent {
   currentStep = 0;
   submitting  = false;
   resultCode: string | null = null;
+  savedOk = false;
   error: string | null = null;
+  hasSavedProfile = false;
+  incompleteStepIndexes: number[] = [];
   signatureSaved = false;
 
   // ── Signature pad ──────────────────────────────────────────
@@ -90,6 +93,17 @@ export class MusicianFormComponent {
   }
 
   private loadSavedProfile() {
+    this.hasSavedProfile = !!localStorage.getItem('musicianId') || !!localStorage.getItem('mm_profile_snapshot');
+    const snapshotRaw = localStorage.getItem('mm_profile_snapshot');
+    if (snapshotRaw) {
+      try {
+        const snapshot = JSON.parse(snapshotRaw);
+        if (snapshot && typeof snapshot === 'object') {
+          this.form.patchValue(snapshot);
+        }
+      } catch {
+      }
+    }
     const pairs: [string, string][] = [
       ['mm_firstName', 'firstName'], ['mm_lastName', 'lastName'],
       ['mm_homeBase',  'homeBase'],  ['mm_phone',    'phone'],
@@ -98,6 +112,7 @@ export class MusicianFormComponent {
     const patch: Record<string, string> = {};
     pairs.forEach(([lk, fk]) => { const v = localStorage.getItem(lk); if (v) patch[fk] = v; });
     if (Object.keys(patch).length) this.form.patchValue(patch);
+    this.refreshIncompleteSteps();
   }
 
   get progressPercent(): number {
@@ -105,10 +120,31 @@ export class MusicianFormComponent {
   }
 
   get workerType(): string { return this.form.get('workerType')?.value || ''; }
+  get inpsExempt(): boolean { return this.form.get('inpsExempt')?.value === true; }
   get isTeacher(): boolean { return this.form.get('isTeacher')?.value === true; }
+
+  // ── Styles chip helpers ─────────────────────────────────────
+  isStyleSelected(style: string, field: 'stylesPlayed' | 'searchableStyles'): boolean {
+    const val: string[] = this.form.get(field)?.value || [];
+    return val.includes(style);
+  }
+
+  toggleStyle(style: string, field: 'stylesPlayed' | 'searchableStyles'): void {
+    const ctrl = this.form.get(field);
+    if (!ctrl) return;
+    const current: string[] = ctrl.value || [];
+    const idx = current.indexOf(style);
+    ctrl.setValue(idx >= 0 ? current.filter(s => s !== style) : [...current, style]);
+  }
+  // ────────────────────────────────────────────────────────────
 
   goToStep(i: number): void {
     if (i >= 0 && i < this.steps.length) this.currentStep = i;
+  }
+
+  goToFirstIncompleteStep(): void {
+    if (!this.incompleteStepIndexes.length) return;
+    this.currentStep = this.incompleteStepIndexes[0];
   }
 
   nextStep(): void {
@@ -207,11 +243,38 @@ export class MusicianFormComponent {
     localStorage.setItem('mm_signature', this._sigCanvas.nativeElement.toDataURL('image/png'));
     this.signatureSaved = true;
   }
+
+  private refreshIncompleteSteps(): void {
+    this.incompleteStepIndexes = this.steps
+      .map((_, idx) => idx)
+      .filter(idx => this.isStepIncomplete(idx));
+  }
+
+  private isStepIncomplete(stepIndex: number): boolean {
+    const fieldsByStep: Record<number, string[]> = {
+      0: ['firstName', 'lastName', 'phone', 'birthDate', 'birthPlace', 'fiscalCode', 'residence', 'homeBase'],
+      1: ['instrument', 'level', 'stylesPlayed', 'searchableStyles'],
+      2: ['instagram', 'facebook', 'youtube', 'tiktok', 'website'],
+      3: ['empalsPosition', 'workerType', 'exemptEmployer', 'inpsNumber', 'inpsStartDate', 'inpsEndDate'],
+      4: ['isTeacher', 'lessonColor', 'concertColor']
+    };
+    const fields = fieldsByStep[stepIndex] || [];
+    if (!fields.length) return false;
+    return fields.every(field => !this.hasValue(this.form.get(field)?.value));
+  }
+
+  private hasValue(value: unknown): boolean {
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    if (typeof value === 'boolean') return value;
+    return value !== null && value !== undefined;
+  }
   // ────────────────────────────────────────────────────────────
 
   async submit(): Promise<void> {
     this.error = null;
     this.resultCode = null;
+    this.savedOk = false;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       if (this.form.get('firstName')?.invalid || this.form.get('lastName')?.invalid) {
@@ -222,7 +285,7 @@ export class MusicianFormComponent {
     this.submitting = true;
     try {
       const v = this.form.value;
-      const isExempt = v.workerType === 'esente';
+      const isExempt = !!v.inpsExempt;
       const persist: [string, string | null | undefined][] = [
         ['lessonColor',   v.lessonColor],  ['concertColor',  v.concertColor],
         ['mm_firstName',  v.firstName],    ['mm_lastName',   v.lastName],
@@ -230,6 +293,7 @@ export class MusicianFormComponent {
         ['mm_fiscalCode', v.fiscalCode],
       ];
       persist.forEach(([k, val]) => { if (val) localStorage.setItem(k, val); });
+      localStorage.setItem('mm_profile_snapshot', JSON.stringify(this.form.value));
 
       const m: Musician = {
         firstName:      v.firstName!,
@@ -268,12 +332,20 @@ export class MusicianFormComponent {
 
       const existingId = localStorage.getItem('musicianId') || undefined;
       const { id, code } = await this.supabase.saveMusician(m, existingId);
-      if (id)   localStorage.setItem('musicianId',   id);
-      if (code) localStorage.setItem('musicianCode', code);
-      if (id) await this.supabase.syncAllFromLocalStorage(id);
-      this.resultCode = code || null;
+      if (!id) throw new Error('ID musicista non restituito dal database');
+      localStorage.setItem('musicianId', id);
+      const resolvedCode = code || localStorage.getItem('mm_affiliation_code') || localStorage.getItem('musicianCode');
+      if (!resolvedCode) throw new Error('Codice musicista non assegnato');
+      localStorage.setItem('musicianCode', resolvedCode);
+      localStorage.setItem('mm_affiliation_code', resolvedCode);
+      await this.supabase.syncAllFromLocalStorage(id);
+      this.hasSavedProfile = true;
+      this.refreshIncompleteSteps();
+      this.savedOk = true;
+      this.resultCode = resolvedCode;
+      this.router.navigateByUrl('/dashboard');
     } catch (e: any) {
-      this.error = e?.message || 'Errore sconosciuto';
+      this.error = e?.message ? `Salvataggio non riuscito: ${e.message}` : 'Salvataggio non riuscito';
     } finally {
       this.submitting = false;
     }

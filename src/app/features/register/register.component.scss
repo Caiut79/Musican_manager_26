@@ -1,0 +1,64 @@
+.auth-card {
+  max-width: 460px;
+  margin: 64px auto;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.subtitle {
+  margin: 0 0 18px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+input {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.btn-primary {
+  margin-top: 6px;
+  border: none;
+  border-radius: 8px;
+  background: var(--clr-primary);
+  color: #fff;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.btn-link {
+  margin-top: 12px;
+  border: none;
+  background: transparent;
+  color: var(--clr-primary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.error {
+  margin-top: 10px;
+  color: var(--clr-danger);
+}

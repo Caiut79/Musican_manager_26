@@ -11,23 +11,23 @@
   <section class="card">
     <h2>Link di prenotazione</h2>
 
-    <div class="alert-info" *ngIf="!musicianCode">
-      ⚠ Completa prima il <a routerLink="/profile">profilo musicista</a> per ottenere il tuo codice univoco.
+    <div class="alert-info" *ngIf="!bookingSlug">
+      ⚠ Completa prima il <a routerLink="/profile">profilo musicista</a> con nome e cognome.
     </div>
 
-    <div class="link-box" *ngIf="musicianCode">
+    <div class="link-box" *ngIf="bookingSlug">
       <div class="link-code">
         <span class="link-label">Il tuo link di prenotazione:</span>
         <div class="link-value">{{ bookingLink }}</div>
       </div>
       <div class="share-buttons">
-        <button class="share-btn copy" (click)="copyLink()">
+        <button type="button" class="share-btn copy" (click)="copyLink()">
           {{ copied ? '✓ Copiato!' : '📋 Copia link' }}
         </button>
-        <button class="share-btn whatsapp" (click)="shareWhatsApp()">
+        <button type="button" class="share-btn whatsapp" (click)="shareWhatsApp()">
           💬 WhatsApp
         </button>
-        <button class="share-btn native" (click)="shareNative()">
+        <button type="button" class="share-btn native" (click)="shareNative()">
           🔗 Condividi
         </button>
       </div>
@@ -66,6 +66,25 @@
         <textarea formControlName="feeNotes" rows="2"
           placeholder="es. Prezzi variabili in base alla durata e al tipo di evento"></textarea>
       </label>
+    </div>
+
+    <div class="settings-group">
+      <h3>🔐 Appartenenza e band</h3>
+      <div class="fixed-code-box">
+        <span class="fixed-code-label">Codice di appartenenza</span>
+        <strong>{{ affiliationCode || 'Non assegnato' }}</strong>
+      </div>
+      <div class="check-row">
+        <label class="check-label">
+          <input type="checkbox" formControlName="allowBandInvites">
+          <span>Consenti di essere aggiunto dalle band</span>
+        </label>
+      </div>
+      <div class="inline-actions">
+        <button type="button" class="share-btn copy" (click)="copyAffiliationCode()">
+          {{ codeCopied ? '✓ Codice copiato' : '📋 Copia codice di appartenenza' }}
+        </button>
+      </div>
     </div>
 
     <div class="settings-group">
@@ -109,7 +128,7 @@
         placeholder="Messaggio di benvenuto mostrato nel form di prenotazione..."></textarea>
     </label>
 
-    <button class="btn-primary" (click)="saveSettings()">
+    <button type="button" class="btn-primary" (click)="saveSettings()">
       {{ saved ? '✓ Salvato!' : 'Salva impostazioni' }}
     </button>
   </section>

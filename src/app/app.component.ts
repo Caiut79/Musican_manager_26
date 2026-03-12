@@ -1,4 +1,6 @@
 import { Component, HostListener, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { ThemeService } from './services/theme.service';
 
 @Component({
   selector: 'app-root',
@@ -10,11 +12,11 @@ export class AppComponent implements OnInit {
   mobileMenuOpen = false;
   isMobile = false;
 
+  constructor(private router: Router, private themeService: ThemeService) {}
+
   ngOnInit() {
+    this.themeService.init();
     this.checkBreakpoint();
-    if (window.innerWidth < 1024 && window.innerWidth >= 768) {
-      this.sidebarCollapsed = true;
-    }
   }
 
   @HostListener('window:resize')
@@ -23,9 +25,13 @@ export class AppComponent implements OnInit {
   }
 
   private checkBreakpoint() {
-    this.isMobile = window.innerWidth < 768;
-    if (!this.isMobile) {
+    const w = window.innerWidth;
+    this.isMobile = w < 768;
+    if (this.isMobile) {
       this.mobileMenuOpen = false;
+    } else {
+      // tablet + desktop: collapsed di default → hover per espandere
+      this.sidebarCollapsed = true;
     }
   }
 
@@ -39,5 +45,12 @@ export class AppComponent implements OnInit {
 
   closeMobileMenu() {
     this.mobileMenuOpen = false;
+  }
+
+  isPublicRoute(): boolean {
+    return this.router.url.startsWith('/register')
+      || this.router.url.startsWith('/book/')
+      || this.router.url.startsWith('/confirm/')
+      || this.router.url.startsWith('/school/');
   }
 }

@@ -1,0 +1,29 @@
+<div class="booking-wrap">
+  <div class="booking-card">
+    <h1>Richiesta musicista</h1>
+    <p class="subtitle">Stai richiedendo disponibilità per <strong>{{ musicianName }}</strong></p>
+    <p class="subtitle" *ngIf="affiliationCode">Codice di appartenenza: <strong>{{ affiliationCode }}</strong></p>
+    <p class="subtitle ok-text" *ngIf="allowBandInvites">Questo profilo può essere aggiunto dalle band.</p>
+
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <label>Nome e cognome
+        <input type="text" formControlName="customerName" placeholder="Mario Rossi">
+      </label>
+      <label>Email
+        <input type="email" formControlName="customerEmail" placeholder="mario@email.com" autocomplete="email">
+      </label>
+      <label>Data evento
+        <input type="date" formControlName="eventDate">
+      </label>
+      <label>Tipo evento
+        <input type="text" formControlName="eventType" placeholder="Serata privata">
+      </label>
+      <label>Messaggio
+        <textarea rows="4" formControlName="message" placeholder="Descrivi il tuo evento..."></textarea>
+      </label>
+      <button type="submit" class="btn-primary">Invia richiesta</button>
+    </form>
+
+    <div class="ok" *ngIf="sent">✓ Richiesta inviata con successo</div>
+  </div>
+</div>

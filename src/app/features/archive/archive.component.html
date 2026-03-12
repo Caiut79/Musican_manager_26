@@ -1,0 +1,57 @@
+<div class="page-header">
+  <h1>Archivio</h1>
+  <p class="subtitle">Sincronizza codici tra app Musicista e Band Manager</p>
+</div>
+<div class="result error" *ngIf="!archiveRemoteAvailable">
+  Archivio remoto non disponibile su Supabase. Attiva la migrazione archivio o usa modalità locale temporanea.
+</div>
+
+<div class="archive-grid">
+  <section class="card">
+    <h2>Sincronizzazione codici</h2>
+    <div class="code-box">
+      <span>Codice musicista</span>
+      <strong>{{ musicianCode || 'Non disponibile' }}</strong>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="syncCodes()">
+      <label>Codice band
+        <input type="text" formControlName="bandCode" placeholder="es. BD0001">
+      </label>
+      <button type="submit" class="btn-primary" [disabled]="syncing">
+        {{ syncing ? 'Sincronizzazione…' : 'Sincronizza codici' }}
+      </button>
+    </form>
+
+    <div class="result success" *ngIf="syncOk">✓ Codici sincronizzati in archivio</div>
+    <div class="result error" *ngIf="syncError">{{ syncError }}</div>
+  </section>
+
+  <section class="card">
+    <h2>Ricerca musicisti</h2>
+    <input type="text" [(ngModel)]="musicianQuery" (ngModelChange)="refreshLists()" placeholder="Cerca per nome o codice">
+    <div class="list">
+      <div class="item" *ngFor="let m of musicians">
+        <strong>{{ m.entity_code }}</strong>
+        <span>{{ m.display_name || 'Musicista' }}</span>
+        <small>Band collegata: {{ m.linked_code || '—' }}</small>
+      </div>
+      <div class="empty" *ngIf="!musicians.length">Nessun musicista trovato</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Ricerca band</h2>
+    <input type="text" [(ngModel)]="bandQuery" (ngModelChange)="refreshLists()" placeholder="Cerca per codice band">
+    <div class="list">
+      <div class="item" *ngFor="let b of bands">
+        <strong>{{ b.entity_code }}</strong>
+        <small>Musicista collegato: {{ b.linked_code || '—' }}</small>
+      </div>
+      <div class="empty" *ngIf="!bands.length">Nessuna band trovata</div>
+      <div class="empty" *ngIf="!bands.length && musicians.length">
+        Prova prima a sincronizzare un codice band con il pulsante "Sincronizza codici".
+      </div>
+    </div>
+  </section>
+</div>

@@ -6,10 +6,14 @@
 
   <!-- Header -->
   <div class="sidebar-header">
-    <span class="brand-icon">♪</span>
-    <span class="brand-name" *ngIf="!collapsed">Musicista</span>
-    <button type="button" class="toggle-btn" (click)="sidebarToggle.emit()" title="Comprimi menu">
-      <span>{{ collapsed ? '▶' : '◀' }}</span>
+    <i class="brand-icon ti ti-music"></i>
+    <span class="brand-name">
+      <strong>Musicista</strong>
+      <small>By Band Manager</small>
+    </span>
+    <button type="button" class="toggle-btn" (click)="sidebarToggle.emit()"
+            [title]="collapsed ? 'Fissa aperto' : 'Modalità hover'">
+      <i class="ti" [ngClass]="collapsed ? 'ti-layout-sidebar-left-expand' : 'ti-layout-sidebar-left-collapse'"></i>
     </button>
   </div>
 
@@ -20,11 +24,30 @@
       [routerLink]="item.route"
       routerLinkActive="active"
       class="nav-item"
-      [title]="collapsed ? item.label : ''"
+      [title]="item.label"
       (click)="sidebarClose.emit()">
-      <span class="nav-icon">{{ item.icon }}</span>
-      <span class="nav-label" *ngIf="!collapsed">{{ item.label }}</span>
+      <i class="nav-icon ti {{ item.icon }}"></i>
+      <span class="nav-label">{{ item.label }}</span>
     </a>
   </nav>
+
+  <!-- Theme switcher -->
+  <div class="theme-row">
+    <button class="theme-btn" [class.active]="currentTheme === 'light'"
+            (click)="setTheme('light')" title="Chiara">
+      <i class="ti ti-sun"></i>
+      <span class="theme-lbl">Chiara</span>
+    </button>
+    <button class="theme-btn" [class.active]="currentTheme === 'dark'"
+            (click)="setTheme('dark')" title="Scura">
+      <i class="ti ti-moon"></i>
+      <span class="theme-lbl">Scura</span>
+    </button>
+    <button class="theme-btn" [class.active]="currentTheme === 'amoled'"
+            (click)="setTheme('amoled')" title="AMOLED">
+      <i class="ti ti-circle-filled"></i>
+      <span class="theme-lbl">AMOLED</span>
+    </button>
+  </div>
 
 </aside>

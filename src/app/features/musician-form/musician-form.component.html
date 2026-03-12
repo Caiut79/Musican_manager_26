@@ -4,6 +4,25 @@
 </div>
 
 <form [formGroup]="form" (ngSubmit)="submit()">
+  <div class="quick-edit" *ngIf="hasSavedProfile">
+    <div class="quick-column">
+      <h3>Modifica rapida</h3>
+      <div class="quick-actions">
+        <button type="button" class="btn-outline" *ngFor="let step of steps; index as i" (click)="goToStep(i)">
+          {{ i + 1 }}. {{ step }}
+        </button>
+      </div>
+    </div>
+    <div class="quick-column" *ngIf="incompleteStepIndexes.length">
+      <h3>Sezioni da completare</h3>
+      <div class="quick-actions quick-actions-column">
+        <button type="button" class="btn-ghost" *ngFor="let idx of incompleteStepIndexes" (click)="goToStep(idx)">
+          {{ steps[idx] }}
+        </button>
+      </div>
+      <button type="button" class="btn-primary" (click)="goToFirstIncompleteStep()">Vai alla prima sezione vuota</button>
+    </div>
+  </div>
 
   <!-- Stepper -->
   <div class="stepper">
@@ -75,18 +94,26 @@
       </label>
     </div>
     <div class="row">
-      <label>Stili suonati
-        <span class="field-hint">Tieni premuto Ctrl per selezionare più stili</span>
-        <select formControlName="stylesPlayed" multiple size="6">
-          <option *ngFor="let st of styles" [value]="st">{{ st }}</option>
-        </select>
-      </label>
-      <label>Stili per ricerca
+      <div>
+        <span class="chips-label">Stili suonati</span>
+        <span class="field-hint">Clicca per selezionare/deselezionare</span>
+        <div class="chips-grid">
+          <button type="button" class="style-chip"
+            *ngFor="let st of styles"
+            [class.selected]="isStyleSelected(st, 'stylesPlayed')"
+            (click)="toggleStyle(st, 'stylesPlayed')">{{ st }}</button>
+        </div>
+      </div>
+      <div>
+        <span class="chips-label">Stili per ricerca</span>
         <span class="field-hint">Stili con cui vuoi essere trovato</span>
-        <select formControlName="searchableStyles" multiple size="6">
-          <option *ngFor="let st of styles" [value]="st">{{ st }}</option>
-        </select>
-      </label>
+        <div class="chips-grid">
+          <button type="button" class="style-chip"
+            *ngFor="let st of styles"
+            [class.selected]="isStyleSelected(st, 'searchableStyles')"
+            (click)="toggleStyle(st, 'searchableStyles')">{{ st }}</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -146,12 +173,6 @@
         <span class="wc-title">Insegnante + serate</span>
         <span class="wc-desc">Uso la stessa P.IVA per lezioni e serate dal vivo</span>
       </label>
-      <label class="worker-card" [class.selected]="workerType === 'esente'">
-        <input type="radio" formControlName="workerType" value="esente">
-        <span class="wc-icon">🛡</span>
-        <span class="wc-title">Esente ENPALS</span>
-        <span class="wc-desc">Ho un altro lavoro principale che versa contributi INPS</span>
-      </label>
     </div>
 
     <!-- Info boxes per tipo -->
@@ -186,8 +207,18 @@
       </ul>
     </div>
 
+    <div class="section-divider"></div>
+    <h2>Esenzione ENPALS</h2>
+    <p class="field-hint field-hint-spaced">Puoi essere esente anche se lavori in cooperativa o come libero professionista</p>
+    <div class="check-row">
+      <label class="check-label">
+        <input type="checkbox" formControlName="inpsExempt">
+        <span>Sono esente ENPALS (ho un'altra occupazione principale che versa contributi INPS)</span>
+      </label>
+    </div>
+
     <!-- ── Sezione esente ── -->
-    <div *ngIf="workerType === 'esente'">
+    <div *ngIf="inpsExempt">
       <div class="info-box info-purple">
         <h4>🛡 Esenzione ENPALS (agibilità in esenzione)</h4>
         <p>Se hai un contratto di lavoro dipendente (o sei pensionato INPS) puoi esibirti presentando il <strong>modulo di esenzione agibilità</strong> per ogni serata. Non versi contributi ENPALS sull'evento.</p>
@@ -291,7 +322,7 @@
     <button type="button" class="btn-primary" *ngIf="currentStep < steps.length - 1" (click)="nextStep()">
       Avanti →
     </button>
-    <button type="submit" class="btn-primary" *ngIf="currentStep === steps.length - 1"
+    <button type="submit" class="btn-primary" *ngIf="currentStep === steps.length - 1 || hasSavedProfile"
       [disabled]="submitting || form.invalid">
       {{ submitting ? 'Salvataggio…' : 'Salva profilo' }}
     </button>
@@ -301,11 +332,11 @@
   </div>
 
   <!-- Feedback -->
-  <div class="result-box success" *ngIf="resultCode">
+  <div class="result-box success" *ngIf="savedOk">
     <span class="result-icon">✓</span>
     <div>
-      <strong>Profilo salvato!</strong><br>
-      Codice identificativo: <strong>{{ resultCode }}</strong>
+      <strong>Profilo salvato!</strong>
+      <ng-container *ngIf="resultCode"><br>Codice identificativo: <strong>{{ resultCode }}</strong></ng-container>
     </div>
   </div>
   <div class="result-box error" *ngIf="error">

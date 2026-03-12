@@ -3,16 +3,18 @@ $sidebar-w: 240px;
 $sidebar-w-collapsed: 64px;
 $mobile-header-h: 52px;
 
-/* ── Main layout: offset to the right of the sidebar ── */
+/* ── Main layout ── */
 .app-layout {
+  /* Pinned open = 240px, collapsed (hover mode) = 64px */
   margin-left: $sidebar-w;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  transition: margin-left 0.25s ease;
+  transition: margin-left 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.sidebar-collapsed {
     margin-left: $sidebar-w-collapsed;
+    /* On hover the sidebar overlays content — no margin shift needed */
   }
 }
 
@@ -30,7 +32,7 @@ $mobile-header-h: 52px;
   top: 0;
   z-index: 100;
   height: $mobile-header-h;
-  background: #2d1b69;
+  background: linear-gradient(180deg, #0f2747 0%, #102f58 100%);
   align-items: center;
   gap: 14px;
   padding: 0 16px;
@@ -77,11 +79,16 @@ $mobile-header-h: 52px;
 }
 
 .container {
-  max-width: 960px;
+  max-width: 1320px;
   margin: 0 auto;
   padding: 32px 24px;
 
   @media (max-width: 767px) {
     padding: 20px 16px;
   }
+}
+
+.register-shell {
+  min-height: 100vh;
+  padding: 24px 16px;
 }

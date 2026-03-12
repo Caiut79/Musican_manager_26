@@ -1,0 +1,89 @@
+<div class="page-header">
+  <div>
+    <h1>Concerti</h1>
+    <p class="subtitle">Gestisci serate, formazioni e link conferma in PDF</p>
+  </div>
+  <button type="button" class="btn-primary" (click)="showForm = !showForm">
+    {{ showForm ? 'Chiudi' : 'Nuovo concerto' }}
+  </button>
+</div>
+
+<section class="card" *ngIf="showForm" [formGroup]="form">
+  <div class="grid">
+    <label>Titolo
+      <input type="text" formControlName="title" placeholder="Serata live">
+    </label>
+    <label>Data
+      <input type="date" formControlName="date">
+    </label>
+    <label>Ora
+      <input type="time" formControlName="timeStart">
+    </label>
+    <label>Formato
+      <select formControlName="lineupType">
+        <option value="solo">Solo</option>
+        <option value="duo">Duo</option>
+        <option value="trio">Trio</option>
+        <option value="quartetto">Quartetto</option>
+        <option value="band">Band</option>
+      </select>
+    </label>
+    <label>Venue
+      <input type="text" formControlName="venue">
+    </label>
+    <label>Indirizzo
+      <input type="text" formControlName="address">
+    </label>
+    <label>Compenso pattuito
+      <input type="number" formControlName="agreedFee" min="0">
+    </label>
+    <label>Rimborso spese
+      <input type="number" formControlName="reimbursement" min="0">
+    </label>
+    <label class="span-2">Note
+      <textarea formControlName="notes" rows="2"></textarea>
+    </label>
+  </div>
+
+  <div class="participants">
+    <div class="box">
+      <div class="box-head">
+        <h3>Band</h3>
+        <button type="button" class="btn-outline" (click)="addBand()">Aggiungi band</button>
+      </div>
+      <div formArrayName="bands" class="stack">
+        <div *ngFor="let b of bandsArray.controls; index as i" class="row">
+          <input type="text" [formControlName]="i" placeholder="Nome band">
+          <button type="button" class="btn-remove" (click)="removeBand(i)">✕</button>
+        </div>
+      </div>
+    </div>
+    <div class="box">
+      <div class="box-head">
+        <h3>Musicisti</h3>
+        <button type="button" class="btn-outline" (click)="addMusician()">Aggiungi musicista</button>
+      </div>
+      <div formArrayName="musicians" class="stack">
+        <div *ngFor="let m of musiciansArray.controls; index as i" class="row">
+          <input type="text" [formControlName]="i" placeholder="Nome musicista">
+          <button type="button" class="btn-remove" (click)="removeMusician(i)">✕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button type="button" class="btn-primary" (click)="saveConcert()">Salva concerto</button>
+</section>
+
+<div class="list">
+  <div class="item" *ngFor="let c of concerts">
+    <div>
+      <strong>{{ c.title }}</strong>
+      <div class="meta">{{ c.date }} • {{ c.timeStart }} • {{ c.lineupType }}</div>
+      <div class="meta">Compenso: {{ c.agreedFee | currency:'EUR':'symbol':'1.0-0' }} + rimborso {{ c.reimbursement | currency:'EUR':'symbol':'1.0-0' }}</div>
+    </div>
+    <button type="button" class="btn-outline" (click)="copyConfirmationLink(c.id)">
+      {{ copiedId === c.id ? 'Link copiato' : 'Copia link conferma PDF' }}
+    </button>
+  </div>
+</div>

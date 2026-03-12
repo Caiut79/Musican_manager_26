@@ -1,84 +1,114 @@
+<!-- Page header -->
 <div class="page-header">
-  <div>
-    <h1>Dashboard</h1>
-    <p class="subtitle" *ngIf="musicianName">Ciao, <strong>{{ musicianName }}</strong> 👋</p>
-    <p class="subtitle" *ngIf="!musicianName">Benvenuto in Musicista Manager</p>
-  </div>
+  <h1 *ngIf="musicianName">Ciao, <strong>{{ musicianName }}</strong> 👋</h1>
+  <h1 *ngIf="!musicianName">Benvenuto in Musicista Manager</h1>
 </div>
 
-<!-- Quick links -->
-<div class="quick-links">
-  <button class="quick-btn" *ngFor="let ql of quickLinks" (click)="go(ql.route)">
-    <span class="quick-icon">{{ ql.icon }}</span>
-    <span class="quick-label">{{ ql.label }}</span>
-  </button>
-</div>
+<div class="dashboard-layout">
 
-<!-- Grid cards -->
-<div class="dashboard-grid">
+  <!-- ── Colonna sinistra ── -->
+  <div class="main-column">
 
-  <!-- Today -->
-  <div class="card">
-    <div class="card-header">
-      <h2>Oggi</h2>
-      <span class="badge-date">{{ formatDate(today) }}</span>
-    </div>
-    <div class="empty-state" *ngIf="todayEvents.length === 0">
-      <span>📭</span>
-      <p>Nessun evento oggi</p>
-    </div>
-    <div class="event-item" *ngFor="let e of todayEvents">
-      <div class="event-type-dot" [ngClass]="e.type"></div>
-      <div class="event-info">
-        <div class="event-title">{{ e.title }}</div>
-        <div class="event-meta">{{ e.timeStart }} – {{ e.timeEnd }} • {{ eventTypeLabel(e.type) }}</div>
+    <!-- Calendario -->
+    <div class="card calendar-card">
+      <div class="cal-header">
+        <h2 class="card-title">Calendario Eventi</h2>
+        <div class="cal-nav-group">
+          <button type="button" class="btn-nav" (click)="prevMonth()">‹</button>
+          <span class="month-label">{{ monthLabel }}</span>
+          <button type="button" class="btn-nav" (click)="nextMonth()">›</button>
+          <button type="button" class="btn-oggi" (click)="goToday()">Oggi</button>
+        </div>
+      </div>
+
+      <!-- Intestazioni giorni Dom-Sab -->
+      <div class="cal-head-row">
+        <div class="cal-head-cell" *ngFor="let h of dayHeaders">{{ h }}</div>
+      </div>
+
+      <!-- Settimane -->
+      <div class="cal-body">
+        <div class="cal-week" *ngFor="let week of calendarWeeks">
+          <div class="cal-cell"
+               *ngFor="let c of week"
+               [class.out-month]="!c.currentMonth"
+               [class.is-today]="c.date === today"
+               (click)="openCreatePicker(c)">
+            <span class="cal-day-num">{{ c.day }}</span>
+            <div class="cal-chips">
+              <span class="cal-chip" *ngFor="let e of c.events.slice(0, 2)"
+                    [ngClass]="chipClass(e.type)">{{ e.title }}</span>
+              <span class="cal-chip chip-more" *ngIf="c.events.length > 2">
+                +{{ c.events.length - 2 }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="day-create-panel" *ngIf="selectedDate">
+        <div class="dcp-header">
+          <strong>Nuovo inserimento per {{ formatDayLabel(selectedDate) }}</strong>
+          <button type="button" class="dcp-close" (click)="closeCreatePicker()">✕</button>
+        </div>
+        <div class="dcp-actions">
+          <button type="button" class="dcp-btn concert" (click)="chooseCreate('concert')">Concerto</button>
+          <button type="button" class="dcp-btn proposal" (click)="chooseCreate('proposal')">Proposta concerto (bozza)</button>
+          <button type="button" class="dcp-btn lesson" (click)="chooseCreate('lesson')">Lezione</button>
+        </div>
+        <div class="dcp-ok" *ngIf="quickCreateDone">✓ {{ quickCreateLabel }}</div>
       </div>
     </div>
+
+    <!-- Accesso Rapido -->
+    <div class="section-label">Accesso Rapido</div>
+    <div class="quick-grid">
+      <button type="button" class="quick-card" *ngFor="let ql of quickLinks" (click)="go(ql.route)">
+        <i class="qc-icon ti {{ ql.icon }}"></i>
+        <span class="qc-text">
+          <span class="qc-title">{{ ql.label }}</span>
+          <span class="qc-sub">{{ ql.sub }}</span>
+        </span>
+        <span class="qc-arrow">›</span>
+      </button>
+    </div>
+
   </div>
 
-  <!-- Upcoming events -->
-  <div class="card">
-    <div class="card-header">
-      <h2>Prossimi eventi</h2>
-      <a routerLink="/events" class="card-link">Tutti →</a>
-    </div>
-    <div class="empty-state" *ngIf="upcomingEvents.length === 0">
-      <span>📅</span>
-      <p>Nessun evento programmato</p>
-    </div>
-    <div class="event-item" *ngFor="let e of upcomingEvents">
-      <div class="event-date-badge">
-        <span class="edb-day">{{ formatDate(e.date).split(' ')[1] }}</span>
-        <span class="edb-month">{{ formatDate(e.date).split(' ')[2] }}</span>
-      </div>
-      <div class="event-info">
-        <div class="event-title">{{ e.title }}</div>
-        <div class="event-meta">{{ e.venue || e.address || '—' }} • {{ eventTypeLabel(e.type) }}</div>
-      </div>
-      <span class="event-status" [ngClass]="e.status">{{ e.status }}</span>
-    </div>
-  </div>
+  <!-- ── Colonna destra ── -->
+  <aside class="right-column">
+    <div class="card notif-card">
+      <h2 class="card-title">Notifiche &amp; Alert</h2>
 
-  <!-- Notifications -->
-  <div class="card">
-    <div class="card-header">
-      <h2>
-        Notifiche
-        <span class="badge-count" *ngIf="unreadCount > 0">{{ unreadCount }}</span>
-      </h2>
-      <button class="card-link" *ngIf="unreadCount > 0" (click)="markAllRead()">Segna lette</button>
-    </div>
-    <div class="empty-state" *ngIf="notifications.length === 0">
-      <span>🔔</span>
-      <p>Nessuna notifica</p>
-    </div>
-    <div class="notif-item" *ngFor="let n of notifications" [class.unread]="!n.read">
-      <div class="notif-dot" *ngIf="!n.read"></div>
-      <div class="notif-body">
-        <div class="notif-title">{{ n.title }}</div>
-        <div class="notif-msg">{{ n.message }}</div>
+      <div class="notif-section-hd">
+        <span class="nsh-label">BOZZE IN SOSPESO</span>
+        <span class="nsh-badge" *ngIf="unreadCount > 0">{{ unreadCount }}</span>
       </div>
+
+      <div class="empty-state" *ngIf="notifications.length === 0">
+        <span>🔔</span>
+        <p>Nessuna notifica</p>
+      </div>
+
+      <div class="notif-item"
+           *ngFor="let n of notifications; let first = first"
+           [class.notif-highlight]="!n.read && first">
+        <div class="ni-icon-wrap" [ngClass]="notifIconClass(n.type)">
+          <span>📣</span>
+        </div>
+        <div class="ni-body">
+          <div class="ni-title">{{ n.title }}</div>
+          <div class="ni-sub">{{ n.message }}</div>
+        </div>
+        <span class="ni-tag" [class.tag-unread]="!n.read" [class.tag-read]="n.read">
+          {{ n.read ? 'Letta' : 'Bozza' }}
+        </span>
+      </div>
+
+      <button type="button" class="mark-all-btn" *ngIf="unreadCount > 0" (click)="markAllRead()">
+        Segna tutte lette
+      </button>
     </div>
-  </div>
+  </aside>
 
 </div>

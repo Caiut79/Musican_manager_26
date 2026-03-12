@@ -1,0 +1,32 @@
+.wrap {
+  max-width: 860px;
+  margin: 20px auto;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-top: 12px;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+}
+
+.item {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.empty {
+  color: var(--text-muted);
+}
+
+.total {
+  margin-top: 10px;
+  font-weight: 700;
+}

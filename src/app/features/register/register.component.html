@@ -1,0 +1,24 @@
+<div class="auth-card">
+  <h1>{{ mode === 'register' ? 'Attiva account musicista' : 'Accedi' }}</h1>
+  <p class="subtitle" *ngIf="licenseRef">Ref licenza: <strong>{{ licenseRef }}</strong></p>
+
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <label>Email
+      <input type="email" formControlName="email" placeholder="nome@email.com" autocomplete="email">
+    </label>
+
+    <label>Password
+      <input type="password" formControlName="password" placeholder="Minimo 6 caratteri" autocomplete="current-password">
+    </label>
+
+    <button type="submit" class="btn-primary" [disabled]="loading">
+      {{ loading ? 'Attendere…' : (mode === 'register' ? 'Registrati e continua' : 'Accedi e continua') }}
+    </button>
+  </form>
+
+  <button type="button" class="btn-link" (click)="toggleMode()">
+    {{ mode === 'register' ? 'Hai già un account? Accedi' : 'Non hai un account? Registrati' }}
+  </button>
+
+  <p class="error" *ngIf="error">{{ error }}</p>
+</div>

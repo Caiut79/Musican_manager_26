@@ -1,27 +1,28 @@
-<!-- Sidebar -->
-<app-sidebar
-  [collapsed]="sidebarCollapsed"
-  [mobileOpen]="mobileMenuOpen"
-  (sidebarToggle)="toggleSidebar()"
-  (sidebarClose)="closeMobileMenu()">
-</app-sidebar>
+<ng-container *ngIf="!isPublicRoute(); else registerLayout">
+  <app-sidebar
+    [collapsed]="sidebarCollapsed"
+    [mobileOpen]="mobileMenuOpen"
+    (sidebarToggle)="toggleSidebar()"
+    (sidebarClose)="closeMobileMenu()">
+  </app-sidebar>
 
-<!-- Main layout wrapper (shifts right to make room for sidebar) -->
-<div class="app-layout" [class.sidebar-collapsed]="sidebarCollapsed">
+  <div class="app-layout" [class.sidebar-collapsed]="sidebarCollapsed">
+    <header class="mobile-header">
+      <button type="button" class="hamburger" (click)="toggleSidebar()" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <span class="mobile-brand">♪ Musicista</span>
+    </header>
+    <main class="app-content" aria-label="Contenuto principale">
+      <div class="container">
+        <router-outlet></router-outlet>
+      </div>
+    </main>
+  </div>
+</ng-container>
 
-  <!-- Mobile top bar (hamburger + brand) -->
-  <header class="mobile-header">
-    <button type="button" class="hamburger" (click)="toggleSidebar()" aria-label="Menu">
-      <span></span><span></span><span></span>
-    </button>
-    <span class="mobile-brand">♪ Musicista</span>
-  </header>
-
-  <!-- Routed content -->
-  <main class="app-content">
-    <div class="container">
-      <router-outlet></router-outlet>
-    </div>
-  </main>
-
-</div>
+<ng-template #registerLayout>
+  <section class="register-shell" aria-label="Registrazione musicista">
+    <router-outlet></router-outlet>
+  </section>
+</ng-template>

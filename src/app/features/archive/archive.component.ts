@@ -1,0 +1,96 @@
+import { Component, OnInit } from '@angular/core';
+import { FormBuilder, Validators } from '@angular/forms';
+import { ArchiveEntity, SupabaseService } from '../../core/supabase.service';
+
+@Component({
+  selector: 'app-archive',
+  templateUrl: './archive.component.html',
+  styleUrls: ['./archive.component.scss']
+})
+export class ArchiveComponent implements OnInit {
+  musicianCode = '';
+  musicianName = '';
+  syncing = false;
+  syncOk = false;
+  syncError: string | null = null;
+  musicianQuery = '';
+  bandQuery = '';
+  musicians: ArchiveEntity[] = [];
+  bands: ArchiveEntity[] = [];
+  archiveRemoteAvailable = true;
+
+  form = this.fb.group({
+    bandCode: ['', Validators.required]
+  });
+
+  constructor(private fb: FormBuilder, private supabase: SupabaseService) {}
+
+  async ngOnInit(): Promise<void> {
+    const firstName = localStorage.getItem('mm_firstName') || '';
+    const lastName = localStorage.getItem('mm_lastName') || '';
+    this.musicianName = `${firstName} ${lastName}`.trim();
+    this.musicianCode =
+      localStorage.getItem('mm_affiliation_code') ||
+      localStorage.getItem('musicianCode') ||
+      '';
+    await this.refreshLists();
+  }
+
+  async refreshLists(): Promise<void> {
+    this.musicians = await this.supabase.searchArchiveEntities(this.musicianQuery, 'musician');
+    const remoteBands = await this.supabase.searchArchiveEntities(this.bandQuery, 'band');
+    if (remoteBands.length) {
+      this.bands = remoteBands;
+    } else {
+      const sourceMusicians = this.musicianQuery
+        ? this.musicians
+        : await this.supabase.searchArchiveEntities('', 'musician');
+      this.bands = this.deriveBandsFromMusicians(sourceMusicians, this.bandQuery);
+    }
+    this.archiveRemoteAvailable = this.supabase.isArchiveRemoteAvailable();
+  }
+
+  async syncCodes(): Promise<void> {
+    this.syncError = null;
+    this.syncOk = false;
+    if (!this.musicianCode) {
+      this.syncError = 'Codice musicista non disponibile';
+      return;
+    }
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
+    this.syncing = true;
+    const bandCode = `${this.form.value.bandCode || ''}`.trim().toUpperCase();
+    const ok = await this.supabase.syncArchiveCodes(this.musicianCode, bandCode, this.musicianName);
+    if (!ok) {
+      this.syncError = 'Sincronizzazione non riuscita. Verifica migrazione archivio su Supabase.';
+    } else {
+      this.syncOk = true;
+      this.form.patchValue({ bandCode: '' });
+      await this.refreshLists();
+    }
+    this.syncing = false;
+  }
+
+  private deriveBandsFromMusicians(rows: ArchiveEntity[], query: string): ArchiveEntity[] {
+    const normalized = (query || '').trim().toLowerCase();
+    const seen = new Set<string>();
+    const out: ArchiveEntity[] = [];
+    rows.forEach(row => {
+      const bandCode = (row.linked_code || '').trim().toUpperCase();
+      if (!bandCode || seen.has(bandCode)) return;
+      if (normalized && !bandCode.toLowerCase().includes(normalized)) return;
+      seen.add(bandCode);
+      out.push({
+        entity_type: 'band',
+        entity_code: bandCode,
+        display_name: null,
+        linked_code: row.entity_code,
+        created_at: row.created_at
+      });
+    });
+    return out;
+  }
+}

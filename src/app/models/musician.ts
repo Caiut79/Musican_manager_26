@@ -22,7 +22,9 @@ export type Musician = {
   birthPlace?: string;
   fiscalCode?: string;
   residence?: string;
-  workerType?: 'cooperativa' | 'libero_professionista' | 'insegnante_piva' | 'esente';
+  workerType?: 'cooperativa' | 'libero_professionista' | 'insegnante_piva' | 'misto_piva_lezioni_cooperativa_musica' | 'esente';
+  lessonBillingMode?: 'in_fattura' | 'fuori_fattura';
+  musicBillingMode?: 'in_fattura' | 'fuori_fattura';
   empalsPosition?: string;
   enpalsCategory?: string;
   exemptEmployer?: string;

@@ -24,7 +24,7 @@ export class SidebarComponent {
 
   setTheme(t: Theme): void { this.themeService.apply(t); }
 
-  navItems: NavItem[] = [
+  private baseNavItems: NavItem[] = [
     { label: 'Dashboard',     icon: 'ti-layout-dashboard', route: '/dashboard' },
     { label: 'Agenda',        icon: 'ti-calendar',         route: '/agenda' },
     { label: 'Concerti',      icon: 'ti-music',            route: '/concerts' },
@@ -32,9 +32,17 @@ export class SidebarComponent {
     { label: 'Report',        icon: 'ti-chart-bar',        route: '/reports' },
     { label: 'Spese',         icon: 'ti-map-pin',          route: '/expenses' },
     { label: 'Comunicazione', icon: 'ti-message-circle',   route: '/communication' },
+    { label: 'Rubrica',       icon: 'ti-address-book',     route: '/contacts' },
     { label: 'Archivio',      icon: 'ti-archive',          route: '/archive' },
     { label: 'Storico',       icon: 'ti-clock',            route: '/history' },
     { label: 'Contabilità',   icon: 'ti-briefcase',        route: '/accounting' },
     { label: 'Profilo',       icon: 'ti-user-circle',      route: '/profile' },
   ];
+
+  get navItems(): NavItem[] {
+    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const isTeacher = profile?.isTeacher === true;
+    if (isTeacher) return this.baseNavItems;
+    return this.baseNavItems.filter(item => item.route !== '/teaching');
+  }
 }

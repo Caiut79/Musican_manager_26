@@ -39,6 +39,14 @@
       <div class="summary-value">{{ balance | currency:'EUR':'symbol':'1.0-2' }}</div>
     </div>
   </div>
+  <div class="summary-card threshold" [class.positive]="invoiced5000Over === 0" [class.negative]="invoiced5000Over > 0">
+    <span class="summary-icon">📊</span>
+    <div>
+      <div class="summary-label">Fatturato concerti (soglia 5.000€)</div>
+      <div class="summary-value">{{ invoiced5000Counter | currency:'EUR':'symbol':'1.0-2' }}</div>
+      <div class="summary-label">Residuo: {{ invoiced5000Residual | currency:'EUR':'symbol':'1.0-2' }}</div>
+    </div>
+  </div>
 </div>
 
 <div class="tables-grid">
@@ -97,4 +105,421 @@
       </tfoot>
     </table>
   </section>
+</div>
+
+<!-- ═══ PAGAMENTI ══════════════════════════════════════════════════════════ -->
+<div class="pay-section">
+
+  <div class="pay-header">
+    <h2 class="pay-title"><i class="ti ti-credit-card"></i> Pagamenti</h2>
+    <div class="pay-tabs">
+      <button type="button" class="pay-tab" [class.active]="paymentTab === 'concerti'" (click)="paymentTab = 'concerti'">
+        <i class="ti ti-music"></i> Concerti
+      </button>
+      <button type="button" class="pay-tab" *ngIf="isTeacher" [class.active]="paymentTab === 'lezioni'" (click)="paymentTab = 'lezioni'">
+        <i class="ti ti-school"></i> Lezioni
+      </button>
+      <button type="button" class="pay-tab" [class.active]="paymentTab === 'totali'" (click)="paymentTab = 'totali'">
+        <i class="ti ti-chart-pie"></i> Totali
+      </button>
+    </div>
+    <button type="button" class="pay-tool-btn" (click)="showTaxTool = !showTaxTool">
+      {{ showTaxTool ? 'Chiudi tool fiscale' : 'Apri tool fiscale' }}
+    </button>
+  </div>
+  <div class="enpals-box" *ngIf="showTaxTool">
+    <div class="enpals-title">Simulatore trattenute serata fatturata</div>
+    <div class="enpals-grid">
+      <label>Imponibile serata
+        <input type="number" min="0" step="0.01" [(ngModel)]="serataTaxInput.imponibile">
+      </label>
+      <label>Numero componenti
+        <input type="number" min="1" step="1" [(ngModel)]="serataTaxInput.componentCount">
+      </label>
+      <label><input type="checkbox" [(ngModel)]="serataTaxInput.exEnpalsRequired"> Versamento INPS ex ENPALS dovuto</label>
+      <label><input type="checkbox" [(ngModel)]="serataTaxInput.outsideResidenceComune"> Concerto fuori Comune di residenza</label>
+      <label><input type="checkbox" [(ngModel)]="serataTaxInput.deductionAlreadyUsedToday"> Detrazione forfettaria già usata oggi</label>
+    </div>
+    <div class="enpals-result">
+      IRAP: <strong>{{ serataIrap | currency:'EUR':'symbol':'1.0-2' }}</strong>
+      • Trattenuta per componente: <strong>{{ serataContributionPerComponent | currency:'EUR':'symbol':'1.0-2' }}</strong>
+      • Totale trattenute serata: <strong>{{ serataTotalTaxesBand | currency:'EUR':'symbol':'1.0-2' }}</strong>
+    </div>
+    <div class="enpals-note">
+      Detrazione applicata per componente: <strong>{{ serataDeductionPerComponent | currency:'EUR':'symbol':'1.0-2' }}</strong> • Imponibile per componente: <strong>{{ serataImponibilePerComponent | currency:'EUR':'symbol':'1.0-2' }}</strong>
+      <span *ngIf="serataMinInvoiceWarning"> • {{ serataMinInvoiceWarning }}</span>
+    </div>
+  </div>
+
+  <div class="enpals-box" *ngIf="showTaxTool">
+    <div class="enpals-title">Simulatore IRPEF (scaglioni)</div>
+    <div class="enpals-grid">
+      <label>Reddito imponibile annuo
+        <input type="number" min="0" step="0.01" [(ngModel)]="irpefInput.annualTaxableIncome">
+      </label>
+      <label>Aliquota addizionali regionale/comunale (%)
+        <input type="number" min="0" step="0.1" [(ngModel)]="irpefInput.regionalMunicipalRate">
+      </label>
+    </div>
+    <div class="enpals-result">
+      Scaglioni:
+      23% = <strong>{{ irpefBracketAmounts.first | currency:'EUR':'symbol':'1.0-2' }}</strong>
+      • 33% = <strong>{{ irpefBracketAmounts.second | currency:'EUR':'symbol':'1.0-2' }}</strong>
+      • 43% = <strong>{{ irpefBracketAmounts.third | currency:'EUR':'symbol':'1.0-2' }}</strong>
+    </div>
+    <div class="enpals-result">
+      IRPEF lorda stimata: <strong>{{ irpefLorda | currency:'EUR':'symbol':'1.0-2' }}</strong>
+      • Addizionali stimate: <strong>{{ irpefRegionalMunicipal | currency:'EUR':'symbol':'1.0-2' }}</strong>
+      • Totale imposte stimate: <strong>{{ irpefTotalEstimated | currency:'EUR':'symbol':'1.0-2' }}</strong>
+    </div>
+  </div>
+
+  <!-- ── TAB: Concerti ─────────────────────────────────────────────────────── -->
+  <div *ngIf="paymentTab === 'concerti'">
+    <div class="pay-filter-row" *ngIf="availableBandFilters.length">
+      <label>Filtra per band
+        <select [(ngModel)]="selectedBandFilter">
+          <option value="">Tutte</option>
+          <option *ngFor="let b of availableBandFilters" [value]="b">{{ b }}</option>
+        </select>
+      </label>
+    </div>
+    <div class="pay-empty" *ngIf="concertEvents.length === 0">
+      <i class="ti ti-music-off"></i><span>Nessun concerto registrato</span>
+    </div>
+
+    <div class="pay-event-card" *ngFor="let ev of concertEvents" [class.pay-focus]="focusedEventId === ev.id">
+      <div class="pec-top">
+        <div class="pec-info">
+          <span class="pec-date">{{ formatDate(ev.date) }}</span>
+          <span class="pec-title">{{ ev.title }}</span>
+          <span class="pec-date">Band: {{ eventBandLabel(ev) }}</span>
+          <span class="pec-date">Cadenza: {{ isMonthlyConcert(ev) ? 'Mensile' : 'Saldo immediato' }}</span>
+        </div>
+        <div class="pec-amounts">
+          <span class="pec-agreed">Pattuito <strong>{{ ev.grossFee | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+          <span class="pec-received" *ngIf="paymentsForEvent(ev.id).length > 0">
+            Ricevuto <strong>{{ totalReceivedForEvent(ev.id) | currency:'EUR':'symbol':'1.0-0' }}</strong>
+          </span>
+        </div>
+        <div class="pec-right">
+          <span class="pay-status-badge" [ngClass]="paymentStatusClass(ev.id)">
+            {{ paymentStatusLabel(ev.id) }}
+          </span>
+          <button type="button" class="btn-pay-add" (click)="openImmediateConcertPaymentForm(ev)"
+                  *ngIf="isImmediateConcert(ev) && !(showPaymentForm && draft.eventId === ev.id)"
+                  title="Registra pagamento" aria-label="Registra pagamento">
+            <i class="ti ti-plus"></i>
+          </button>
+          <button type="button" class="btn-pay-add btn-pay-text" (click)="openMonthlyConcertPaymentForm(ev, 'acconto')"
+                  *ngIf="isMonthlyConcert(ev) && !(showPaymentForm && draft.eventId === ev.id)"
+                  title="Aggiungi acconto" aria-label="Aggiungi acconto">
+            Acconto
+          </button>
+          <button type="button" class="btn-pay-add btn-pay-text" (click)="openMonthlyConcertPaymentForm(ev, 'bonifico')"
+                  *ngIf="isMonthlyConcert(ev) && !(showPaymentForm && draft.eventId === ev.id)"
+                  title="Aggiungi bonifico" aria-label="Aggiungi bonifico">
+            Bonifico
+          </button>
+          <button type="button" class="btn-pay-add btn-cancel-form" (click)="closePaymentForm()"
+                  *ngIf="showPaymentForm && draft.eventId === ev.id"
+                  title="Annulla" aria-label="Annulla registrazione pagamento">
+            <i class="ti ti-x"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Payments list -->
+      <div class="pay-list" *ngIf="paymentsForEvent(ev.id).length > 0">
+        <div class="pay-row" *ngFor="let p of paymentsForEvent(ev.id)">
+          <span class="pr-type-badge" [ngClass]="p.paymentType">{{ paymentTypeLabel(p.paymentType) }}</span>
+          <span class="pr-method"><i class="ti ti-credit-card"></i> {{ paymentMethodLabel(p.paymentMethod) }}</span>
+          <span class="pr-mode-badge" [ngClass]="paymentModeBadgeClass(p.paymentMode)">{{ paymentModeLabel(p.paymentMode) }}</span>
+          <span class="pr-iva-info" *ngIf="p.paymentMode === 'fattura_diretta'">
+            + IVA {{ p.ivaPercent }}% = <strong>{{ p.invoiceTotal | currency:'EUR':'symbol':'1.0-2' }}</strong>
+            <span class="pr-enpals" *ngIf="p.includeExpensesInInvoice && p.reimbursableExpenses > 0">Spese in fattura {{ p.reimbursableExpenses | currency:'EUR':'symbol':'1.0-2' }}</span>
+            <span class="pr-enpals" *ngIf="p.enpalsExempt">ENPALS esente</span>
+          </span>
+          <span class="pr-group-note" *ngIf="p.paymentMode === 'pattuito_fattura' && p.groupInvoiceNote">
+            {{ p.groupInvoiceNote }}
+          </span>
+          <span class="pr-amount">{{ p.receivedAmount | currency:'EUR':'symbol':'1.0-2' }}</span>
+          <button type="button" class="btn-delete" (click)="deletePayment(p.id)" title="Elimina" aria-label="Elimina pagamento">
+            <i class="ti ti-trash"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Inline payment form (concerti) -->
+      <div class="pay-form" *ngIf="showPaymentForm && draft.eventId === ev.id">
+        <div class="pf-title">Registra pagamento — <em>{{ draft.serviceTitle }}</em></div>
+        <div class="pf-grid">
+
+          <label>
+            <span>Importo ricevuto (€)</span>
+            <input type="number" [(ngModel)]="draft.receivedAmount" min="0" step="0.01">
+          </label>
+
+          <label *ngIf="isDraftMonthlyConcert()">
+            <span>Tipo pagamento mensile</span>
+            <select [(ngModel)]="draft.paymentType">
+              <option value="acconto">Acconto fuori fattura</option>
+              <option value="mensile">Bonifico da fattura band</option>
+            </select>
+          </label>
+
+          <div class="pf-inline-info" *ngIf="!isDraftMonthlyConcert()">
+            Tipo pagamento: <strong>Saldo immediato</strong>
+          </div>
+
+          <label>
+            <span>Metodo</span>
+            <select [(ngModel)]="draft.paymentMethod" (ngModelChange)="onConcertPaymentMethodChanged()">
+              <option value="contanti">Contanti</option>
+              <option value="bonifico">Bonifico bancario</option>
+              <option value="assegno">Assegno</option>
+              <option value="pos">POS / Carta</option>
+            </select>
+          </label>
+
+          <div class="full">
+            <span>Modalità di pagamento</span>
+            <div class="pf-mode-radios">
+              <label class="pf-mode-opt">
+                <input type="radio" [name]="'payMode_' + ev.id" value="pattuito_extra" [(ngModel)]="draft.paymentMode" [disabled]="isImmediateTrackedMethod()">
+                <span class="pmo-label">
+                  <strong>Pattuito fuori fattura</strong>
+                  <small>Pagamento del compenso pattuito senza emissione di fattura</small>
+                </span>
+              </label>
+              <label class="pf-mode-opt" *ngIf="isDraftMonthlyConcert()">
+                <input type="radio" [name]="'payMode_' + ev.id" value="pattuito_fattura" [(ngModel)]="draft.paymentMode">
+                <span class="pmo-label">
+                  <strong>Pattuito in fattura (gruppo)</strong>
+                  <small>Il pattuito viene inserito in una fattura emessa dal gruppo; il gruppo copre IVA e spese aggiuntive</small>
+                </span>
+              </label>
+              <label class="pf-mode-opt" *ngIf="!isDraftMonthlyConcert()">
+                <input type="radio" [name]="'payMode_' + ev.id" value="fattura_diretta" [(ngModel)]="draft.paymentMode" [disabled]="isImmediateTrackedMethod()">
+                <span class="pmo-label">
+                  <strong>Importo in fattura diretta</strong>
+                  <small>Fattura emessa dal musicista: il committente paga importo + IVA</small>
+                </span>
+              </label>
+            </div>
+            <div class="pf-inline-info" *ngIf="!isDraftMonthlyConcert() && draft.paymentMethod !== 'contanti'">
+              Metodo tracciato selezionato: modalità impostata automaticamente su <strong>Importo in fattura diretta</strong>
+            </div>
+          </div>
+
+          <label class="full" *ngIf="draft.paymentMode === 'pattuito_fattura'">
+            <span>Nota fattura gruppo</span>
+            <input type="text" [(ngModel)]="draft.groupInvoiceNote"
+                   placeholder="Es. Fattura n.5/2026 — gruppo X divide IVA">
+          </label>
+
+          <div class="full pf-iva-box" *ngIf="draft.paymentMode === 'fattura_diretta'">
+            <label class="pf-iva-exempt" *ngIf="draft.reimbursableExpenses > 0">
+              <input type="checkbox" [(ngModel)]="draft.includeExpensesInInvoice">
+              <span>Includi spese in fattura ({{ draft.reimbursableExpenses | currency:'EUR':'symbol':'1.0-2' }})</span>
+            </label>
+            <div class="pf-iva-row">
+              <label class="iva-pct-lbl">
+                <span>IVA (%)</span>
+                <input type="number" [(ngModel)]="draft.ivaPercent" min="0" max="22" step="1">
+              </label>
+              <div class="pf-iva-calc">
+                <div>Imponibile: <strong>{{ draftTaxableBase | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
+                <div>IVA {{ draft.ivaPercent }}%: <strong>{{ draftIvaAmount | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
+                <div class="pf-iva-total">Totale fattura: <strong>{{ draftInvoiceTotal | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
+              </div>
+            </div>
+            <label class="pf-iva-exempt">
+              <input type="checkbox" [(ngModel)]="draft.enpalsExempt">
+              <span>Esente ENPALS/INPS — applicare regime agevolato</span>
+            </label>
+            <p class="pf-iva-note" *ngIf="draft.enpalsExempt">
+              Con esenzione ENPALS attiva: verificare l'applicazione del regime forfettario o agevolato per la propria categoria.
+            </p>
+          </div>
+
+          <label class="full">
+            <span>Note</span>
+            <input type="text" [(ngModel)]="draft.notes" placeholder="Note opzionali">
+          </label>
+        </div>
+
+        <div class="pf-actions">
+          <button type="button" class="btn-cancel" (click)="closePaymentForm()">Annulla</button>
+          <button type="button" class="btn-save" (click)="savePayment()"
+                  [disabled]="!draft.receivedAmount || draft.receivedAmount <= 0">
+            <i class="ti ti-check"></i> Salva pagamento
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TAB: Lezioni ──────────────────────────────────────────────────────── -->
+  <div *ngIf="paymentTab === 'lezioni' && isTeacher">
+    <div class="pay-empty" *ngIf="lessonEvents.length === 0">
+      <i class="ti ti-school"></i><span>Nessuna lezione registrata</span>
+    </div>
+
+    <div class="pay-event-card" *ngFor="let ev of lessonEvents">
+      <div class="pec-top">
+        <div class="pec-info">
+          <span class="pec-date">{{ formatDate(ev.date) }}</span>
+          <span class="pec-title">{{ ev.title }}</span>
+        </div>
+        <div class="pec-amounts">
+          <span class="pec-agreed">Pattuito <strong>{{ ev.grossFee | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+          <span class="pec-received" *ngIf="paymentsForEvent(ev.id).length > 0">
+            Ricevuto <strong>{{ totalReceivedForEvent(ev.id) | currency:'EUR':'symbol':'1.0-0' }}</strong>
+          </span>
+        </div>
+        <div class="pec-right">
+          <span class="pay-status-badge" [ngClass]="paymentStatusClass(ev.id)">
+            {{ paymentStatusLabel(ev.id) }}
+          </span>
+          <button type="button" class="btn-pay-add" (click)="openPaymentForm(ev)"
+                  *ngIf="!(showPaymentForm && draft.eventId === ev.id)"
+                  title="Registra pagamento" aria-label="Registra pagamento">
+            <i class="ti ti-plus"></i>
+          </button>
+          <button type="button" class="btn-pay-add btn-cancel-form" (click)="closePaymentForm()"
+                  *ngIf="showPaymentForm && draft.eventId === ev.id"
+                  title="Annulla" aria-label="Annulla registrazione pagamento">
+            <i class="ti ti-x"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="pay-list" *ngIf="paymentsForEvent(ev.id).length > 0">
+        <div class="pay-row" *ngFor="let p of paymentsForEvent(ev.id)">
+          <span class="pr-type-badge" [ngClass]="p.paymentType">{{ paymentTypeLabel(p.paymentType) }}</span>
+          <span class="pr-method"><i class="ti ti-credit-card"></i> {{ paymentMethodLabel(p.paymentMethod) }}</span>
+          <span class="pr-mode-badge" [ngClass]="paymentModeBadgeClass(p.paymentMode)">{{ paymentModeLabel(p.paymentMode) }}</span>
+          <span class="pr-iva-info" *ngIf="p.paymentMode === 'fattura_diretta'">
+            + IVA {{ p.ivaPercent }}% = <strong>{{ p.invoiceTotal | currency:'EUR':'symbol':'1.0-2' }}</strong>
+            <span class="pr-enpals" *ngIf="p.enpalsExempt">Esente</span>
+          </span>
+          <span class="pr-amount">{{ p.receivedAmount | currency:'EUR':'symbol':'1.0-2' }}</span>
+          <button type="button" class="btn-delete" (click)="deletePayment(p.id)" title="Elimina" aria-label="Elimina pagamento">
+            <i class="ti ti-trash"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="pay-form" *ngIf="showPaymentForm && draft.eventId === ev.id">
+        <div class="pf-title">Registra pagamento — <em>{{ draft.serviceTitle }}</em></div>
+        <div class="pf-grid">
+
+          <label>
+            <span>Importo ricevuto (€)</span>
+            <input type="number" [(ngModel)]="draft.receivedAmount" min="0" step="0.01">
+          </label>
+
+          <label>
+            <span>Tipo pagamento</span>
+            <select [(ngModel)]="draft.paymentType">
+              <option value="acconto">Acconto</option>
+              <option value="saldo">Saldo (pagamento completo)</option>
+              <option value="mensile">Mensile</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Metodo</span>
+            <select [(ngModel)]="draft.paymentMethod">
+              <option value="contanti">Contanti</option>
+              <option value="bonifico">Bonifico bancario</option>
+              <option value="assegno">Assegno</option>
+              <option value="pos">POS / Carta</option>
+            </select>
+          </label>
+
+          <div class="full">
+            <span>Modalità di pagamento</span>
+            <div class="pf-mode-radios">
+              <label class="pf-mode-opt">
+                <input type="radio" [name]="'lessonMode_' + ev.id" value="pattuito_extra" [(ngModel)]="draft.paymentMode">
+                <span class="pmo-label">
+                  <strong>Pattuito</strong>
+                  <small>Pagamento del compenso pattuito senza fattura</small>
+                </span>
+              </label>
+              <label class="pf-mode-opt">
+                <input type="radio" [name]="'lessonMode_' + ev.id" value="fattura_diretta" [(ngModel)]="draft.paymentMode">
+                <span class="pmo-label">
+                  <strong>In fattura</strong>
+                  <small>Lezione fatturata: importo + IVA a carico dell'allievo/scuola</small>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="full pf-iva-box" *ngIf="draft.paymentMode === 'fattura_diretta'">
+            <div class="pf-iva-row">
+              <label class="iva-pct-lbl">
+                <span>IVA (%)</span>
+                <input type="number" [(ngModel)]="draft.ivaPercent" min="0" max="22" step="1">
+              </label>
+              <div class="pf-iva-calc">
+                <div>Imponibile: <strong>{{ draft.receivedAmount | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
+                <div>IVA {{ draft.ivaPercent }}%: <strong>{{ draftIvaAmount | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
+                <div class="pf-iva-total">Totale fattura: <strong>{{ draftInvoiceTotal | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
+              </div>
+            </div>
+            <label class="pf-iva-exempt">
+              <input type="checkbox" [(ngModel)]="draft.enpalsExempt">
+              <span>Applica regime agevolato / esenzione ENPALS</span>
+            </label>
+          </div>
+
+          <label class="full">
+            <span>Note</span>
+            <input type="text" [(ngModel)]="draft.notes" placeholder="Note opzionali">
+          </label>
+        </div>
+
+        <div class="pf-actions">
+          <button type="button" class="btn-cancel" (click)="closePaymentForm()">Annulla</button>
+          <button type="button" class="btn-save" (click)="savePayment()"
+                  [disabled]="!draft.receivedAmount || draft.receivedAmount <= 0">
+            <i class="ti ti-check"></i> Salva pagamento
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TAB: Totali ───────────────────────────────────────────────────────── -->
+  <div *ngIf="paymentTab === 'totali'" class="pay-totali">
+    <div class="tot-row" *ngIf="concertEvents.length > 0">
+      <div class="tot-label"><i class="ti ti-music"></i> Concerti</div>
+      <div class="tot-cols">
+        <div class="tot-item"><span>Pattuito totale</span><strong>{{ totalConcertiAgreed | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+        <div class="tot-item"><span>Ricevuto</span><strong class="clr-success">{{ totalConcertiReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+        <div class="tot-item"><span>In attesa</span><strong [class.clr-danger]="totalConcertiAgreed - totalConcertiReceived > 0">{{ (totalConcertiAgreed - totalConcertiReceived) | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+      </div>
+    </div>
+    <div class="tot-row" *ngIf="isTeacher && lessonEvents.length > 0">
+      <div class="tot-label"><i class="ti ti-school"></i> Lezioni</div>
+      <div class="tot-cols">
+        <div class="tot-item"><span>Pattuito totale</span><strong>{{ totalLezioniAgreed | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+        <div class="tot-item"><span>Ricevuto</span><strong class="clr-success">{{ totalLezioniReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+        <div class="tot-item"><span>In attesa</span><strong [class.clr-danger]="totalLezioniAgreed - totalLezioniReceived > 0">{{ (totalLezioniAgreed - totalLezioniReceived) | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+      </div>
+    </div>
+    <div class="tot-total tot-row">
+      <div class="tot-label"><i class="ti ti-sum"></i> Totale generale</div>
+      <div class="tot-cols">
+        <div class="tot-item"><span>Pattuito totale</span><strong>{{ totalAllAgreed | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+        <div class="tot-item"><span>Ricevuto</span><strong class="clr-success">{{ totalAllReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+        <div class="tot-item"><span>In attesa</span><strong [class.clr-danger]="totalAllPending > 0">{{ totalAllPending | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+      </div>
+    </div>
+  </div>
+
 </div>

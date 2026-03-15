@@ -51,6 +51,7 @@ export class AppComponent implements OnInit {
     return this.router.url.startsWith('/register')
       || this.router.url.startsWith('/book/')
       || this.router.url.startsWith('/confirm/')
-      || this.router.url.startsWith('/school/');
+      || this.router.url.startsWith('/school/')
+      || this.router.url.startsWith('/privacy-consent/');
   }
 }

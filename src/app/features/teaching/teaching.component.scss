@@ -14,6 +14,16 @@
   margin-bottom: 12px;
 }
 
+.create-hub {
+  margin-bottom: 12px;
+}
+
+.create-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -40,6 +50,17 @@ input, select {
   padding: 8px 10px;
 }
 
+.inline-row {
+  margin: 2px 0 8px;
+}
+
+.inline-grid {
+  border: 1px dashed #ddd6fe;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
 .btn-primary, .btn-outline {
   border-radius: 8px;
   padding: 8px 12px;
@@ -55,6 +76,10 @@ input, select {
   border: 1px solid #ddd6fe;
   color: var(--clr-primary);
   background: transparent;
+  &.active {
+    background: #ede9fe;
+    border-color: #c4b5fd;
+  }
 }
 
 .list {
@@ -69,6 +94,31 @@ input, select {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+}
+
+.item-col {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.att-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sub-list {
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.sub-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
 }
 
 .meta {

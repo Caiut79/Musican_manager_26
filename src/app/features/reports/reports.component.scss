@@ -34,3 +34,50 @@ h2 {
 .danger {
   color: #b91c1c;
 }
+
+.comp-card {
+  margin-top: 12px;
+}
+
+.comp-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  color: var(--text-muted);
+}
+
+.comp-summary.stacked {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comp-table {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 80px 130px 140px;
+  gap: 8px 10px;
+  align-items: center;
+}
+
+.comp-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.right {
+  text-align: right;
+}
+
+h3 {
+  margin: 10px 0 8px;
+  font-size: 13px;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}

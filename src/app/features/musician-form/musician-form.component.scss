@@ -283,6 +283,14 @@ input.invalid {
   grid-template-columns: repeat(3, minmax(150px, 1fr));
 }
 
+.exemption-reasons {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  .check-label {
+    width: 100%;
+  }
+}
+
+
 /* ── Span-2 label ── */
 .span-2 { grid-column: 1 / -1; }
 

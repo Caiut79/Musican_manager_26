@@ -1,17 +1,55 @@
 <div class="doc" *ngIf="concert; else notFound">
-  <h1>Conferma richiesta concerto</h1>
-  <p>Data: <strong>{{ concert.date }}</strong> ore <strong>{{ concert.timeStart }}</strong></p>
-  <p>Evento: <strong>{{ concert.title }}</strong></p>
-  <p>Venue: <strong>{{ concert.venue || 'N/D' }}</strong></p>
-  <p>Indirizzo: <strong>{{ concert.address || 'N/D' }}</strong></p>
-  <p>Formato: <strong>{{ concert.lineupType }}</strong></p>
-  <p>Compenso pattuito: <strong>{{ concert.agreedFee | currency:'EUR':'symbol':'1.0-0' }}</strong></p>
-  <p>Rimborso spese: <strong>{{ concert.reimbursement | currency:'EUR':'symbol':'1.0-0' }}</strong></p>
-  <p>Totale: <strong>{{ concert.agreedFee + concert.reimbursement | currency:'EUR':'symbol':'1.0-0' }}</strong></p>
-  <p *ngIf="concert.bands.length">Band: <strong>{{ concert.bands.join(', ') }}</strong></p>
-  <p *ngIf="concert.musicians.length">Musicisti: <strong>{{ concert.musicians.join(', ') }}</strong></p>
-  <p *ngIf="concert.notes">Note: {{ concert.notes }}</p>
-  <button type="button" class="btn-primary" (click)="printPdf()">Stampa / Salva PDF</button>
+  <div class="doc-head">
+    <div>
+      <h1>Esenzione Agibilità INPS ex ENPALS</h1>
+      <p class="subtitle">Autocertificazione ai sensi dell’art. 39 quater D.L. 159/2007 convertito in Legge n. 222/2007</p>
+    </div>
+    <button type="button" class="btn-primary no-print" (click)="printPdf()">Stampa / Salva PDF</button>
+  </div>
+
+  <section class="panel">
+    <h2>Dati evento</h2>
+    <div class="grid">
+      <div><span class="k">Data della serata</span><strong>{{ formatItalianDate(concert.date || todayIso) }}</strong></div>
+      <div><span class="k">Evento</span><strong>{{ concert.title | uppercase }}</strong></div>
+      <div><span class="k">Luogo evento (locale e provincia)</span><strong>{{ eventPlace | uppercase }}</strong></div>
+      <div><span class="k">Band / Progetto</span><strong>{{ eventBandLabel | uppercase }}</strong></div>
+    </div>
+    <p class="legal warn" *ngIf="eventProvinceHint">{{ eventProvinceHint }}</p>
+  </section>
+
+  <section class="panel exemption" *ngIf="exemptionEnabled">
+    <h2>Dichiarazione di esenzione contributiva spettacolo</h2>
+    <p class="legal">
+      Il sottoscritto dichiara di svolgere attività di musica dal vivo e di rientrare nelle condizioni previste dalla normativa vigente per l’esenzione.
+    </p>
+    <div class="grid">
+      <div><span class="k">Dichiarante</span><strong>{{ fullName | uppercase }}</strong></div>
+      <div><span class="k">Nato a</span><strong>{{ (profile.birthPlace || 'N/D') | uppercase }}</strong></div>
+      <div><span class="k">Data di nascita</span><strong>{{ formatItalianDate(profile.birthDate) }}</strong></div>
+      <div><span class="k">Residenza</span><strong>{{ (profile.residence || 'N/D') | uppercase }}</strong></div>
+      <div><span class="k">Codice fiscale</span><strong>{{ (profile.fiscalCode || 'N/D') | uppercase }}</strong></div>
+    </div>
+    <div class="checks">
+      <div class="check-row" *ngFor="let c of exemptionChecks">
+        <span class="box">{{ c.selected ? 'X' : '' }}</span>
+        <span>{{ c.label }}</span>
+      </div>
+    </div>
+    <p class="legal">
+      Si dichiara inoltre che la retribuzione annua derivante dall’attività musicale rientra nei limiti previsti per l’esenzione.
+    </p>
+    <div class="sign-row">
+      <div class="sign-box">
+        <div class="signature-area" *ngIf="signatureDataUrl">
+          <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" [attr.src]="signatureDataUrl" alt="Firma dichiarante" class="signature-img">
+          <div class="signature-line"></div>
+          <span class="k signature-caption">Firma del dichiarante</span>
+        </div>
+        <strong>{{ fullName | uppercase }}</strong>
+      </div>
+    </div>
+  </section>
 </div>
 
 <ng-template #notFound>

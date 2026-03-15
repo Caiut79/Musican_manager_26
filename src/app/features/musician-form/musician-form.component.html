@@ -58,6 +58,9 @@
       <label>Telefono
         <input type="tel" formControlName="phone" placeholder="es. +39 333 1234567">
       </label>
+      <label>Email licenza
+        <input type="email" formControlName="licenseEmail" placeholder="email usata per attivazione licenza" readonly>
+      </label>
       <label>Codice fiscale
         <input type="text" formControlName="fiscalCode" placeholder="es. RSSMRC80A01H501Z" class="uppercase-input">
       </label>
@@ -156,22 +159,28 @@
 
     <div class="worker-type-grid">
       <label class="worker-card" [class.selected]="workerType === 'cooperativa'">
-        <input type="radio" formControlName="workerType" value="cooperativa">
+        <input type="radio" formControlName="workerType" value="cooperativa" (change)="onWorkerTypeChange('cooperativa')">
         <span class="wc-icon">🏢</span>
         <span class="wc-title">Cooperativa</span>
         <span class="wc-desc">Lavoro attraverso una cooperativa di musica/spettacolo</span>
       </label>
       <label class="worker-card" [class.selected]="workerType === 'libero_professionista'">
-        <input type="radio" formControlName="workerType" value="libero_professionista">
+        <input type="radio" formControlName="workerType" value="libero_professionista" (change)="onWorkerTypeChange('libero_professionista')">
         <span class="wc-icon">💼</span>
         <span class="wc-title">Libero professionista</span>
         <span class="wc-desc">Ho partita IVA e fattura direttamente le serate</span>
       </label>
       <label class="worker-card" [class.selected]="workerType === 'insegnante_piva'">
-        <input type="radio" formControlName="workerType" value="insegnante_piva">
+        <input type="radio" formControlName="workerType" value="insegnante_piva" (change)="onWorkerTypeChange('insegnante_piva')">
         <span class="wc-icon">🎓</span>
         <span class="wc-title">Insegnante + serate</span>
         <span class="wc-desc">Uso la stessa P.IVA per lezioni e serate dal vivo</span>
+      </label>
+      <label class="worker-card" [class.selected]="workerType === 'misto_piva_lezioni_cooperativa_musica'">
+        <input type="radio" formControlName="workerType" value="misto_piva_lezioni_cooperativa_musica" (change)="onWorkerTypeChange('misto_piva_lezioni_cooperativa_musica')">
+        <span class="wc-icon">🧾</span>
+        <span class="wc-title">Misto: P.IVA lezioni + cooperativa musica</span>
+        <span class="wc-desc">Fatturo lezioni con P.IVA e gestisco serate con cooperativa</span>
       </label>
     </div>
 
@@ -207,6 +216,32 @@
       </ul>
     </div>
 
+    <div class="info-box info-purple" *ngIf="workerType === 'misto_piva_lezioni_cooperativa_musica'">
+      <h4>🧾 Regime misto</h4>
+      <p>Configurazione supportata: lezioni con P.IVA, serate con cooperativa.</p>
+      <ul>
+        <li>Lezioni: in fattura</li>
+        <li>Concerti / serate: fuori fattura in app, con nota gestione cooperativa</li>
+      </ul>
+    </div>
+
+    <div class="section-divider"></div>
+    <h2>Modalità fatturazione per attività</h2>
+    <div class="row">
+      <label>Lezioni
+        <select formControlName="lessonBillingMode">
+          <option value="in_fattura">In fattura</option>
+          <option value="fuori_fattura">Fuori fattura</option>
+        </select>
+      </label>
+      <label>Musica dal vivo
+        <select formControlName="musicBillingMode">
+          <option value="in_fattura">In fattura</option>
+          <option value="fuori_fattura">Fuori fattura / cooperativa</option>
+        </select>
+      </label>
+    </div>
+
     <div class="section-divider"></div>
     <h2>Esenzione ENPALS</h2>
     <p class="field-hint field-hint-spaced">Puoi essere esente anche se lavori in cooperativa o come libero professionista</p>
@@ -230,32 +265,19 @@
       </div>
 
       <div class="section-divider"></div>
-      <h2>Dati per il modulo di esenzione</h2>
-
-      <div class="row">
-        <label>Datore di lavoro principale
-          <input type="text" formControlName="exemptEmployer"
-            placeholder="es. Comune di Milano / Istituto Comprensivo…">
-        </label>
-        <label>Tipo di rapporto
-          <select formControlName="exemptEmployerType">
-            <option value="dipendente">Lavoratore dipendente</option>
-            <option value="pensionato">Pensionato INPS</option>
-            <option value="altro">Altro rapporto INPS</option>
-          </select>
-        </label>
+      <h2>Motivazioni esenzione</h2>
+      <div class="row exemption-reasons">
+        <label class="check-label"><input type="checkbox" formControlName="exemptReasonUnder18"><span>Giovani fino a 18 anni</span></label>
+        <label class="check-label"><input type="checkbox" formControlName="exemptReasonStudentUnder25"><span>Studenti fino a 25 anni</span></label>
+        <label class="check-label"><input type="checkbox" formControlName="exemptReasonPensionerOver65"><span>Pensionati di età superiore a 65 anni</span></label>
+        <label class="check-label"><input type="checkbox" formControlName="exemptReasonEmployee"><span>Dipendente di una qualsiasi azienda</span></label>
+        <label class="check-label"><input type="checkbox" formControlName="exemptReasonBusinessOwner"><span>Titolare di ditta e/o società</span></label>
+        <label class="check-label"><input type="checkbox" formControlName="exemptReasonProfessionalFund"><span>Professionista con cassa previdenziale</span></label>
       </div>
-
-      <div class="row inps-extra">
-        <label>Numero tessera / matricola INPS
-          <input type="text" formControlName="inpsNumber" placeholder="Opzionale">
-        </label>
-        <label>Validità dal
-          <input type="date" formControlName="inpsStartDate">
-        </label>
-        <label>Validità al
-          <input type="date" formControlName="inpsEndDate">
-        </label>
+      <div class="info-box" [class.info-green]="enpalsExemptionEligible" [class.info-amber]="!enpalsExemptionEligible">
+        <h4>Contatore 5.000€ su fatturato</h4>
+        <p>Fatturato musicale annuo considerato: <strong>{{ annualInvoicedMusicIncome | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+        <p>Residuo soglia: <strong>{{ enpalsThresholdResidual | currency:'EUR':'symbol':'1.0-2' }}</strong> • Esenzione suggerita: <strong>{{ enpalsExemptionEligible ? 'SI' : 'NO' }}</strong></p>
       </div>
 
       <div class="section-divider"></div>

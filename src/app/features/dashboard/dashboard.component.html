@@ -52,11 +52,99 @@
           <button type="button" class="dcp-close" (click)="closeCreatePicker()">✕</button>
         </div>
         <div class="dcp-actions">
-          <button type="button" class="dcp-btn concert" (click)="chooseCreate('concert')">Concerto</button>
-          <button type="button" class="dcp-btn proposal" (click)="chooseCreate('proposal')">Proposta concerto (bozza)</button>
-          <button type="button" class="dcp-btn lesson" (click)="chooseCreate('lesson')">Lezione</button>
+          <button type="button" class="dcp-btn concert" [class.active]="draft.kind === 'concert'" (click)="chooseCreate('concert')">Concerto</button>
+          <button type="button" class="dcp-btn lesson" [class.active]="draft.kind === 'lesson'" (click)="chooseCreate('lesson')">Lezione</button>
+        </div>
+        <div class="dcp-form">
+          <label class="full">Rubrica (ordinata per priorità)
+            <select [(ngModel)]="draft.contactId" (ngModelChange)="onContactChange()">
+              <option value="">Nessun contatto</option>
+              <option *ngFor="let c of contactsByPriority" [value]="c.id">
+                {{ c.displayName }} • priorità {{ c.priority }} • medio {{ c.averageFee | currency:'EUR':'symbol':'1.0-0' }} • {{ c.paymentCadence === 'mensile' ? 'mensile' : 'prestazione' }}
+              </option>
+            </select>
+          </label>
+          <div class="full dcp-inline-contact">
+            <button type="button" class="dcp-btn" (click)="toggleInlineContact()">
+              {{ showNewContactInline ? 'Chiudi nuovo contatto' : 'Nuovo contatto rubrica' }}
+            </button>
+          </div>
+          <div class="full dcp-inline-grid" *ngIf="showNewContactInline">
+            <label>Tipo
+              <select [(ngModel)]="newContactDraft.type">
+                <option value="band">Band</option>
+                <option value="school">Scuola</option>
+                <option value="student">Allievo</option>
+              </select>
+            </label>
+            <label>Nome
+              <input type="text" [(ngModel)]="newContactDraft.displayName">
+            </label>
+            <label>Priorità
+              <input type="number" min="1" max="5" [(ngModel)]="newContactDraft.priority">
+            </label>
+            <label>Compenso medio
+              <input type="number" min="0" [(ngModel)]="newContactDraft.averageFee">
+            </label>
+            <label>Fatturazione
+              <select [(ngModel)]="newContactDraft.billingMode">
+                <option value="in_fattura">In fattura</option>
+                <option value="fuori_fattura">Fuori fattura</option>
+              </select>
+            </label>
+            <label>Pagamento
+              <select [(ngModel)]="newContactDraft.paymentCadence">
+                <option value="prestazione">A prestazione (saldo immediato)</option>
+                <option value="mensile">Mensile</option>
+              </select>
+            </label>
+            <label *ngIf="newContactDraft.paymentCadence === 'mensile'">Regolazione mensile
+              <select [(ngModel)]="newContactDraft.monthlySettlement">
+                <option value="acconto">Acconti</option>
+                <option value="bonifico">Bonifico</option>
+              </select>
+            </label>
+            <div class="inline-actions">
+              <button type="button" class="dcp-save" (click)="saveInlineContact()">Salva contatto</button>
+            </div>
+          </div>
+          <label>Titolo
+            <input type="text" [(ngModel)]="draft.title" placeholder="Titolo evento/lezione">
+          </label>
+          <label>Ora inizio
+            <input type="time" [(ngModel)]="draft.timeStart">
+          </label>
+          <label>Ora fine
+            <input type="time" [(ngModel)]="draft.timeEnd">
+          </label>
+          <label>Venue / Scuola
+            <input type="text" [(ngModel)]="draft.venue" placeholder="Location o scuola">
+          </label>
+          <label>Indirizzo
+            <input type="text" [(ngModel)]="draft.address" placeholder="Indirizzo">
+          </label>
+          <label>Compenso lordo
+            <input type="number" [(ngModel)]="draft.grossFee" min="0">
+          </label>
+          <label>Compenso netto
+            <input type="number" [(ngModel)]="draft.netFee" min="0">
+          </label>
+          <label class="full">Note
+            <textarea rows="2" [(ngModel)]="draft.notes" placeholder="Note aggiuntive"></textarea>
+          </label>
+        </div>
+        <div class="dcp-footer">
+          <span class="dcp-error" *ngIf="quickCreateError">{{ quickCreateError }}</span>
+          <button type="button" class="dcp-save" (click)="saveQuickCreate()">Salva inserimento</button>
         </div>
         <div class="dcp-ok" *ngIf="quickCreateDone">✓ {{ quickCreateLabel }}</div>
+        <div class="dcp-existing" *ngIf="eventsForSelectedDate().length">
+          <div class="dcp-existing-title">Eventi del giorno</div>
+          <div class="dcp-existing-row" *ngFor="let ev of eventsForSelectedDate()">
+            <span>{{ ev.title }} • {{ ev.timeStart || 'orario libero' }}</span>
+            <button type="button" class="dcp-remove" (click)="deleteEventFromDashboard(ev.id)">Elimina</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -80,12 +168,52 @@
     <div class="card notif-card">
       <h2 class="card-title">Notifiche &amp; Alert</h2>
 
-      <div class="notif-section-hd">
+      <!-- Pagamenti da confermare -->
+      <div *ngIf="unpaidAlerts.length > 0">
+        <div class="notif-section-hd">
+          <span class="nsh-label">PAGAMENTI DA CONFERMARE</span>
+          <span class="nsh-badge">{{ unpaidAlerts.length }}</span>
+        </div>
+        <div class="notif-item notif-pay" *ngFor="let a of unpaidAlerts" (click)="go('/accounting')">
+          <div class="ni-icon-wrap ni-orange">
+            <i class="ti ti-currency-euro"></i>
+          </div>
+          <div class="ni-body">
+            <div class="ni-title">{{ a.title }}</div>
+            <div class="ni-sub">{{ formatDate(a.date) }} — pagamento da registrare</div>
+          </div>
+          <span class="ni-tag tag-unread">Da fare</span>
+        </div>
+      </div>
+
+      <!-- Acconti in sospeso (saldo atteso) -->
+      <div *ngIf="pendingBalanceAlerts.length > 0">
+        <div class="notif-section-hd">
+          <span class="nsh-label">SALDO IN ATTESA</span>
+          <span class="nsh-badge ni-blue-badge">{{ pendingBalanceAlerts.length }}</span>
+        </div>
+        <div class="notif-item notif-pay" *ngFor="let a of pendingBalanceAlerts" (click)="go('/accounting')">
+          <div class="ni-icon-wrap ni-blue">
+            <i class="ti ti-clock-dollar"></i>
+          </div>
+          <div class="ni-body">
+            <div class="ni-title">{{ a.title }}</div>
+            <div class="ni-sub">
+              Acconto {{ a.acconto | currency:'EUR':'symbol':'1.0-0' }} /
+              Pattuito {{ a.agreed | currency:'EUR':'symbol':'1.0-0' }}
+            </div>
+          </div>
+          <span class="ni-tag tag-acconto">Acconto</span>
+        </div>
+      </div>
+
+      <!-- Notifiche standard -->
+      <div class="notif-section-hd" *ngIf="notifications.length > 0 || (unpaidAlerts.length === 0 && pendingBalanceAlerts.length === 0)">
         <span class="nsh-label">BOZZE IN SOSPESO</span>
         <span class="nsh-badge" *ngIf="unreadCount > 0">{{ unreadCount }}</span>
       </div>
 
-      <div class="empty-state" *ngIf="notifications.length === 0">
+      <div class="empty-state" *ngIf="notifications.length === 0 && unpaidAlerts.length === 0 && pendingBalanceAlerts.length === 0">
         <span>🔔</span>
         <p>Nessuna notifica</p>
       </div>

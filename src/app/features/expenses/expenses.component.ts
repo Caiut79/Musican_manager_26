@@ -2,6 +2,7 @@ import { Component, OnInit, AfterViewInit, OnDestroy, ElementRef, ViewChild } fr
 import { FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
 import * as L from 'leaflet';
 import { Expense, ExpenseExtra } from '../../models/expense';
+import { SupabaseService } from '../../core/supabase.service';
 
 @Component({
   selector: 'app-expenses',
@@ -24,7 +25,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   private markerDest?: L.Marker;
   private routeLine?: L.Polyline;
 
-  constructor(private fb: FormBuilder) {}
+  constructor(private fb: FormBuilder, private supabase: SupabaseService) {}
 
   ngOnInit() {
     this.expenses = JSON.parse(localStorage.getItem('mm_expenses') || '[]');
@@ -186,6 +187,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     };
     this.expenses.unshift(expense);
     localStorage.setItem('mm_expenses', JSON.stringify(this.expenses));
+    void this.syncSupabaseExpenses();
   }
 
   openNavigation(app: 'waze' | 'google' | 'apple') {
@@ -203,5 +205,15 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   deleteExpense(id: string) {
     this.expenses = this.expenses.filter(e => e.id !== id);
     localStorage.setItem('mm_expenses', JSON.stringify(this.expenses));
+    void this.syncSupabaseExpenses();
+  }
+
+  private async syncSupabaseExpenses(): Promise<void> {
+    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const musicianId = `${profile.id || ''}`.trim();
+    if (!musicianId) return;
+    try {
+      await this.supabase.syncExpensesFromLocalStorage(musicianId);
+    } catch {}
   }
 }

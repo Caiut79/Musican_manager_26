@@ -22,6 +22,8 @@ import { ConcertConfirmationComponent } from './features/concert-confirmation/co
 import { TeachingComponent }        from './features/teaching/teaching.component';
 import { SchoolPortalComponent }    from './features/school-portal/school-portal.component';
 import { ReportsComponent }         from './features/reports/reports.component';
+import { ContactsComponent }        from './features/contacts/contacts.component';
+import { PrivacyConsentComponent }  from './features/privacy-consent/privacy-consent.component';
 
 const routes: Routes = [
   { path: '',              redirectTo: 'register', pathMatch: 'full' },
@@ -29,12 +31,14 @@ const routes: Routes = [
   { path: 'book/:slug',   component: BookingRequestComponent },
   { path: 'confirm/:id',  component: ConcertConfirmationComponent },
   { path: 'school/:code', component: SchoolPortalComponent },
+  { path: 'privacy-consent/:id', component: PrivacyConsentComponent },
   { path: 'dashboard',    component: DashboardComponent },
   { path: 'profile',      component: MusicianFormComponent },
   { path: 'agenda',       component: AgendaComponent },
   { path: 'concerts',     component: ConcertsComponent },
   { path: 'teaching',     component: TeachingComponent },
   { path: 'reports',      component: ReportsComponent },
+  { path: 'contacts',     component: ContactsComponent },
   { path: 'events',       component: EventsComponent },
   { path: 'expenses',     component: ExpensesComponent },
   { path: 'communication',component: CommunicationComponent },
@@ -60,6 +64,7 @@ const routes: Routes = [
     TeachingComponent,
     SchoolPortalComponent,
     ReportsComponent,
+    PrivacyConsentComponent,
     HistoryComponent,
     AccountingComponent,
     RegisterComponent,

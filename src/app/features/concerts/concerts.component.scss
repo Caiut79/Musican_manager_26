@@ -29,6 +29,25 @@
   grid-column: 1 / -1;
 }
 
+.inline-contact {
+  display: flex;
+}
+
+.inline-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 10px;
+  border: 1px dashed #ddd6fe;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.inline-actions {
+  display: flex;
+  align-items: flex-end;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -82,10 +101,91 @@ input, textarea, select {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.item-main {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.item-compact {
+  display: grid;
+  gap: 3px;
+}
+
+.item-details {
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.status-planned {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.status-cancelled {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.status-done {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.status-refunded {
+  background: #fef9c3;
+  border-color: #fde047;
+  color: #92400e;
+}
+
+.pay-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.pay-done {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.pay-due {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.pay-partial {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .meta {

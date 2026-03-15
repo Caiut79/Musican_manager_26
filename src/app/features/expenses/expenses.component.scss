@@ -20,6 +20,10 @@
   @media (max-width: 480px) { grid-template-columns: 1fr; }
 }
 
+.fuel-row label {
+  min-width: 0;
+}
+
 /* Cards */
 .card {
   background: var(--surface); border: 1px solid var(--border);
@@ -41,6 +45,8 @@ label {
 input:not([type='checkbox']) {
   border: 1px solid #d1d5db; border-radius: var(--radius-sm);
   padding: 9px 12px; font-size: 14px; color: var(--text); background: #fff; font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
   &::placeholder { color: var(--text-light); }
 }
 

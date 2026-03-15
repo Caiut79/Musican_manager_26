@@ -29,6 +29,7 @@ export class SupabaseService {
   private client: SupabaseClient<any, any, any> | null = null;
   private licenseRpcUnavailable = false;
   private archiveRemoteUnavailable = false;
+  private authStorageKey = `mm_auth_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
   constructor(private config: ConfigService) {}
 
@@ -41,6 +42,7 @@ export class SupabaseService {
     }
     this.client = createClient(cfg.url, cfg.anonKey, {
       auth: {
+        storageKey: this.authStorageKey,
         persistSession: false,
         autoRefreshToken: false,
         detectSessionInUrl: false
@@ -56,7 +58,8 @@ export class SupabaseService {
     await this.init();
     if (!this.client) throw new Error('Supabase non inizializzato');
     const licenseKey = localStorage.getItem('mm_license_ref') || null;
-    const musicianCode = localStorage.getItem('mm_affiliation_code') || localStorage.getItem('musicianCode') || null;
+    const rawMusicianCode = localStorage.getItem('mm_affiliation_code') || localStorage.getItem('musicianCode') || null;
+    const musicianCode = this.normalizeValidMusicianCode(rawMusicianCode);
     const metadata = this.buildRegistryMetadata(m);
     const { data, error } = await this.client.rpc('upsert_musician_registry_profile', {
       p_license_key: licenseKey,
@@ -71,8 +74,13 @@ export class SupabaseService {
     });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
-    const id = row?.id as string | undefined;
-    const code = (row?.musician_code as string | undefined) || musicianCode || undefined;
+    const rpcId = row?.id as string | undefined;
+    const localId = localStorage.getItem('musicianId') || undefined;
+    const id = rpcId || musicianId || localId;
+    let code = (row?.musician_code as string | undefined) || musicianCode || undefined;
+    if (!code) {
+      code = await this.ensureMusicianCode(m.firstName, m.lastName);
+    }
     if (code) {
       localStorage.setItem('mm_affiliation_code', code);
       localStorage.setItem('musicianCode', code);
@@ -81,6 +89,23 @@ export class SupabaseService {
       localStorage.setItem('musicianId', id);
     }
     return { id, code };
+  }
+
+  async ensureMusicianCode(_firstName?: string, _lastName?: string): Promise<string | undefined> {
+    const existing = this.normalizeValidMusicianCode(localStorage.getItem('mm_affiliation_code') || localStorage.getItem('musicianCode') || '');
+    if (existing) return existing;
+    const synced = await this.syncAffiliationCodeFromLicense();
+    if (synced) return synced;
+    const fallbackSeed = Math.floor(Math.random() * 10000);
+    const code = `MU${fallbackSeed.toString().padStart(4, '0')}`;
+    localStorage.setItem('mm_affiliation_code', code);
+    localStorage.setItem('musicianCode', code);
+    const currentSettings = JSON.parse(localStorage.getItem('mm_settings') || '{}');
+    localStorage.setItem('mm_settings', JSON.stringify({
+      ...currentSettings,
+      affiliationCode: code
+    }));
+    return code;
   }
 
   async addEvent(musicianId: string, title: string, date: string, type: 'lesson' | 'concert'): Promise<void> {
@@ -107,6 +132,8 @@ export class SupabaseService {
       phone: profileSnapshot.phone || localStorage.getItem('mm_phone') || undefined,
       instrument: profileSnapshot.instrument || undefined,
       workerType: profileSnapshot.workerType || undefined,
+      lessonBillingMode: profileSnapshot.lessonBillingMode || undefined,
+      musicBillingMode: profileSnapshot.musicBillingMode || undefined,
       homeBase: profileSnapshot.homeBase || localStorage.getItem('mm_homeBase') || undefined,
       stylesPlayed: profileSnapshot.stylesPlayed || [],
       searchableStyles: profileSnapshot.searchableStyles || [],
@@ -184,6 +211,56 @@ export class SupabaseService {
     if (error) throw error;
   }
 
+  async syncContactsFromLocalStorage(musicianId: string): Promise<boolean> {
+    await this.init();
+    if (!this.client) throw new Error('Supabase non inizializzato');
+    const contacts = this.readJsonArray<any>('mm_contacts');
+    if (!contacts.length) return true;
+    const rows = contacts.map(contact => ({
+      musician_id: musicianId,
+      source_id: `${contact.id || crypto.randomUUID()}`,
+      type: `${contact.type || 'band'}`,
+      display_name: `${contact.displayName || ''}`.trim(),
+      phone: contact.phone || null,
+      email: contact.email || null,
+      priority: Number(contact.priority || 3),
+      average_fee: Number(contact.averageFee || 0),
+      billing_mode: contact.billingMode || null,
+      payment_cadence: contact.paymentCadence || null,
+      monthly_settlement: contact.monthlySettlement || null,
+      city: contact.positionCity || null,
+      address: contact.positionAddress || null,
+      notes: contact.notes || null,
+      payload: contact
+    }));
+    const { error } = await this.client
+      .from('contacts')
+      .upsert(rows, { onConflict: 'musician_id,source_id', ignoreDuplicates: false });
+    if (!error) return true;
+    const msg = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+    if (msg.includes('relation') || msg.includes('does not exist') || msg.includes('404')) {
+      return false;
+    }
+    throw error;
+  }
+
+  async loadContactsFromSupabase(musicianId: string): Promise<any[]> {
+    await this.init();
+    if (!this.client) return [];
+    const { data, error } = await this.client
+      .from('contacts')
+      .select('*')
+      .eq('musician_id', musicianId)
+      .order('priority', { ascending: true })
+      .order('display_name', { ascending: true });
+    if (!error && Array.isArray(data)) return data;
+    const msg = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+    if (msg.includes('relation') || msg.includes('does not exist') || msg.includes('404')) {
+      return [];
+    }
+    return [];
+  }
+
   async syncAllFromLocalStorage(musicianId: string): Promise<void> {
     try {
       await this.syncEventsFromLocalStorage(musicianId);
@@ -191,6 +268,10 @@ export class SupabaseService {
     }
     try {
       await this.syncExpensesFromLocalStorage(musicianId);
+    } catch {
+    }
+    try {
+      await this.syncContactsFromLocalStorage(musicianId);
     } catch {
     }
   }
@@ -253,9 +334,10 @@ export class SupabaseService {
     const firstName = profileSnapshot.firstName || localStorage.getItem('mm_firstName') || 'Musicista';
     const lastName = profileSnapshot.lastName || localStorage.getItem('mm_lastName') || 'Singolo';
     const licenseKey = localStorage.getItem('mm_license_ref');
+    const localCode = this.normalizeValidMusicianCode(localStorage.getItem('mm_affiliation_code'));
     const { data, error } = await this.client.rpc('upsert_musician_registry_profile', {
       p_license_key: licenseKey,
-      p_musician_code: localStorage.getItem('mm_affiliation_code'),
+      p_musician_code: localCode,
       p_first_name: firstName,
       p_last_name: lastName,
       p_email: localStorage.getItem('mm_user_email'),
@@ -278,6 +360,60 @@ export class SupabaseService {
     return code;
   }
 
+  async loadRegistryProfileForCurrentContext(): Promise<Record<string, any> | null> {
+    await this.init();
+    if (!this.client) return null;
+    let musicianCode = this.normalizeValidMusicianCode(localStorage.getItem('mm_affiliation_code') || localStorage.getItem('musicianCode') || '');
+    if (!musicianCode) {
+      const syncedCode = await this.syncAffiliationCodeFromLicense();
+      musicianCode = syncedCode || '';
+    }
+    if (!musicianCode) return null;
+    const { data, error } = await this.client
+      .from('musician_registry_profiles')
+      .select('first_name,last_name,email,phone,instrument,metadata,musician_code')
+      .eq('musician_code', musicianCode)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error || !Array.isArray(data) || !data.length) return null;
+    const row: any = data[0] || {};
+    const metadata = row.metadata || {};
+    const social = metadata.social || {};
+    return {
+      firstName: row.first_name || '',
+      lastName: row.last_name || '',
+      licenseEmail: row.email || localStorage.getItem('mm_user_email') || '',
+      phone: row.phone || '',
+      instrument: row.instrument || '',
+      birthDate: metadata.birthDate || '',
+      birthPlace: metadata.birthPlace || '',
+      fiscalCode: metadata.fiscalCode || '',
+      residence: metadata.residence || '',
+      homeBase: metadata.homeBase || '',
+      workerType: metadata.workerType || '',
+      lessonBillingMode: metadata.lessonBillingMode || 'fuori_fattura',
+      musicBillingMode: metadata.musicBillingMode || 'fuori_fattura',
+      empalsPosition: metadata.empalsPosition || '',
+      exemptEmployer: metadata.exemptEmployer || '',
+      exemptEmployerType: metadata.exemptEmployerType || 'dipendente',
+      level: metadata.level || '',
+      stylesPlayed: Array.isArray(metadata.stylesPlayed) ? metadata.stylesPlayed : [],
+      searchableStyles: Array.isArray(metadata.searchableStyles) ? metadata.searchableStyles : [],
+      instagram: social.instagram || '',
+      facebook: social.facebook || '',
+      youtube: social.youtube || '',
+      tiktok: social.tiktok || '',
+      website: social.website || '',
+      inpsExempt: metadata.inpsExempt === true,
+      inpsNumber: metadata.inpsData?.number || '',
+      inpsStartDate: metadata.inpsData?.startDate || '',
+      inpsEndDate: metadata.inpsData?.endDate || '',
+      isTeacher: metadata.isTeacher === true,
+      lessonColor: metadata.lessonColor || '#2e7d32',
+      concertColor: metadata.concertColor || '#1565c0'
+    };
+  }
+
   async searchArchiveEntities(query: string, entityType: 'musician' | 'band'): Promise<ArchiveEntity[]> {
     await this.init();
     if (!this.client) return this.searchArchiveLocal(query, entityType);
@@ -295,7 +431,8 @@ export class SupabaseService {
   async syncArchiveCodes(musicianCode: string, bandCode: string, musicianName?: string): Promise<boolean> {
     await this.init();
     if (!musicianCode || !bandCode) return false;
-    const codeM = musicianCode.trim().toUpperCase();
+    const codeM = this.normalizeValidMusicianCode(musicianCode.trim().toUpperCase());
+    if (!codeM) return false;
     const codeB = bandCode.trim().toUpperCase();
     const display = (musicianName || '').trim() || null;
     const rows: ArchiveEntity[] = [
@@ -405,6 +542,12 @@ export class SupabaseService {
     }
   }
 
+  private normalizeValidMusicianCode(raw: string | null | undefined): string | null {
+    const value = `${raw || ''}`.trim().toUpperCase();
+    if (!/^MU\d{4}$/.test(value)) return null;
+    return value;
+  }
+
   private isArchiveMissingError(error: any): boolean {
     const msg = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
     return msg.includes('404') || msg.includes('relation') || msg.includes('archive_directory');
@@ -414,6 +557,12 @@ export class SupabaseService {
     const normalized = (query || '').trim().toLowerCase();
     return this.readJsonArray<ArchiveEntity>('mm_archive_directory')
       .filter(row => row.entity_type === entityType)
+      .filter(row => {
+        if (entityType === 'musician') {
+          return !!this.normalizeValidMusicianCode(row.entity_code);
+        }
+        return !!(row.entity_code || '').trim() && !!this.normalizeValidMusicianCode(row.linked_code || '');
+      })
       .filter(row => {
         if (!normalized) return true;
         const code = (row.entity_code || '').toLowerCase();
@@ -439,13 +588,21 @@ export class SupabaseService {
       if (this.isArchiveMissingError(error)) this.archiveRemoteUnavailable = true;
       return null;
     }
-    return (data as unknown as RegistryProfileRow[]).map(row => ({
-      entity_type: 'musician',
-      entity_code: row.musician_code,
-      display_name: `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Musicista',
-      linked_code: row.metadata?.['bandRegistryCode'] || null,
-      created_at: row.created_at
-    }));
+    const out: ArchiveEntity[] = [];
+    (data as unknown as RegistryProfileRow[]).forEach(row => {
+      const code = this.normalizeValidMusicianCode(row.musician_code);
+      if (!code) return;
+      const source = `${row.metadata?.['appSource'] || ''}`.trim().toLowerCase();
+      if (source && source !== 'musician_manager') return;
+      out.push({
+        entity_type: 'musician',
+        entity_code: code,
+        display_name: `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Musicista',
+        linked_code: row.metadata?.['bandRegistryCode'] || null,
+        created_at: row.created_at
+      });
+    });
+    return out;
   }
 
   private async searchBandsRemote(query: string): Promise<ArchiveEntity[] | null> {
@@ -457,19 +614,24 @@ export class SupabaseService {
       if (this.isArchiveMissingError(error)) this.archiveRemoteUnavailable = true;
       return null;
     }
-    return (data as any[]).map(row => ({
-      entity_type: 'band',
-      entity_code: row.band_code,
-      display_name: row.band_name || null,
-      linked_code: row.musician_code || null,
-      created_at: row.created_at
-    }));
+    return (data as any[])
+      .filter(row => !!`${row?.band_code || ''}`.trim())
+      .filter(row => !!this.normalizeValidMusicianCode(`${row?.musician_code || ''}`))
+      .map(row => ({
+        entity_type: 'band',
+        entity_code: row.band_code,
+        display_name: row.band_name || null,
+        linked_code: this.normalizeValidMusicianCode(`${row.musician_code || ''}`),
+        created_at: row.created_at
+      }));
   }
 
   private mergeArchiveLocal(rows: ArchiveEntity[]): void {
     const current = this.readJsonArray<ArchiveEntity>('mm_archive_directory');
     const now = new Date().toISOString();
     rows.forEach(row => {
+      if (row.entity_type === 'musician' && !this.normalizeValidMusicianCode(row.entity_code)) return;
+      if (row.entity_type === 'band' && !this.normalizeValidMusicianCode(row.linked_code || '')) return;
       const idx = current.findIndex(
         item => item.entity_type === row.entity_type && item.entity_code === row.entity_code
       );
@@ -491,6 +653,8 @@ export class SupabaseService {
       fiscalCode: m.fiscalCode ?? null,
       residence: m.residence ?? null,
       workerType: m.workerType ?? null,
+      lessonBillingMode: m.lessonBillingMode ?? null,
+      musicBillingMode: m.musicBillingMode ?? null,
       empalsPosition: m.empalsPosition ?? null,
       enpalsCategory: m.enpalsCategory ?? null,
       exemptEmployer: m.exemptEmployer ?? null,
@@ -502,6 +666,8 @@ export class SupabaseService {
       inpsExempt: m.inpsExempt ?? false,
       inpsData: m.inpsData ?? null,
       isTeacher: m.isTeacher ?? false,
+      appSource: 'musician_manager',
+      appKey: 'musician_manager',
       lessonColor: m.lessonColor ?? null,
       concertColor: m.concertColor ?? null,
       signatureData: m.signatureData ?? null

@@ -3,8 +3,18 @@
   <p class="subtitle">Gestisci scuole, allievi, lezioni e compensi</p>
 </div>
 
-<div class="grid">
-  <section class="card" [formGroup]="schoolForm">
+<section class="card create-hub">
+  <h2>Nuovo</h2>
+  <div class="create-actions">
+    <button type="button" class="btn-outline" [class.active]="creatorMode === 'school'" (click)="setCreatorMode('school')">Nuova scuola</button>
+    <button type="button" class="btn-outline" [class.active]="creatorMode === 'student'" (click)="setCreatorMode('student')">Nuovo allievo</button>
+    <button type="button" class="btn-outline" [class.active]="creatorMode === 'lesson'" (click)="setCreatorMode('lesson')">Nuova lezione</button>
+  </div>
+  <p class="meta" *ngIf="creatorMode === 'none'">Seleziona cosa vuoi inserire: scuola, allievo o lezione.</p>
+</section>
+
+<div class="grid" *ngIf="creatorMode !== 'none'">
+  <section class="card" [formGroup]="schoolForm" *ngIf="creatorMode === 'school'">
     <h2>Nuova scuola</h2>
     <label>Nome scuola
       <input type="text" formControlName="name">
@@ -21,10 +31,65 @@
         <option value="non_fattura">Fuori fattura</option>
       </select>
     </label>
+    <label>Cadenza pagamento
+      <select formControlName="paymentCadence">
+        <option value="prestazione">A prestazione (saldo immediato)</option>
+        <option value="mensile">Mensile</option>
+      </select>
+    </label>
+    <label *ngIf="schoolForm.get('paymentCadence')?.value === 'mensile'">Regolazione mensile
+      <select formControlName="monthlySettlement">
+        <option value="acconto">Acconti</option>
+        <option value="bonifico">Bonifico</option>
+      </select>
+    </label>
+    <label>Contatto rubrica scuola
+      <select formControlName="contactId">
+        <option value="">Nessuno</option>
+        <option *ngFor="let c of schoolContacts" [value]="c.id">
+          {{ c.displayName }} • priorità {{ c.priority }}
+        </option>
+      </select>
+    </label>
+    <div class="inline-row">
+      <button type="button" class="btn-outline" (click)="toggleNewContact('school')">
+        {{ showNewContactForSchool ? 'Chiudi nuovo contatto' : 'Nuovo contatto scuola' }}
+      </button>
+    </div>
+    <div class="inline-grid" *ngIf="showNewContactForSchool">
+      <label>Nome
+        <input type="text" [(ngModel)]="newContact.displayName">
+      </label>
+      <label>Priorità
+        <input type="number" min="1" max="5" [(ngModel)]="newContact.priority">
+      </label>
+      <label>Compenso medio
+        <input type="number" min="0" [(ngModel)]="newContact.averageFee">
+      </label>
+      <label>Fatturazione
+        <select [(ngModel)]="newContact.billingMode">
+          <option value="in_fattura">In fattura</option>
+          <option value="fuori_fattura">Fuori fattura</option>
+        </select>
+      </label>
+      <label>Pagamento
+        <select [(ngModel)]="newContact.paymentCadence">
+          <option value="prestazione">A prestazione</option>
+          <option value="mensile">Mensile</option>
+        </select>
+      </label>
+      <label *ngIf="newContact.paymentCadence === 'mensile'">Regolazione mensile
+        <select [(ngModel)]="newContact.monthlySettlement">
+          <option value="acconto">Acconti</option>
+          <option value="bonifico">Bonifico</option>
+        </select>
+      </label>
+      <button type="button" class="btn-primary" (click)="saveInlineContact('school')">Salva contatto</button>
+    </div>
     <button type="button" class="btn-primary" (click)="createSchool()">Aggiungi scuola</button>
   </section>
 
-  <section class="card" [formGroup]="studentForm">
+  <section class="card" [formGroup]="studentForm" *ngIf="creatorMode === 'student'">
     <h2>Nuovo allievo</h2>
     <label>Nome allievo
       <input type="text" formControlName="fullName">
@@ -35,10 +100,53 @@
         <option *ngFor="let s of schools" [value]="s.id">{{ s.name }}</option>
       </select>
     </label>
+    <label>Contatto rubrica allievo
+      <select formControlName="contactId">
+        <option value="">Nessuno</option>
+        <option *ngFor="let c of studentContacts" [value]="c.id">
+          {{ c.displayName }} • priorità {{ c.priority }}
+        </option>
+      </select>
+    </label>
+    <div class="inline-row">
+      <button type="button" class="btn-outline" (click)="toggleNewContact('student')">
+        {{ showNewContactForStudent ? 'Chiudi nuovo contatto' : 'Nuovo contatto allievo' }}
+      </button>
+    </div>
+    <div class="inline-grid" *ngIf="showNewContactForStudent">
+      <label>Nome
+        <input type="text" [(ngModel)]="newContact.displayName">
+      </label>
+      <label>Priorità
+        <input type="number" min="1" max="5" [(ngModel)]="newContact.priority">
+      </label>
+      <label>Compenso medio
+        <input type="number" min="0" [(ngModel)]="newContact.averageFee">
+      </label>
+      <label>Fatturazione
+        <select [(ngModel)]="newContact.billingMode">
+          <option value="in_fattura">In fattura</option>
+          <option value="fuori_fattura">Fuori fattura</option>
+        </select>
+      </label>
+      <label>Pagamento
+        <select [(ngModel)]="newContact.paymentCadence">
+          <option value="prestazione">A prestazione</option>
+          <option value="mensile">Mensile</option>
+        </select>
+      </label>
+      <label *ngIf="newContact.paymentCadence === 'mensile'">Regolazione mensile
+        <select [(ngModel)]="newContact.monthlySettlement">
+          <option value="acconto">Acconti</option>
+          <option value="bonifico">Bonifico</option>
+        </select>
+      </label>
+      <button type="button" class="btn-primary" (click)="saveInlineContact('student')">Salva contatto</button>
+    </div>
     <button type="button" class="btn-primary" (click)="createStudent()">Aggiungi allievo</button>
   </section>
 
-  <section class="card" [formGroup]="sessionForm">
+  <section class="card" [formGroup]="sessionForm" *ngIf="creatorMode === 'lesson'">
     <h2>Nuova lezione</h2>
     <label>Data
       <input type="date" formControlName="date">
@@ -83,12 +191,79 @@
         <option value="non_fattura">Fuori fattura</option>
       </select>
     </label>
+    <label>Cadenza pagamento
+      <select formControlName="paymentCadence">
+        <option value="prestazione">A prestazione (saldo immediato)</option>
+        <option value="mensile">Mensile</option>
+      </select>
+    </label>
+    <label *ngIf="sessionForm.get('paymentCadence')?.value === 'mensile'">Regolazione mensile
+      <select formControlName="monthlySettlement">
+        <option value="acconto">Acconti</option>
+        <option value="bonifico">Bonifico</option>
+      </select>
+    </label>
+    <label>Contatto rubrica
+      <select formControlName="contactId" (change)="onSessionContactChange()">
+        <option value="">Nessuno</option>
+        <option *ngFor="let c of contactsByPriority" [value]="c.id">
+          {{ c.displayName }} • priorità {{ c.priority }} • medio {{ c.averageFee | currency:'EUR':'symbol':'1.0-0' }} • {{ c.paymentCadence === 'mensile' ? 'mensile' : 'prestazione' }}
+        </option>
+      </select>
+    </label>
+    <div class="inline-row">
+      <button type="button" class="btn-outline" (click)="toggleNewContact('session')">
+        {{ showNewContactForSession ? 'Chiudi nuovo contatto' : 'Nuovo contatto rubrica' }}
+      </button>
+    </div>
+    <div class="inline-grid" *ngIf="showNewContactForSession">
+      <label>Tipo
+        <select [(ngModel)]="newContact.type">
+          <option value="school">Scuola</option>
+          <option value="student">Allievo</option>
+          <option value="band">Band</option>
+        </select>
+      </label>
+      <label>Nome
+        <input type="text" [(ngModel)]="newContact.displayName">
+      </label>
+      <label>Priorità
+        <input type="number" min="1" max="5" [(ngModel)]="newContact.priority">
+      </label>
+      <label>Compenso medio
+        <input type="number" min="0" [(ngModel)]="newContact.averageFee">
+      </label>
+      <label>Fatturazione
+        <select [(ngModel)]="newContact.billingMode">
+          <option value="in_fattura">In fattura</option>
+          <option value="fuori_fattura">Fuori fattura</option>
+        </select>
+      </label>
+      <label>Pagamento
+        <select [(ngModel)]="newContact.paymentCadence">
+          <option value="prestazione">A prestazione</option>
+          <option value="mensile">Mensile</option>
+        </select>
+      </label>
+      <label *ngIf="newContact.paymentCadence === 'mensile'">Regolazione mensile
+        <select [(ngModel)]="newContact.monthlySettlement">
+          <option value="acconto">Acconti</option>
+          <option value="bonifico">Bonifico</option>
+        </select>
+      </label>
+      <button type="button" class="btn-primary" (click)="saveInlineContact('session')">Salva contatto</button>
+    </div>
     <label>Note
       <input type="text" formControlName="notes">
     </label>
     <button type="button" class="btn-primary" (click)="createSession()">Salva lezione</button>
   </section>
 </div>
+
+<section class="card">
+  <h2>Pagamenti insegnamento</h2>
+  <p class="meta">La registrazione e la gestione pagamenti delle lezioni avviene nella sezione Contabilità.</p>
+</section>
 
 <div class="grid">
   <section class="card">
@@ -115,6 +290,48 @@
           <strong>{{ l.date }} - {{ l.lessonType }}</strong>
           <div class="meta">Allievo: {{ studentName(l.studentId) }} | Scuola: {{ schoolName(l.schoolId) }}</div>
           <div class="meta">Compenso: {{ l.compensation | currency:'EUR':'symbol':'1.0-0' }} ({{ l.invoiceMode }})</div>
+          <div class="meta">Pagamento: {{ paymentStatusLabel(l) }} • Residuo {{ paymentPendingAmount(l) | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="meta">
+            Presenza: {{ l.attendanceStatus === 'absent' ? 'Assente' : 'Presente' }}
+          </div>
+        </div>
+        <div class="att-actions">
+          <button type="button" class="btn-outline" (click)="markAttendance(l, 'present')">Segna presente</button>
+          <button type="button" class="btn-outline" (click)="markAttendance(l, 'absent')">Segna assente</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="grid">
+  <section class="card">
+    <h2>Report allievi</h2>
+    <div class="list">
+      <div class="item" *ngFor="let st of students">
+        <div>
+          <strong>{{ st.fullName }}</strong>
+          <div class="meta">Scuola: {{ schoolName(st.schoolId) }}</div>
+          <div class="meta">Presenze: {{ studentPresenceCount(st.id) }} • Assenze: {{ studentAbsenceCount(st.id) }}</div>
+          <div class="meta">Lezioni totali: {{ studentSessions(st.id).length }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Report scuole</h2>
+    <div class="list">
+      <div class="item item-col" *ngFor="let s of schools">
+        <div>
+          <strong>{{ s.name }}</strong>
+          <div class="meta">Allievi associati: {{ schoolStudents(s.id).length }} • Lezioni registrate: {{ schoolSessionCount(s.id) }}</div>
+        </div>
+        <div class="sub-list" *ngIf="schoolStudents(s.id).length > 0">
+          <div class="sub-item" *ngFor="let st of schoolStudents(s.id)">
+            <span>{{ st.fullName }}</span>
+            <small>Presenze {{ studentPresenceCount(st.id) }} / Assenze {{ studentAbsenceCount(st.id) }}</small>
+          </div>
         </div>
       </div>
     </div>

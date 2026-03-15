@@ -32,9 +32,12 @@
     <input type="text" [(ngModel)]="musicianQuery" (ngModelChange)="refreshLists()" placeholder="Cerca per nome o codice">
     <div class="list">
       <div class="item" *ngFor="let m of musicians">
-        <strong>{{ m.entity_code }}</strong>
-        <span>{{ m.display_name || 'Musicista' }}</span>
-        <small>Band collegata: {{ m.linked_code || '—' }}</small>
+        <div class="item-top">
+          <strong>{{ m.display_name || 'Musicista' }}</strong>
+          <span class="code-chip">{{ m.entity_code }}</span>
+        </div>
+        <span class="item-line">Band collegata: <strong>{{ m.linked_code || '—' }}</strong></span>
+        <small>Aggiornato: {{ formatCreatedAt(m.created_at) }}</small>
       </div>
       <div class="empty" *ngIf="!musicians.length">Nessun musicista trovato</div>
     </div>
@@ -45,8 +48,13 @@
     <input type="text" [(ngModel)]="bandQuery" (ngModelChange)="refreshLists()" placeholder="Cerca per codice band">
     <div class="list">
       <div class="item" *ngFor="let b of bands">
-        <strong>{{ b.entity_code }}</strong>
-        <small>Musicista collegato: {{ b.linked_code || '—' }}</small>
+        <div class="item-top">
+          <strong>{{ b.display_name || 'Band' }}</strong>
+          <span class="code-chip">{{ b.entity_code }}</span>
+        </div>
+        <span class="item-line">Musicista collegato: <strong>{{ b.linked_code || '—' }}</strong></span>
+        <small>{{ linkedMusicianName(b.linked_code) }}</small>
+        <small>Aggiornato: {{ formatCreatedAt(b.created_at) }}</small>
       </div>
       <div class="empty" *ngIf="!bands.length">Nessuna band trovata</div>
       <div class="empty" *ngIf="!bands.length && musicians.length">

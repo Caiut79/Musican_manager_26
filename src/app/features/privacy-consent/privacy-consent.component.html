@@ -1,0 +1,33 @@
+<div class="wrap" *ngIf="contact; else missing">
+  <div class="card">
+    <h1>Consenso trattamento dati personali</h1>
+    <p class="subtitle">Conferma inserimento allievo minorenne nell'app Musicista Manager</p>
+
+    <div class="block">
+      <strong>Allievo:</strong> {{ contact.displayName }}
+    </div>
+    <div class="block">
+      <strong>Genitore:</strong> {{ contact.parentName || 'Non indicato' }}
+      <div>{{ contact.parentPhone || '—' }} • {{ contact.parentEmail || '—' }}</div>
+    </div>
+    <div class="block">
+      Confermo di aver preso visione dell'informativa privacy e autorizzo l'inserimento dei dati nell'app.
+    </div>
+
+    <button type="button" class="btn-primary" (click)="accept()" [disabled]="confirmed">
+      {{ confirmed ? 'Consenso già confermato' : 'Conferma consenso' }}
+    </button>
+    <div class="ok" *ngIf="confirmed">
+      ✓ Consenso registrato {{ acceptedAt ? ('il ' + (acceptedAt | date:'dd/MM/yyyy HH:mm')) : '' }}
+    </div>
+  </div>
+</div>
+
+<ng-template #missing>
+  <div class="wrap">
+    <div class="card">
+      <h1>Link non valido</h1>
+      <p>Contatto non trovato.</p>
+    </div>
+  </div>
+</ng-template>

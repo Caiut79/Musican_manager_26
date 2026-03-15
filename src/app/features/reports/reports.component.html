@@ -8,7 +8,7 @@
     <h2>Entrate concerti</h2>
     <div class="value">{{ concertIncome | currency:'EUR':'symbol':'1.0-0' }}</div>
   </section>
-  <section class="card">
+  <section class="card" *ngIf="isTeacherProfile">
     <h2>Entrate insegnamento</h2>
     <div class="value">{{ teachingIncome | currency:'EUR':'symbol':'1.0-0' }}</div>
   </section>
@@ -21,3 +21,76 @@
     <div class="value" [class.danger]="netTotal < 0">{{ netTotal | currency:'EUR':'symbol':'1.0-0' }}</div>
   </section>
 </div>
+
+<section class="card comp-card">
+  <h2>Compensi concerti</h2>
+  <div class="comp-summary">
+    <div>Serate: <strong>{{ totalConcertSessions }}</strong></div>
+    <div>Totale: <strong>{{ concertIncome | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+  </div>
+  <div class="comp-table" *ngIf="concertCompByGroup.length; else noConcertData">
+    <div class="comp-head">Gruppo</div>
+    <div class="comp-head right">Date</div>
+    <div class="comp-head right">Media</div>
+    <div class="comp-head right">Totale</div>
+    <ng-container *ngFor="let row of concertCompByGroup">
+      <div>{{ row.label }}</div>
+      <div class="right">{{ row.count }}</div>
+      <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
+      <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+    </ng-container>
+  </div>
+  <ng-template #noConcertData>
+    <div class="empty">Nessun concerto disponibile</div>
+  </ng-template>
+</section>
+
+<section class="card comp-card" *ngIf="isTeacherProfile">
+  <h2>Compensi lezioni</h2>
+  <div class="comp-summary">
+    <div>Lezioni: <strong>{{ totalLessonSessions }}</strong></div>
+    <div>Totale: <strong>{{ teachingIncome | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+  </div>
+  <h3>Per allievo</h3>
+  <div class="comp-table" *ngIf="lessonCompByStudent.length; else noStudentData">
+    <div class="comp-head">Allievo</div>
+    <div class="comp-head right">Lezioni</div>
+    <div class="comp-head right">Media</div>
+    <div class="comp-head right">Totale</div>
+    <ng-container *ngFor="let row of lessonCompByStudent">
+      <div>{{ row.label }}</div>
+      <div class="right">{{ row.count }}</div>
+      <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
+      <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+    </ng-container>
+  </div>
+  <ng-template #noStudentData>
+    <div class="empty">Nessuna lezione disponibile</div>
+  </ng-template>
+
+  <h3>Per scuola</h3>
+  <div class="comp-table" *ngIf="lessonCompBySchool.length; else noSchoolData">
+    <div class="comp-head">Scuola</div>
+    <div class="comp-head right">Lezioni</div>
+    <div class="comp-head right">Media</div>
+    <div class="comp-head right">Totale</div>
+    <ng-container *ngFor="let row of lessonCompBySchool">
+      <div>{{ row.label }}</div>
+      <div class="right">{{ row.count }}</div>
+      <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
+      <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+    </ng-container>
+  </div>
+  <ng-template #noSchoolData>
+    <div class="empty">Nessuna scuola disponibile</div>
+  </ng-template>
+</section>
+
+<section class="card comp-card" *ngIf="isTeacherProfile">
+  <h2>Compensi totali</h2>
+  <div class="comp-summary stacked">
+    <div>Concerti: <strong>{{ concertIncome | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+    <div>Lezioni: <strong>{{ teachingIncome | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+    <div>Totale compensi: <strong>{{ grossTotal | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+  </div>
+</section>

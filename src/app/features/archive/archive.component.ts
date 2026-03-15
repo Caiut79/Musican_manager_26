@@ -18,6 +18,7 @@ export class ArchiveComponent implements OnInit {
   musicians: ArchiveEntity[] = [];
   bands: ArchiveEntity[] = [];
   archiveRemoteAvailable = true;
+  private musicianNameByCode = new Map<string, string>();
 
   form = this.fb.group({
     bandCode: ['', Validators.required]
@@ -29,18 +30,26 @@ export class ArchiveComponent implements OnInit {
     const firstName = localStorage.getItem('mm_firstName') || '';
     const lastName = localStorage.getItem('mm_lastName') || '';
     this.musicianName = `${firstName} ${lastName}`.trim();
-    this.musicianCode =
+    const localCode =
       localStorage.getItem('mm_affiliation_code') ||
       localStorage.getItem('musicianCode') ||
       '';
+    this.musicianCode = /^MU\d{4}$/i.test(localCode) ? localCode.toUpperCase() : '';
     await this.refreshLists();
   }
 
   async refreshLists(): Promise<void> {
-    this.musicians = await this.supabase.searchArchiveEntities(this.musicianQuery, 'musician');
+    const [musicianRows, allMusicians] = await Promise.all([
+      this.supabase.searchArchiveEntities(this.musicianQuery, 'musician'),
+      this.supabase.searchArchiveEntities('', 'musician')
+    ]);
+    this.musicianNameByCode = new Map(
+      allMusicians.map(row => [row.entity_code.toUpperCase(), row.display_name || 'Musicista'])
+    );
+    this.musicians = musicianRows;
     const remoteBands = await this.supabase.searchArchiveEntities(this.bandQuery, 'band');
     if (remoteBands.length) {
-      this.bands = remoteBands;
+      this.bands = remoteBands.filter(b => !!`${b.entity_code || ''}`.trim());
     } else {
       const sourceMusicians = this.musicianQuery
         ? this.musicians
@@ -92,5 +101,18 @@ export class ArchiveComponent implements OnInit {
       });
     });
     return out;
+  }
+
+  linkedMusicianName(code: string | null): string {
+    const normalized = `${code || ''}`.trim().toUpperCase();
+    if (!normalized) return '—';
+    return this.musicianNameByCode.get(normalized) || 'Musicista non identificato';
+  }
+
+  formatCreatedAt(iso: string | undefined): string {
+    if (!iso) return 'Data non disponibile';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return 'Data non disponibile';
+    return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
   }
 }

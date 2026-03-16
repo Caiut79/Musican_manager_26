@@ -125,6 +125,14 @@ export class DashboardComponent implements OnInit {
 
   go(route: string) { this.router.navigate([route]); }
 
+  openUnpaidAlert(alert: { id: string; type: string }): void {
+    if (alert.type === 'concert') {
+      this.router.navigate(['/concerts'], { queryParams: { eventId: alert.id, source: 'dashboard' } });
+      return;
+    }
+    this.router.navigate(['/accounting'], { queryParams: { eventId: alert.id, source: 'dashboard' } });
+  }
+
   openCreatePicker(cell: CalendarCell): void {
     if (!cell.currentMonth) return;
     this.selectedDate = cell.date;

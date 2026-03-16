@@ -174,7 +174,7 @@
           <span class="nsh-label">PAGAMENTI DA CONFERMARE</span>
           <span class="nsh-badge">{{ unpaidAlerts.length }}</span>
         </div>
-        <div class="notif-item notif-pay" *ngFor="let a of unpaidAlerts" (click)="go('/accounting')">
+        <div class="notif-item notif-pay" *ngFor="let a of unpaidAlerts" (click)="openUnpaidAlert(a)">
           <div class="ni-icon-wrap ni-orange">
             <i class="ti ti-currency-euro"></i>
           </div>

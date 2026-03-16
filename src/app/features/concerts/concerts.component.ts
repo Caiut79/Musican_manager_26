@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { EventDetail } from '../../models/event-detail';
 import { SupabaseService } from '../../core/supabase.service';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 type ConcertRecord = {
   id: string;
@@ -63,6 +63,7 @@ export class ConcertsComponent implements OnInit {
   filterExecutionStatus: 'all' | 'da_fare' | 'effettuato' | 'annullato' | 'rimborsato' = 'all';
   servicePayments: ServicePayment[] = [];
   expandedConcertId: string | null = null;
+  focusedConcertId: string | null = null;
   inpsExemptProfile = false;
   newContact = {
     type: 'band' as 'band' | 'school' | 'student',
@@ -93,7 +94,7 @@ export class ConcertsComponent implements OnInit {
     musicians: this.fb.array([])
   });
 
-  constructor(private fb: FormBuilder, private supabase: SupabaseService, private router: Router) {}
+  constructor(private fb: FormBuilder, private supabase: SupabaseService, private router: Router, private route: ActivatedRoute) {}
 
   ngOnInit(): void {
     const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
@@ -103,6 +104,7 @@ export class ConcertsComponent implements OnInit {
     this.contacts = this.readContacts();
     this.concerts = this.mergeConcertsFromAgenda(this.concerts);
     this.persistConcerts();
+    this.applyRouteContext();
   }
 
   get bandsArray(): FormArray {
@@ -431,7 +433,7 @@ export class ConcertsComponent implements OnInit {
     this.persistConcerts();
     this.syncConcertToAgenda(concert);
     if (status === 'effettuato' && concert.paymentCadence === 'prestazione' && this.concertPaymentState(concert) !== 'pagato') {
-      const shouldRegister = window.confirm('Concerto effettuato. Registriamo il pagamento ora in Contabilità?');
+      const shouldRegister = window.confirm('Concerto effettuato con pagamento a serata. Vuoi registrare subito il saldo in Contabilità?');
       if (shouldRegister) {
         this.goToAccountingForConcert(concert);
       }
@@ -467,6 +469,19 @@ export class ConcertsComponent implements OnInit {
   private persistConcerts(): void {
     this.concerts = [...this.concerts].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
     localStorage.setItem('mm_concerts', JSON.stringify(this.concerts));
+  }
+
+  private applyRouteContext(): void {
+    const eventId = `${this.route.snapshot.queryParamMap.get('eventId') || ''}`.trim();
+    if (!eventId) return;
+    const target = this.concerts.find(concert => concert.id === eventId);
+    if (!target) return;
+    this.expandedConcertId = target.id;
+    this.focusedConcertId = target.id;
+    setTimeout(() => {
+      const node = document.getElementById(`concert-${target.id}`);
+      node?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
   }
 
   private readConcerts(): ConcertRecord[] {

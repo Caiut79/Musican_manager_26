@@ -1,6 +1,6 @@
 <div class="page-header">
   <div>
-    <h1>Spese & Spostamenti</h1>
+    <h1>Spese &amp; Spostamenti</h1>
     <p class="subtitle">Calcola il costo degli spostamenti per le tue serate</p>
   </div>
 </div>
@@ -15,6 +15,28 @@
       <label>Luogo di partenza *
         <input type="text" formControlName="origin" placeholder="es. Milano">
       </label>
+      <!-- Waypoints -->
+      <div class="waypoints-section">
+        <div class="waypoints-header">
+          <span class="waypoints-title">📍 Punti di passaggio <span class="wp-count" *ngIf="waypointsArray.length > 0">({{ waypointsArray.length }}/5)</span></span>
+          <div class="waypoint-actions">
+            <button type="button" class="btn-outline-sm" (click)="addWaypoint()" [disabled]="waypointsArray.length >= 5">+ Aggiungi tappa</button>
+            <button type="button" class="btn-outline-sm" [class.active]="mapWaypointPickMode" (click)="toggleMapWaypointPick()" [disabled]="waypointsArray.length >= 5 && !mapWaypointPickMode">
+              {{ mapWaypointPickMode ? 'Annulla selezione mappa' : 'Seleziona su mappa' }}
+            </button>
+          </div>
+        </div>
+        <div class="waypoints-list" [formArrayName]="'waypoints'">
+          <div class="waypoint-row" *ngFor="let wp of waypointsArray.controls; index as i">
+            <span class="wp-pin">🟠</span>
+            <input type="text" [formControlName]="i" placeholder="es. Cremona, Via Garibaldi 5">
+            <button type="button" class="btn-remove" (click)="removeWaypoint(i)" title="Rimuovi tappa">✕</button>
+          </div>
+        </div>
+        <p class="waypoints-hint" *ngIf="waypointsArray.length > 0">Le tappe disabilitano i percorsi alternativi</p>
+        <p class="waypoints-hint pick-active" *ngIf="mapWaypointPickMode">Tocca un punto sulla mappa per aggiungere la tappa</p>
+      </div>
+
       <label>Destinazione *
         <input type="text" formControlName="destination" placeholder="es. Bergamo, Via Roma 1">
       </label>
@@ -26,7 +48,6 @@
           <input type="number" formControlName="vehicleConsumption" min="0" step="0.1" placeholder="es. 7.0">
         </label>
       </div>
-
       <!-- Extras -->
       <div class="extras-section">
         <div class="extras-header">
@@ -42,7 +63,7 @@
         </div>
       </div>
 
-      <button class="btn-primary full-btn" (click)="calculate()" [disabled]="calculating">
+      <button type="button" class="btn-primary full-btn" (click)="calculate()" [disabled]="calculating">
         {{ calculating ? '⏳ Calcolo in corso...' : '🔍 Calcola percorso' }}
       </button>
 
@@ -53,10 +74,29 @@
     <section class="card result-card" *ngIf="result">
       <h2>Risultato</h2>
 
+      <div class="itineraries" *ngIf="itineraryOptions.length > 0">
+        <button
+          type="button"
+          class="itinerary-btn"
+          *ngFor="let itinerary of itineraryOptions"
+          [class.active]="selectedItineraryId === itinerary.id"
+          (click)="selectItinerary(itinerary.id)">
+          <span class="itinerary-title">{{ itinerary.label }}</span>
+          <span class="itinerary-meta">{{ itinerary.distanceKm }} km • {{ durationLabel(itinerary.durationMin) }}</span>
+          <span class="itinerary-meta">Pedaggio stimato locale</span>
+          <span class="itinerary-meta" *ngIf="itinerary.tollOneWay !== null">Pedaggio A/R {{ itinerary.tollRoundTrip | currency:'EUR':'symbol':'1.2-2' }}</span>
+          <span class="itinerary-meta" *ngIf="itinerary.tollOneWay === null">Pedaggio non disponibile</span>
+        </button>
+      </div>
+
       <div class="result-grid">
         <div class="result-item">
-          <span class="result-label">Distanza (in linea d'aria)</span>
+          <span class="result-label">{{ result.routeLabel }}</span>
           <span class="result-value">{{ result.distanceKm }} km</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">Tempo stimato (solo andata)</span>
+          <span class="result-value">{{ durationLabel(result.durationMin) }}</span>
         </div>
         <div class="result-item">
           <span class="result-label">Costo carburante calcolato</span>
@@ -65,6 +105,15 @@
         <div class="result-item">
           <span class="result-label">Carburante totale (A/R)</span>
           <span class="result-value">{{ result.totalFuel | currency:'EUR':'symbol':'1.2-2' }}</span>
+        </div>
+        <div class="result-item">
+          <span class="result-label">Pedaggio (A/R)</span>
+          <span class="result-value" *ngIf="result.tollRoundTrip !== null">{{ result.tollRoundTrip | currency:'EUR':'symbol':'1.2-2' }}</span>
+          <span class="result-value" *ngIf="result.tollRoundTrip === null">Non disponibile</span>
+        </div>
+        <div class="result-item" *ngIf="result.tollBoothsCount !== null">
+          <span class="result-label">Caselli stimati</span>
+          <span class="result-value">{{ result.tollBoothsCount }}</span>
         </div>
         <div class="result-item" *ngIf="result.totalExtras > 0">
           <span class="result-label">Spese extra</span>
@@ -78,25 +127,27 @@
 
       <!-- Navigation buttons -->
       <div class="nav-buttons">
-        <button class="nav-btn waze"   (click)="openNavigation('waze')">
+        <button type="button" class="nav-btn waze"   (click)="openNavigation('waze')">
           <span>🧭</span> Waze
         </button>
-        <button class="nav-btn google" (click)="openNavigation('google')">
+        <button type="button" class="nav-btn google" (click)="openNavigation('google')">
           <span>🗺️</span> Google Maps
         </button>
-        <button class="nav-btn apple"  (click)="openNavigation('apple')">
+        <button type="button" class="nav-btn apple"  (click)="openNavigation('apple')">
           <span>🍎</span> Apple Maps
         </button>
       </div>
 
-      <button class="btn-outline full-btn" (click)="saveExpense()">💾 Salva spesa</button>
+      <button type="button" class="btn-outline full-btn" (click)="openPedaggiPopup()">🛣️ Calcola pedaggi</button>
+
+      <button type="button" class="btn-outline full-btn" (click)="saveExpense()">💾 Salva spesa</button>
     </section>
   </div>
 
   <!-- Right: map -->
   <div class="map-col">
     <div class="map-wrapper">
-      <div #mapContainer class="leaflet-map"></div>
+      <div #mapContainer class="leaflet-map" [class.pick-active]="mapWaypointPickMode"></div>
       <div class="map-placeholder" *ngIf="!result">
         <span>🗺️</span>
         <p>La mappa apparirà dopo il calcolo</p>
@@ -105,6 +156,45 @@
   </div>
 
 </div>
+
+<div class="pedaggi-modal-backdrop" *ngIf="showPedaggiPopup" (click)="closePedaggiPopup()"></div>
+<section class="pedaggi-modal" *ngIf="showPedaggiPopup" role="dialog" aria-modal="true">
+  <div class="pedaggi-modal-header">
+    <h3>Calcolo pedaggi</h3>
+    <button type="button" class="btn-remove" (click)="closePedaggiPopup()">✕</button>
+  </div>
+  <div class="pedaggi-modal-body">
+    <div class="pedaggi-row">
+      <label>Partenza
+        <input type="text" [(ngModel)]="pedaggiEntry" [ngModelOptions]="{standalone: true}">
+      </label>
+      <label>Destinazione
+        <input type="text" [(ngModel)]="pedaggiExit" [ngModelOptions]="{standalone: true}">
+      </label>
+    </div>
+    <div class="pedaggi-tools">
+      <button type="button" class="btn-outline-sm" (click)="copyPedaggiPair()">Copia caselli</button>
+      <button type="button" class="btn-outline-sm" (click)="openPedaggiInNewTab()">Apri su Infoviaggiando</button>
+    </div>
+    <p class="pedaggi-note">Infoviaggiando non consente il caricamento dentro questo popup. Apri il sito, inserisci partenza e destinazione, poi torna qui.</p>
+    <div class="pedaggi-steps">
+      <span>1) Apri il sito</span>
+      <span>2) Calcola il pedaggio</span>
+      <span>3) Incolla il costo sotto</span>
+    </div>
+    <div class="pedaggi-row compact">
+      <label>Costo pedaggio solo andata (€)
+        <input type="number" min="0" step="0.1" [(ngModel)]="pedaggiCostValue" [ngModelOptions]="{standalone: true}" placeholder="Es. 13.60">
+      </label>
+      <div class="pedaggi-actions">
+        <button type="button" class="btn-outline-sm" (click)="pastePedaggiCost()">Incolla costo</button>
+        <button type="button" class="btn-primary" (click)="applyPedaggiCostToRoute()" [disabled]="!pedaggiEntry || !pedaggiExit || !pedaggiCostValue || pedaggiCostValue <= 0">
+          Aggiungi costo al percorso
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- Saved expenses -->
 <section class="card" *ngIf="expenses.length > 0">
@@ -118,10 +208,11 @@
       </div>
       <div class="expense-details">
         <span>{{ ex.distanceKm }} km</span>
+        <span *ngIf="ex.tollEstimatedRoundTrip !== undefined && ex.tollEstimatedRoundTrip !== null">Pedaggio {{ ex.tollEstimatedRoundTrip | currency:'EUR':'symbol':'1.2-2' }}</span>
         <span>{{ ex.date }}</span>
         <strong>{{ ex.totalExpense | currency:'EUR':'symbol':'1.2-2' }}</strong>
       </div>
-      <button class="btn-remove" (click)="deleteExpense(ex.id)" title="Elimina">🗑</button>
+      <button type="button" class="btn-remove" (click)="deleteExpense(ex.id)" title="Elimina">🗑</button>
     </div>
   </div>
 </section>

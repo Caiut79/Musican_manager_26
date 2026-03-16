@@ -20,6 +20,12 @@ export type Expense = {
   extras: ExpenseExtra[];
   totalFuel: number;
   totalExtras: number;
+  tollEstimatedOneWay?: number | null;
+  tollEstimatedRoundTrip?: number | null;
+  tollProvider?: string;
+  tollBoothsCount?: number | null;
+  routeLabel?: string;
+  durationMin?: number;
   totalExpense: number;
   createdAt: string;
 };

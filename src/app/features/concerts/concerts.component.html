@@ -194,7 +194,7 @@
 </section>
 
 <div class="list">
-  <div class="item" *ngFor="let c of filteredConcerts">
+  <div class="item" *ngFor="let c of filteredConcerts" [attr.id]="'concert-' + c.id" [class.item-focus]="focusedConcertId === c.id">
     <div class="item-main">
       <div class="item-compact">
         <strong>{{ c.title }}</strong>

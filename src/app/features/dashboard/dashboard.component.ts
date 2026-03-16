@@ -72,6 +72,7 @@ export class DashboardComponent implements OnInit {
   unreadCount = 0;
   today = new Date().toISOString().split('T')[0];
   isTeacherProfile = false;
+  private refundedConcertIds = new Set<string>();
 
   dayHeaders = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
 
@@ -103,6 +104,7 @@ export class DashboardComponent implements OnInit {
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 5);
     this.buildCalendar();
+    this.refreshRefundedConcertIds();
     this.contacts = this.readContacts();
 
     const storedNotifications: AppNotification[] = JSON.parse(localStorage.getItem('mm_notifications') || '[]');
@@ -308,12 +310,32 @@ export class DashboardComponent implements OnInit {
     this.buildCalendar();
   }
 
-  chipClass(type: string): string {
-    const map: Record<string, string> = {
-      concert: 'chip-blue', lesson: 'chip-green',
-      rehearsal: 'chip-orange', other: 'chip-teal'
-    };
-    return map[type] || 'chip-gray';
+  chipClasses(event: EventDetail): string[] {
+    if (this.refundedConcertIds.has(event.id)) return ['chip-refunded'];
+    if (event.status === 'cancelled') return ['chip-cancelled'];
+    if (this.isEventCompleted(event)) return ['chip-done'];
+    return ['chip-todo'];
+  }
+
+  private isEventCompleted(event: EventDetail): boolean {
+    if (event.status === 'cancelled') return false;
+    if (event.status === 'confirmed' && event.date <= this.today) return true;
+    return event.date < this.today;
+  }
+
+  private refreshRefundedConcertIds(): void {
+    const raw = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
+    const refunded = Array.isArray(raw) ? raw.filter((c: any) => c?.executionStatus === 'rimborsato') : [];
+    this.refundedConcertIds = new Set(refunded.map((c: any) => `${c?.id || ''}`).filter(Boolean));
+  }
+
+  eventGroupLabel(event: EventDetail): string {
+    if (event.type !== 'concert') return '';
+    const venue = `${event.venue || ''}`.trim();
+    if (venue) return venue;
+    const names = Array.isArray(event.band) ? event.band.map(x => `${x?.name || ''}`.trim()).filter(Boolean) : [];
+    if (!names.length) return '';
+    return names[0];
   }
 
   notifIconClass(type: string): string {
@@ -398,6 +420,7 @@ export class DashboardComponent implements OnInit {
   }
 
   private refreshEventCollections(storedEvents: EventDetail[]): void {
+    this.refreshRefundedConcertIds();
     const sorted = [...storedEvents].sort((a, b) => a.date.localeCompare(b.date));
     this.allEvents = sorted;
     this.todayEvents = sorted.filter(e => e.date === this.today);
@@ -459,7 +482,7 @@ export class DashboardComponent implements OnInit {
 
   // ─── Payment alerts ────────────────────────────────────────────────────────
   /** Events in the last 7 days + next 3 days with no payment recorded */
-  get unpaidAlerts(): { id: string; title: string; date: string; type: string }[] {
+  get unpaidAlerts(): { id: string; title: string; date: string; type: string; counterpart: string }[] {
     const payments: { eventId: string }[] = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
     const paidIds = new Set(payments.map(p => p.eventId));
     const past7  = new Date(); past7.setDate(past7.getDate() - 7);
@@ -470,11 +493,17 @@ export class DashboardComponent implements OnInit {
       .filter(e => (e.type === 'concert' || e.type === 'lesson'))
       .filter(e => e.date >= from && e.date <= to)
       .filter(e => !paidIds.has(e.id))
-      .map(e => ({ id: e.id, title: e.title, date: e.date, type: e.type }));
+      .map(e => ({
+        id: e.id,
+        title: e.title,
+        date: e.date,
+        type: e.type,
+        counterpart: this.eventCounterpartLabel(e)
+      }));
   }
 
   /** Events that have only acconto payments (saldo still pending) */
-  get pendingBalanceAlerts(): { id: string; title: string; date: string; acconto: number; agreed: number }[] {
+  get pendingBalanceAlerts(): { id: string; title: string; date: string; acconto: number; agreed: number; counterpart: string }[] {
     const payments: { eventId: string; paymentType: string; receivedAmount: number }[] =
       JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
     const byEvent: Record<string, typeof payments> = {};
@@ -482,16 +511,31 @@ export class DashboardComponent implements OnInit {
       if (!byEvent[p.eventId]) byEvent[p.eventId] = [];
       byEvent[p.eventId].push(p);
     }
-    const results: { id: string; title: string; date: string; acconto: number; agreed: number }[] = [];
+    const results: { id: string; title: string; date: string; acconto: number; agreed: number; counterpart: string }[] = [];
     for (const [eventId, evPayments] of Object.entries(byEvent)) {
       const onlyAcconto = evPayments.every(p => p.paymentType === 'acconto');
       const event = this.allEvents.find(e => e.id === eventId);
       if (onlyAcconto && event) {
         const acconto = evPayments.reduce((s, p) => s + p.receivedAmount, 0);
-        results.push({ id: event.id, title: event.title, date: event.date, acconto, agreed: event.grossFee });
+        results.push({
+          id: event.id,
+          title: event.title,
+          date: event.date,
+          acconto,
+          agreed: event.grossFee,
+          counterpart: this.eventCounterpartLabel(event)
+        });
       }
     }
     return results;
+  }
+
+  private eventCounterpartLabel(event: EventDetail): string {
+    const venue = `${event.venue || ''}`.trim();
+    if (venue) return venue;
+    const firstBand = `${event.band?.[0]?.name || ''}`.trim();
+    if (firstBand) return firstBand;
+    return event.type === 'lesson' ? 'allievo da definire' : 'destinazione da definire';
   }
 
   private cleanupDashboardDraftEvents(events: EventDetail[]): EventDetail[] {

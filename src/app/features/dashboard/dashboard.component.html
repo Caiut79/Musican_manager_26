@@ -37,7 +37,10 @@
             <span class="cal-day-num">{{ c.day }}</span>
             <div class="cal-chips">
               <span class="cal-chip" *ngFor="let e of c.events.slice(0, 2)"
-                    [ngClass]="chipClass(e.type)">{{ e.title }}</span>
+                    [ngClass]="chipClasses(e)">
+              <span class="cal-chip-title">{{ e.title }}</span>
+              <span class="cal-chip-sub" *ngIf="eventGroupLabel(e)">{{ eventGroupLabel(e) }}</span>
+            </span>
               <span class="cal-chip chip-more" *ngIf="c.events.length > 2">
                 +{{ c.events.length - 2 }}
               </span>
@@ -181,6 +184,7 @@
           <div class="ni-body">
             <div class="ni-title">{{ a.title }}</div>
             <div class="ni-sub">{{ formatDate(a.date) }} — pagamento da registrare</div>
+            <div class="ni-sub">Per: {{ a.counterpart }}</div>
           </div>
           <span class="ni-tag tag-unread">Da fare</span>
         </div>
@@ -202,6 +206,7 @@
               Acconto {{ a.acconto | currency:'EUR':'symbol':'1.0-0' }} /
               Pattuito {{ a.agreed | currency:'EUR':'symbol':'1.0-0' }}
             </div>
+            <div class="ni-sub">Per: {{ a.counterpart }}</div>
           </div>
           <span class="ni-tag tag-acconto">Acconto</span>
         </div>

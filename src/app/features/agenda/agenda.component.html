@@ -59,7 +59,10 @@
     <div class="event-card" *ngFor="let e of events">
       <div class="event-accent" [ngStyle]="{ background: e.type === 'lesson' ? lessonColor : concertColor }"></div>
       <div class="event-body">
-        <div class="event-title">{{ e.title }}</div>
+        <div class="event-main">
+          <div class="event-title">{{ e.title }}</div>
+          <div class="event-counterpart" *ngIf="e.counterpart">{{ e.counterpart }}</div>
+        </div>
         <div class="event-meta">
           <span class="event-date">{{ e.date }}</span>
           <span class="event-badge"

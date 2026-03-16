@@ -350,23 +350,39 @@
 }
 
 .cal-chip {
-  display: block;
+  display: flex;
+  flex-direction: column;
   font-size: 10px;
   font-weight: 500;
   padding: 2px 5px;
   border-radius: 3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.4;
+  line-height: 1.2;
   color: #fff;
 }
 
-.chip-blue    { background: #3b82f6; }
-.chip-green   { background: #22c55e; }
-.chip-orange  { background: #f59e0b; }
-.chip-teal    { background: #14b8a6; }
-.chip-gray    { background: #9ca3af; }
+.cal-chip-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-chip-sub {
+  margin-top: 1px;
+  font-size: 9px;
+  font-weight: 500;
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chip-todo    { background: #2563eb; }
+.chip-done    { background: #16a34a; }
+.chip-cancelled { background: #dc2626; }
+.chip-refunded {
+  background: #facc15;
+  color: #111827;
+}
 .chip-more    { background: #e5e7eb; color: var(--text-muted); }
 
 /* ── Accesso Rapido ── */

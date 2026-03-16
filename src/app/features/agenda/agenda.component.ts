@@ -3,7 +3,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { SupabaseService } from '../../core/supabase.service';
 import { EventDetail } from '../../models/event-detail';
 
-type EventItem = { id: string; title: string; date: string; type: 'lesson' | 'concert' };
+type EventItem = { id: string; title: string; date: string; type: 'lesson' | 'concert'; counterpart: string };
 
 @Component({
   selector: 'app-agenda',
@@ -32,7 +32,8 @@ export class AgendaComponent implements OnInit {
         id: event.id,
         title: event.title,
         date: event.date,
-        type: event.type === 'lesson' ? 'lesson' : 'concert'
+        type: event.type === 'lesson' ? 'lesson' : 'concert',
+        counterpart: this.resolveCounterpart(event)
       } as EventItem))
       .sort((a, b) => b.date.localeCompare(a.date));
   }
@@ -40,7 +41,7 @@ export class AgendaComponent implements OnInit {
   async add(): Promise<void> {
     if (this.form.invalid) return;
     const v = this.form.value;
-    const created: EventItem = { id: crypto.randomUUID(), title: v.title!, date: v.date!, type: v.type! };
+    const created: EventItem = { id: crypto.randomUUID(), title: v.title!, date: v.date!, type: v.type!, counterpart: '' };
     this.events = [created, ...this.events].sort((a, b) => b.date.localeCompare(a.date));
     const mmEvents: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
     mmEvents.unshift({
@@ -66,5 +67,18 @@ export class AgendaComponent implements OnInit {
       }
     }
     this.form.reset({ type: 'lesson' });
+  }
+
+  private resolveCounterpart(event: EventDetail): string {
+    if (event.type === 'concert') {
+      const bandNames = Array.isArray(event.band) ? event.band.map(x => `${x?.name || ''}`.trim()).filter(Boolean) : [];
+      if (bandNames.length) return bandNames.join(', ');
+      const venue = `${event.venue || ''}`.trim();
+      return venue;
+    }
+    const venue = `${event.venue || ''}`.trim();
+    if (venue) return venue;
+    const fromTitle = `${event.title || ''}`.match(/con\s+(.+)$/i);
+    return fromTitle?.[1]?.trim() || '';
   }
 }

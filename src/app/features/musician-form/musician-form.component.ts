@@ -17,6 +17,8 @@ const ENPALS_CATEGORIES = [
   { value: 'altro', label: 'Altra categoria' },
 ];
 
+type ProfileAddressField = 'birthPlace' | 'residence' | 'homeBase';
+
 @Component({
   selector: 'app-musician-form',
   templateUrl: './musician-form.component.html',
@@ -38,6 +40,11 @@ export class MusicianFormComponent {
   incompleteStepIndexes: number[] = [];
   signatureSaved = false;
   annualInvoicedMusicIncome = 0;
+  birthPlaceSuggestions: string[] = [];
+  residenceSuggestions: string[] = [];
+  homeBaseSuggestions: string[] = [];
+  private addressSearchTimers: Partial<Record<ProfileAddressField, ReturnType<typeof setTimeout>>> = {};
+  private addressSearchAborters: Partial<Record<ProfileAddressField, AbortController>> = {};
 
   // ── Signature pad ──────────────────────────────────────────
   private _sigCanvas?: ElementRef<HTMLCanvasElement>;
@@ -166,6 +173,98 @@ export class MusicianFormComponent {
       localStorage.setItem('mm_profile_snapshot', JSON.stringify({ ...this.form.value, licenseEmail: restoredEmail }));
     } catch {
     }
+  }
+
+  onProfileAddressInput(field: ProfileAddressField, rawValue: string): void {
+    const value = `${rawValue || ''}`.trim();
+    const timer = this.addressSearchTimers[field];
+    if (timer) clearTimeout(timer);
+    if (value.length < 2) {
+      this.setProfileAddressSuggestions(field, []);
+      return;
+    }
+    this.addressSearchTimers[field] = setTimeout(() => {
+      void this.fetchProfileAddressSuggestions(field, value);
+    }, 220);
+  }
+
+  private async fetchProfileAddressSuggestions(field: ProfileAddressField, query: string): Promise<void> {
+    this.addressSearchAborters[field]?.abort();
+    const controller = new AbortController();
+    this.addressSearchAborters[field] = controller;
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=7&countrycodes=it&addressdetails=1`;
+      const res = await fetch(url, {
+        headers: { 'Accept-Language': 'it' },
+        signal: controller.signal
+      });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const currentValue = `${this.form.get(field)?.value || ''}`.trim();
+      if (this.normalizeAddressText(currentValue) !== this.normalizeAddressText(query)) return;
+      const suggestions = this.rankNominatimRows(rows, query).slice(0, 7).map(x => x.label);
+      this.setProfileAddressSuggestions(field, suggestions);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') this.setProfileAddressSuggestions(field, []);
+    }
+  }
+
+  private setProfileAddressSuggestions(field: ProfileAddressField, values: string[]): void {
+    if (field === 'birthPlace') this.birthPlaceSuggestions = values;
+    if (field === 'residence') this.residenceSuggestions = values;
+    if (field === 'homeBase') this.homeBaseSuggestions = values;
+  }
+
+  private normalizeAddressText(value: string): string {
+    return `${value || ''}`.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  private rankNominatimRows(rows: any[], query: string): Array<{ label: string; score: number }> {
+    const normalizedQuery = this.normalizeAddressText(query);
+    const seen = new Set<string>();
+    const ranked: Array<{ label: string; score: number }> = [];
+    for (const row of rows) {
+      const label = this.formatNominatimLabel(row);
+      const key = this.normalizeAddressText(label);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
+      const importance = Number(row?.importance || 0);
+      let score = this.addressTypeScore(addresstype) + Math.max(0, Math.min(30, importance * 30));
+      if (key.startsWith(normalizedQuery)) score += 40;
+      else if (key.includes(normalizedQuery)) score += 20;
+      ranked.push({ label, score });
+    }
+    return ranked.sort((a, b) => b.score - a.score);
+  }
+
+  private formatNominatimLabel(row: any): string {
+    const address = row?.address || {};
+    const place = `${address.city || address.town || address.village || address.municipality || address.hamlet || row?.name || ''}`.trim();
+    const province = this.normalizeProvince(`${address.county || ''}`);
+    const region = `${address.state || ''}`.trim();
+    const country = `${address.country || 'Italia'}`.trim();
+    const road = `${address.road || ''}`.trim();
+    const number = `${address.house_number || ''}`.trim();
+    const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
+    if (['road', 'house', 'residential'].includes(addresstype) && road) {
+      const roadLabel = `${road}${number ? ` ${number}` : ''}`.trim();
+      return [roadLabel, place, province, region, country].filter(Boolean).join(', ');
+    }
+    const compact = [place, province, region, country].filter(Boolean).join(', ');
+    return compact || `${row?.display_name || ''}`.trim();
+  }
+
+  private normalizeProvince(value: string): string {
+    return `${value || ''}`.replace(/^Città metropolitana di\s+/i, '').trim();
+  }
+
+  private addressTypeScore(addresstype: string): number {
+    if (['city', 'town', 'village', 'municipality', 'hamlet', 'locality'].includes(addresstype)) return 60;
+    if (['county', 'province', 'state_district', 'state'].includes(addresstype)) return 45;
+    if (['suburb', 'neighbourhood', 'quarter'].includes(addresstype)) return 35;
+    if (['road', 'house', 'residential'].includes(addresstype)) return 25;
+    return 20;
   }
 
   get progressPercent(): number {

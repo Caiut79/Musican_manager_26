@@ -32,6 +32,8 @@ type ExpenseCalculationResult = {
   total: number;
 };
 
+type AddressField = 'origin' | 'destination';
+
 // ─── Toll segment for manual toll calculator ─────────────────────────────────
 type TollSegment = {
   id: string;
@@ -77,6 +79,9 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
 
   tollSegments: TollSegment[] = [];
   tollVehicleType = '2AxlesAuto';
+  originSuggestions: string[] = [];
+  destinationSuggestions: string[] = [];
+  activeAddressField: AddressField | null = null;
 
   private map!: L.Map;
   private markerOrigin?: L.Marker;
@@ -84,6 +89,8 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   private routeLine?: L.Polyline;
   private waypointMarkers: L.Marker[] = [];
   private draftWaypointMarkers: L.Marker[] = [];
+  private addressSearchTimers: Partial<Record<AddressField, ReturnType<typeof setTimeout>>> = {};
+  private addressSearchAborters: Partial<Record<AddressField, AbortController>> = {};
 
   constructor(private fb: FormBuilder, private supabase: SupabaseService) {}
 
@@ -110,6 +117,11 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    (['origin', 'destination'] as AddressField[]).forEach(field => {
+      const timer = this.addressSearchTimers[field];
+      if (timer) clearTimeout(timer);
+      this.addressSearchAborters[field]?.abort();
+    });
     if (this.map) { this.map.remove(); }
   }
 
@@ -121,10 +133,13 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
       iconSize: [25, 41], iconAnchor: [12, 41],
     });
     L.Marker.prototype.options.icon = iconDefault;
-    this.map = L.map(this.mapEl.nativeElement).setView([41.9, 12.5], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 18,
+    this.map = L.map(this.mapEl.nativeElement, {
+      worldCopyJump: true,
+      minZoom: 2
+    }).setView([46.5, 8.5], 5);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap contributors © CARTO',
+      maxZoom: 19,
     }).addTo(this.map);
     this.map.on('click', (event: L.LeafletMouseEvent) => {
       if (!this.mapWaypointPickMode) return;
@@ -217,11 +232,129 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   private async geocode(query: string): Promise<[number, number] | null> {
     const parsed = this.parseCoordinatesFromText(query);
     if (parsed) return parsed;
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&countrycodes=it&addressdetails=1`;
     const res  = await fetch(url, { headers: { 'Accept-Language': 'it' } });
     const data = await res.json();
     if (!data.length) return null;
-    return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+    const ranked = this.rankNominatimRows(data, query);
+    const best = ranked[0]?.row || data[0];
+    return [parseFloat(best.lat), parseFloat(best.lon)];
+  }
+
+  onAddressInput(field: AddressField, value: string): void {
+    this.queueAddressSuggestions(field, value);
+  }
+
+  onAddressFocus(field: AddressField): void {
+    const value = `${this.form.get(field)?.value || ''}`;
+    this.queueAddressSuggestions(field, value);
+  }
+
+  onAddressBlur(field: AddressField): void {
+    setTimeout(() => {
+      if (this.activeAddressField === field) this.activeAddressField = null;
+      this.clearAddressSuggestions(field);
+    }, 160);
+  }
+
+  selectAddressSuggestion(field: AddressField, suggestion: string): void {
+    this.form.get(field)?.setValue(suggestion);
+    this.activeAddressField = null;
+    this.clearAddressSuggestions(field);
+  }
+
+  private queueAddressSuggestions(field: AddressField, rawValue: string): void {
+    const value = `${rawValue || ''}`.trim();
+    const timer = this.addressSearchTimers[field];
+    if (timer) clearTimeout(timer);
+    if (value.length < 2) {
+      this.clearAddressSuggestions(field);
+      return;
+    }
+    this.activeAddressField = field;
+    this.addressSearchTimers[field] = setTimeout(() => {
+      void this.fetchAddressSuggestions(field, value);
+    }, 220);
+  }
+
+  private async fetchAddressSuggestions(field: AddressField, query: string): Promise<void> {
+    this.addressSearchAborters[field]?.abort();
+    const controller = new AbortController();
+    this.addressSearchAborters[field] = controller;
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&countrycodes=it&addressdetails=1`;
+      const res = await fetch(url, {
+        headers: { 'Accept-Language': 'it' },
+        signal: controller.signal
+      });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const currentValue = `${this.form.get(field)?.value || ''}`.trim();
+      if (this.normalizeAddressText(currentValue) !== this.normalizeAddressText(query)) return;
+      const suggestions = this.rankNominatimRows(rows, query).slice(0, 6).map(x => x.label);
+      if (field === 'origin') this.originSuggestions = suggestions;
+      else this.destinationSuggestions = suggestions;
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') this.clearAddressSuggestions(field);
+    }
+  }
+
+  private clearAddressSuggestions(field: AddressField): void {
+    if (field === 'origin') this.originSuggestions = [];
+    else this.destinationSuggestions = [];
+  }
+
+  private normalizeAddressText(value: string): string {
+    return `${value || ''}`.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  private rankNominatimRows(rows: any[], query: string): Array<{ row: any; label: string; score: number }> {
+    const normalizedQuery = this.normalizeAddressText(query);
+    const seen = new Set<string>();
+    const ranked: Array<{ row: any; label: string; score: number }> = [];
+    for (const row of rows) {
+      const label = this.formatNominatimLabel(row);
+      const key = this.normalizeAddressText(label);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
+      const importance = Number(row?.importance || 0);
+      let score = this.addressTypeScore(addresstype) + Math.max(0, Math.min(30, importance * 30));
+      if (key.startsWith(normalizedQuery)) score += 40;
+      else if (key.includes(normalizedQuery)) score += 20;
+      ranked.push({ row, label, score });
+    }
+    return ranked.sort((a, b) => b.score - a.score);
+  }
+
+  private formatNominatimLabel(row: any): string {
+    const address = row?.address || {};
+    const place = `${address.city || address.town || address.village || address.municipality || address.hamlet || row?.name || ''}`.trim();
+    const province = this.normalizeProvinceName(`${address.county || ''}`);
+    const region = `${address.state || ''}`.trim();
+    const country = `${address.country || 'Italia'}`.trim();
+    const road = `${address.road || ''}`.trim();
+    const number = `${address.house_number || ''}`.trim();
+    const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
+    const roadLike = addresstype === 'road' || addresstype === 'house' || addresstype === 'residential';
+    if (roadLike && road) {
+      const roadLabel = `${road}${number ? ` ${number}` : ''}`.trim();
+      return [roadLabel, place, province, region, country].filter(Boolean).join(', ');
+    }
+    const compact = [place, province, region, country].filter(Boolean).join(', ');
+    return compact || `${row?.display_name || ''}`.trim();
+  }
+
+  private normalizeProvinceName(value: string): string {
+    return `${value || ''}`.replace(/^Città metropolitana di\s+/i, '').trim();
+  }
+
+  private addressTypeScore(addresstype: string): number {
+    if (['city', 'town', 'village', 'municipality', 'hamlet', 'locality'].includes(addresstype)) return 60;
+    if (['county', 'province', 'state_district', 'state'].includes(addresstype)) return 45;
+    if (['suburb', 'neighbourhood', 'quarter'].includes(addresstype)) return 35;
+    if (['road', 'house', 'residential'].includes(addresstype)) return 25;
+    return 20;
   }
 
   toggleMapWaypointPick(): void {
@@ -408,9 +541,9 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
         const isMotorway = this.isMotorwayStep(ref, name);
         if (isMotorway) {
           const motorwayRef = this.normalizeMotorwayRef(ref, name);
-          const booth = this.normalizeBoothLabel(name, motorwayRef);
+          const booth = this.extractBoothFromStep(step, motorwayRef);
           if (!current) {
-            current = { motorwayRef, entryBooth: booth || 'Entrata stimata', kmMotorway: 0 };
+            current = { motorwayRef, entryBooth: booth || 'Casello entrata stimato', kmMotorway: 0 };
           } else {
             current.motorwayRef = this.mergeMotorwayRef(current.motorwayRef, motorwayRef);
           }
@@ -434,7 +567,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
             id: crypto.randomUUID(),
             motorwayRef: current.motorwayRef,
             entryBooth: current.entryBooth,
-            exitBooth: this.normalizeBoothLabel(name, current.motorwayRef) || exitBooth || 'Uscita stimata',
+            exitBooth: this.extractBoothFromStep(step, current.motorwayRef) || exitBooth || 'Casello uscita stimato',
             kmMotorway: +current.kmMotorway.toFixed(1),
             manualCost: null
           });
@@ -448,7 +581,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
         id: crypto.randomUUID(),
         motorwayRef: current.motorwayRef,
         entryBooth: current.entryBooth,
-        exitBooth: exitBooth || 'Uscita stimata',
+        exitBooth: exitBooth || 'Casello uscita stimato',
         kmMotorway: +current.kmMotorway.toFixed(1),
         manualCost: null
       });
@@ -474,14 +607,26 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     const clean = `${name || ''}`.replace(/\s+/g, ' ').trim();
     if (!clean) return '';
     const compact = clean.toLowerCase();
+    if (compact.includes('raccordo') || compact.includes('autostrada') || compact.includes('tangenziale') || compact.includes('strada') || compact.includes('svincolo')) return '';
     if (compact.includes('casello')) return clean;
-    if (compact.includes('uscita')) return clean;
-    if (compact.includes('svincolo')) return clean;
-    if (compact.includes('autostrada')) return clean;
+    if (compact.includes('uscita')) return clean.replace(/uscita/i, 'Casello').trim();
     if (compact.includes('barriera')) return clean;
     if (compact.includes('stazione')) return clean;
     if (motorwayRef && clean.toUpperCase() === motorwayRef.toUpperCase()) return '';
-    return clean;
+    return '';
+  }
+
+  private extractBoothFromStep(step: any, motorwayRef: string): string {
+    const candidates = [
+      `${step?.destinations || ''}`.trim(),
+      `${step?.name || ''}`.trim(),
+      `${step?.maneuver?.instruction || ''}`.trim()
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      const normalized = this.normalizeBoothLabel(candidate, motorwayRef);
+      if (normalized) return normalized;
+    }
+    return '';
   }
 
   private mergeMotorwayRef(currentRef: string, nextRef: string): string {
@@ -714,7 +859,6 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     const destination = `${dLat},${dLon}`;
     const waypoints = this.validWaypointCoords.map(([lat, lon]) => `${lat},${lon}`);
     let url: string;
-    const isMobile = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
     if (app === 'google') {
       const params = new URLSearchParams({
@@ -729,21 +873,9 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
       const applePath = waypoints.length > 0 ? `${waypoints.join('+to:')}+to:${destination}` : destination;
       url = `https://maps.apple.com/?saddr=${encodeURIComponent(origin)}&daddr=${encodeURIComponent(applePath)}&dirflg=d`;
     } else {
-      if (!isMobile) {
-        const params = new URLSearchParams({
-          api: '1',
-          origin,
-          destination,
-          travelmode: 'driving'
-        });
-        if (waypoints.length > 0) params.set('waypoints', waypoints.join('|'));
-        url = `https://www.google.com/maps/dir/?${params.toString()}`;
-        window.open(url, '_blank', 'noopener,noreferrer');
-        return;
-      }
       const wazeParams = new URLSearchParams({
         ll: destination,
-        q: destination,
+        q: `${this.form.value.destination || destination}`,
         navigate: 'yes',
         zoom: '17',
         utm_source: 'musican_manager'
@@ -809,6 +941,8 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     const entry = `${first.entryBooth || ''}`.trim();
     const exit = `${last.exitBooth || ''}`.trim();
     if (!entry || !exit) return null;
+    const hasEstimated = [entry, exit].some(v => `${v}`.toLowerCase().includes('stimato'));
+    if (hasEstimated) return null;
     return { entry, exit };
   }
 

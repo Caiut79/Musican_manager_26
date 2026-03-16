@@ -47,10 +47,16 @@
       <input type="text" [(ngModel)]="form.displayName" placeholder="Nome band, scuola o allievo">
     </label>
     <label>Città / Posizione
-      <input type="text" [(ngModel)]="form.positionCity" placeholder="es. Milano">
+      <input type="text" [(ngModel)]="form.positionCity" placeholder="es. Milano" list="contact-position-city-suggestions" (input)="onAddressInput('positionCity', $any($event.target).value)">
+      <datalist id="contact-position-city-suggestions">
+        <option *ngFor="let item of positionCitySuggestions" [value]="item"></option>
+      </datalist>
     </label>
     <label>Indirizzo
-      <input type="text" [(ngModel)]="form.positionAddress" placeholder="es. Via Roma 10">
+      <input type="text" [(ngModel)]="form.positionAddress" placeholder="es. Via Roma 10" list="contact-position-address-suggestions" (input)="onAddressInput('positionAddress', $any($event.target).value)">
+      <datalist id="contact-position-address-suggestions">
+        <option *ngFor="let item of positionAddressSuggestions" [value]="item"></option>
+      </datalist>
     </label>
     <label>Telefono
       <input type="text" [(ngModel)]="form.phone" placeholder="+39 ...">
@@ -101,13 +107,19 @@
       <input type="text" [(ngModel)]="form.billingAddress" placeholder="Via ...">
     </label>
     <label>Città fatturazione
-      <input type="text" [(ngModel)]="form.billingCity" placeholder="Milano">
+      <input type="text" [(ngModel)]="form.billingCity" placeholder="Milano" list="contact-billing-city-suggestions" (input)="onAddressInput('billingCity', $any($event.target).value)">
+      <datalist id="contact-billing-city-suggestions">
+        <option *ngFor="let item of billingCitySuggestions" [value]="item"></option>
+      </datalist>
     </label>
     <label>CAP
       <input type="text" [(ngModel)]="form.billingZip" placeholder="20100">
     </label>
     <label>Nazione
-      <input type="text" [(ngModel)]="form.billingCountry" placeholder="Italia">
+      <input type="text" [(ngModel)]="form.billingCountry" placeholder="Italia" list="contact-billing-country-suggestions" (input)="onAddressInput('billingCountry', $any($event.target).value)">
+      <datalist id="contact-billing-country-suggestions">
+        <option *ngFor="let item of billingCountrySuggestions" [value]="item"></option>
+      </datalist>
     </label>
     <label class="full">Note fatturazione
       <textarea rows="2" [(ngModel)]="form.billingNotes" placeholder="Es. split payment, scadenza"></textarea>

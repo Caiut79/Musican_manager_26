@@ -12,9 +12,24 @@
     <section class="card" [formGroup]="form">
       <h2>Calcola percorso</h2>
 
-      <label>Luogo di partenza *
-        <input type="text" formControlName="origin" placeholder="es. Milano">
-      </label>
+      <div class="field-block">
+        <label for="expense-origin">Luogo di partenza *</label>
+        <div class="address-autocomplete">
+          <input type="text"
+            id="expense-origin"
+            formControlName="origin"
+            placeholder="es. Milano"
+            autocomplete="off"
+            (focus)="onAddressFocus('origin')"
+            (input)="onAddressInput('origin', $any($event.target).value)"
+            (blur)="onAddressBlur('origin')">
+          <div class="address-suggestions" *ngIf="activeAddressField === 'origin' && originSuggestions.length > 0">
+            <button type="button" class="address-suggestion" *ngFor="let item of originSuggestions" (mousedown)="selectAddressSuggestion('origin', item)">
+              {{ item }}
+            </button>
+          </div>
+        </div>
+      </div>
       <!-- Waypoints -->
       <div class="waypoints-section">
         <div class="waypoints-header">
@@ -37,9 +52,24 @@
         <p class="waypoints-hint pick-active" *ngIf="mapWaypointPickMode">Tocca un punto sulla mappa per aggiungere la tappa</p>
       </div>
 
-      <label>Destinazione *
-        <input type="text" formControlName="destination" placeholder="es. Bergamo, Via Roma 1">
-      </label>
+      <div class="field-block">
+        <label for="expense-destination">Destinazione *</label>
+        <div class="address-autocomplete">
+          <input type="text"
+            id="expense-destination"
+            formControlName="destination"
+            placeholder="es. Bergamo, Via Roma 1"
+            autocomplete="off"
+            (focus)="onAddressFocus('destination')"
+            (input)="onAddressInput('destination', $any($event.target).value)"
+            (blur)="onAddressBlur('destination')">
+          <div class="address-suggestions" *ngIf="activeAddressField === 'destination' && destinationSuggestions.length > 0">
+            <button type="button" class="address-suggestion" *ngFor="let item of destinationSuggestions" (mousedown)="selectAddressSuggestion('destination', item)">
+              {{ item }}
+            </button>
+          </div>
+        </div>
+      </div>
       <div class="fuel-row">
         <label>Prezzo carburante (€/litro)
           <input type="number" formControlName="fuelPricePerLiter" min="0" step="0.01" placeholder="es. 1.85">

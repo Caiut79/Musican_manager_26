@@ -68,13 +68,22 @@
         <input type="date" formControlName="birthDate">
       </label>
       <label>Luogo di nascita
-        <input type="text" formControlName="birthPlace" placeholder="es. Milano (MI)">
+        <input type="text" formControlName="birthPlace" placeholder="es. Milano (MI)" list="birth-place-suggestions" (input)="onProfileAddressInput('birthPlace', $any($event.target).value)">
+        <datalist id="birth-place-suggestions">
+          <option *ngFor="let item of birthPlaceSuggestions" [value]="item"></option>
+        </datalist>
       </label>
       <label>Residenza
-        <input type="text" formControlName="residence" placeholder="es. Via Roma 1, Milano">
+        <input type="text" formControlName="residence" placeholder="es. Via Roma 1, Milano" list="residence-suggestions" (input)="onProfileAddressInput('residence', $any($event.target).value)">
+        <datalist id="residence-suggestions">
+          <option *ngFor="let item of residenceSuggestions" [value]="item"></option>
+        </datalist>
       </label>
       <label>Luogo di partenza (homeBase)
-        <input type="text" formControlName="homeBase" placeholder="es. Milano">
+        <input type="text" formControlName="homeBase" placeholder="es. Milano" list="homebase-suggestions" (input)="onProfileAddressInput('homeBase', $any($event.target).value)">
+        <datalist id="homebase-suggestions">
+          <option *ngFor="let item of homeBaseSuggestions" [value]="item"></option>
+        </datalist>
       </label>
     </div>
   </section>

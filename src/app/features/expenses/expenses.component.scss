@@ -242,6 +242,7 @@ select {
 .waypoint-row {
   display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; align-items: center;
   .wp-pin { font-size: 14px; line-height: 1; }
+  .address-autocomplete { width: 100%; }
   input { margin: 0; }
 }
 .waypoints-hint {

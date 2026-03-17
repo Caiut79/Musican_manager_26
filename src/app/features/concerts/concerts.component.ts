@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, Validators } from '@angular/forms';
 import { EventDetail } from '../../models/event-detail';
 import { SupabaseService } from '../../core/supabase.service';
@@ -44,12 +44,17 @@ type ServicePayment = {
   paymentType: 'acconto' | 'saldo' | 'mensile';
 };
 
+type ConcertAddressSuggestion = {
+  label: string;
+  score: number;
+};
+
 @Component({
   selector: 'app-concerts',
   templateUrl: './concerts.component.html',
   styleUrls: ['./concerts.component.scss']
 })
-export class ConcertsComponent implements OnInit {
+export class ConcertsComponent implements OnInit, OnDestroy {
   showForm = false;
   copiedId: string | null = null;
   concerts: ConcertRecord[] = [];
@@ -65,6 +70,7 @@ export class ConcertsComponent implements OnInit {
   expandedConcertId: string | null = null;
   focusedConcertId: string | null = null;
   inpsExemptProfile = false;
+  addressSuggestions: string[] = [];
   newContact = {
     type: 'band' as 'band' | 'school' | 'student',
     displayName: '',
@@ -93,6 +99,8 @@ export class ConcertsComponent implements OnInit {
     bands: this.fb.array([]),
     musicians: this.fb.array([])
   });
+  private addressTimer: ReturnType<typeof setTimeout> | null = null;
+  private addressAborter: AbortController | null = null;
 
   constructor(private fb: FormBuilder, private supabase: SupabaseService, private router: Router, private route: ActivatedRoute) {}
 
@@ -105,6 +113,12 @@ export class ConcertsComponent implements OnInit {
     this.concerts = this.mergeConcertsFromAgenda(this.concerts);
     this.persistConcerts();
     this.applyRouteContext();
+    this.applyExpenseReturnContext();
+  }
+
+  ngOnDestroy(): void {
+    if (this.addressTimer) clearTimeout(this.addressTimer);
+    this.addressAborter?.abort();
   }
 
   get bandsArray(): FormArray {
@@ -236,6 +250,38 @@ export class ConcertsComponent implements OnInit {
       paymentCadence: selected.paymentCadence === 'mensile' ? 'mensile' : 'prestazione',
       monthlySettlement: selected.monthlySettlement === 'bonifico' ? 'bonifico' : 'acconto'
     });
+  }
+
+  onAddressInput(rawValue: string): void {
+    const value = `${rawValue || ''}`.trim();
+    if (this.addressTimer) clearTimeout(this.addressTimer);
+    if (value.length < 2) {
+      this.addressSuggestions = [];
+      return;
+    }
+    this.addressTimer = setTimeout(() => {
+      void this.fetchAddressSuggestions(value);
+    }, 220);
+  }
+
+  selectAddressSuggestion(value: string): void {
+    this.form.patchValue({ address: value });
+    this.addressSuggestions = [];
+  }
+
+  launchExpenseCalculator(): void {
+    const draft = this.form.getRawValue();
+    const destination = `${draft.address || draft.venue || ''}`.trim();
+    if (!destination) {
+      window.alert('Inserisci prima almeno l’indirizzo o il venue del concerto');
+      return;
+    }
+    localStorage.setItem('mm_concert_expense_context', JSON.stringify({
+      from: 'concerts',
+      draft,
+      createdAt: new Date().toISOString()
+    }));
+    this.router.navigate(['/expenses'], { queryParams: { fromConcert: '1' } });
   }
 
   toggleInlineContact(): void {
@@ -484,6 +530,117 @@ export class ConcertsComponent implements OnInit {
     }, 120);
   }
 
+  private applyExpenseReturnContext(): void {
+    const rawContext = localStorage.getItem('mm_concert_expense_context');
+    if (!rawContext) return;
+    const rawResult = localStorage.getItem('mm_concert_expense_result');
+    const context = JSON.parse(rawContext || '{}');
+    const draft = context?.draft || {};
+    this.showForm = true;
+    this.form.patchValue({
+      title: `${draft.title || ''}`,
+      date: `${draft.date || ''}`,
+      timeStart: `${draft.timeStart || ''}`,
+      venue: `${draft.venue || ''}`,
+      address: `${draft.address || ''}`,
+      lineupType: `${draft.lineupType || 'duo'}`,
+      agreedFee: Number(draft.agreedFee || 0),
+      reimbursement: Number(draft.reimbursement || 0),
+      contactId: `${draft.contactId || ''}`,
+      billingMode: draft.billingMode === 'in_fattura' ? 'in_fattura' : 'fuori_fattura',
+      paymentCadence: draft.paymentCadence === 'mensile' ? 'mensile' : 'prestazione',
+      monthlySettlement: draft.monthlySettlement === 'bonifico' ? 'bonifico' : 'acconto',
+      extraExpensesOutsideInvoice: draft.extraExpensesOutsideInvoice !== false,
+      notes: `${draft.notes || ''}`
+    });
+    while (this.bandsArray.length) this.bandsArray.removeAt(0);
+    while (this.musiciansArray.length) this.musiciansArray.removeAt(0);
+    const bands = Array.isArray(draft.bands) ? draft.bands : [];
+    const musicians = Array.isArray(draft.musicians) ? draft.musicians : [];
+    bands.forEach((name: any) => this.bandsArray.push(this.fb.control(`${name || ''}`)));
+    musicians.forEach((name: any) => this.musiciansArray.push(this.fb.control(`${name || ''}`)));
+    if (!rawResult) return;
+    const result = JSON.parse(rawResult || '{}');
+    const totalExpense = Number(result?.totalExpense || 0);
+    if (Number.isFinite(totalExpense) && totalExpense > 0) {
+      this.form.patchValue({ reimbursement: totalExpense });
+      const currentNotes = `${this.form.get('notes')?.value || ''}`.replace(/\s*\[Spese viaggio:[^\]]+\]/gi, '').trim();
+      const routeText = `${result?.origin || ''} → ${result?.destination || ''}`.trim();
+      const noteAddon = `[Spese viaggio: ${totalExpense.toFixed(2)}€${routeText ? ` • ${routeText}` : ''}]`;
+      this.form.patchValue({ notes: `${currentNotes}${currentNotes ? ' ' : ''}${noteAddon}`.trim() });
+    }
+    localStorage.removeItem('mm_concert_expense_context');
+    localStorage.removeItem('mm_concert_expense_result');
+  }
+
+  private async fetchAddressSuggestions(query: string): Promise<void> {
+    this.addressAborter?.abort();
+    const controller = new AbortController();
+    this.addressAborter = controller;
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=7&countrycodes=it&addressdetails=1`;
+      const res = await fetch(url, {
+        headers: { 'Accept-Language': 'it' },
+        signal: controller.signal
+      });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const currentAddress = `${this.form.get('address')?.value || ''}`.trim();
+      if (this.normalizeAddress(currentAddress) !== this.normalizeAddress(query)) return;
+      this.addressSuggestions = this.rankAddressRows(rows, query).slice(0, 7).map(x => x.label);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') this.addressSuggestions = [];
+    }
+  }
+
+  private rankAddressRows(rows: any[], query: string): ConcertAddressSuggestion[] {
+    const normalizedQuery = this.normalizeAddress(query);
+    const seen = new Set<string>();
+    const ranked: ConcertAddressSuggestion[] = [];
+    for (const row of rows) {
+      const label = this.formatAddressLabel(row);
+      const key = this.normalizeAddress(label);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
+      const importance = Number(row?.importance || 0);
+      let score = this.addressTypeScore(addresstype) + Math.max(0, Math.min(30, importance * 30));
+      if (key.startsWith(normalizedQuery)) score += 40;
+      else if (key.includes(normalizedQuery)) score += 20;
+      ranked.push({ label, score });
+    }
+    return ranked.sort((a, b) => b.score - a.score);
+  }
+
+  private formatAddressLabel(row: any): string {
+    const address = row?.address || {};
+    const place = `${address.city || address.town || address.village || address.municipality || address.hamlet || row?.name || ''}`.trim();
+    const province = `${address.county || ''}`.replace(/^Città metropolitana di\s+/i, '').trim();
+    const region = `${address.state || ''}`.trim();
+    const country = `${address.country || 'Italia'}`.trim();
+    const road = `${address.road || ''}`.trim();
+    const number = `${address.house_number || ''}`.trim();
+    const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
+    if (['road', 'house', 'residential'].includes(addresstype) && road) {
+      const roadLabel = `${road}${number ? ` ${number}` : ''}`.trim();
+      return [roadLabel, place, province, region, country].filter(Boolean).join(', ');
+    }
+    const compact = [place, province, region, country].filter(Boolean).join(', ');
+    return compact || `${row?.display_name || ''}`.trim();
+  }
+
+  private normalizeAddress(value: string): string {
+    return `${value || ''}`.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  private addressTypeScore(addresstype: string): number {
+    if (['city', 'town', 'village', 'municipality', 'hamlet', 'locality'].includes(addresstype)) return 60;
+    if (['county', 'province', 'state_district', 'state'].includes(addresstype)) return 45;
+    if (['suburb', 'neighbourhood', 'quarter'].includes(addresstype)) return 35;
+    if (['road', 'house', 'residential'].includes(addresstype)) return 25;
+    return 20;
+  }
+
   private readConcerts(): ConcertRecord[] {
     const parsed = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
     if (!Array.isArray(parsed)) return [];
@@ -516,7 +673,21 @@ export class ConcertsComponent implements OnInit {
     const concertsFromEvents = events.filter(e => e.type !== 'lesson');
     const byId = new Map(current.map(c => [c.id, c]));
     concertsFromEvents.forEach(event => {
-      if (byId.has(event.id)) return;
+      const existing = byId.get(event.id);
+      const agendaStatus: ConcertRecord['executionStatus'] =
+        event.status === 'cancelled' ? 'annullato' : (event.status === 'confirmed' ? 'effettuato' : 'da_fare');
+      if (existing) {
+        const keepRefund = existing.executionStatus === 'rimborsato';
+        byId.set(event.id, {
+          ...existing,
+          date: event.date || existing.date,
+          timeStart: event.timeStart || existing.timeStart,
+          venue: event.venue || existing.venue,
+          address: event.address || existing.address,
+          executionStatus: keepRefund ? 'rimborsato' : agendaStatus
+        });
+        return;
+      }
       const paymentCadence = `${event.notes || ''}`.toLowerCase().includes('pagamento mensile') ? 'mensile' : 'prestazione';
       const monthlySettlement = `${event.notes || ''}`.toLowerCase().includes('bonifico') ? 'bonifico' : 'acconto';
       const extraExpensesOutsideInvoice = `${event.notes || ''}`.toLowerCase().includes('[spese extra:in_fattura]') ? false : true;
@@ -540,7 +711,7 @@ export class ConcertsComponent implements OnInit {
         paymentCadence,
         monthlySettlement,
         extraExpensesOutsideInvoice,
-        executionStatus: event.status === 'cancelled' ? 'annullato' : (event.status === 'confirmed' ? 'effettuato' : 'da_fare'),
+        executionStatus: agendaStatus,
         reimbursedAmount: 0,
         createdAt: event.createdAt || new Date().toISOString()
       });

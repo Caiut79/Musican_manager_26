@@ -123,9 +123,21 @@
           <label>Venue / Scuola
             <input type="text" [(ngModel)]="draft.venue" placeholder="Location o scuola">
           </label>
-          <label>Indirizzo
-            <input type="text" [(ngModel)]="draft.address" placeholder="Indirizzo">
-          </label>
+          <div class="dcp-field">
+            <span>Indirizzo</span>
+            <div class="dcp-address-autocomplete">
+              <input type="text" [(ngModel)]="draft.address" placeholder="Indirizzo"
+                (focus)="onDraftAddressFocus()"
+                (input)="onDraftAddressInput($any($event.target).value)"
+                (blur)="onDraftAddressBlur()">
+              <div class="dcp-address-suggestions" *ngIf="addressFocused && addressSuggestions.length > 0">
+                <button type="button" class="dcp-address-suggestion" *ngFor="let item of addressSuggestions" (mousedown)="selectDraftAddressSuggestion(item)">
+                  {{ item }}
+                </button>
+              </div>
+            </div>
+            <button type="button" class="dcp-btn-inline" (click)="launchExpenseCalculatorFromDraft()">Calcola Spese</button>
+          </div>
           <label>Compenso lordo
             <input type="number" [(ngModel)]="draft.grossFee" min="0">
           </label>

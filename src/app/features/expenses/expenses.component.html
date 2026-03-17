@@ -44,7 +44,18 @@
         <div class="waypoints-list" [formArrayName]="'waypoints'">
           <div class="waypoint-row" *ngFor="let wp of waypointsArray.controls; index as i">
             <span class="wp-pin">🟠</span>
-            <input type="text" [formControlName]="i" placeholder="es. Cremona, Via Garibaldi 5">
+            <div class="address-autocomplete">
+              <input type="text" [formControlName]="i" placeholder="es. Cremona, Via Garibaldi 5"
+                autocomplete="off"
+                (focus)="onWaypointFocus(i)"
+                (input)="onWaypointInput(i, $any($event.target).value)"
+                (blur)="onWaypointBlur(i)">
+              <div class="address-suggestions" *ngIf="activeWaypointIndex === i && waypointSuggestions.length > 0">
+                <button type="button" class="address-suggestion" *ngFor="let item of waypointSuggestions" (mousedown)="selectWaypointSuggestion(i, item)">
+                  {{ item }}
+                </button>
+              </div>
+            </div>
             <button type="button" class="btn-remove" (click)="removeWaypoint(i)" title="Rimuovi tappa">✕</button>
           </div>
         </div>
@@ -171,6 +182,7 @@
       <button type="button" class="btn-outline full-btn" (click)="openPedaggiPopup()">🛣️ Calcola pedaggi</button>
 
       <button type="button" class="btn-outline full-btn" (click)="saveExpense()">💾 Salva spesa</button>
+      <button type="button" class="btn-primary full-btn" *ngIf="fromConcertFlow || fromDashboardFlow" (click)="loadExpenseIntoConcert()">Carica in evento</button>
     </section>
   </div>
 

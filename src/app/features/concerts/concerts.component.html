@@ -32,8 +32,14 @@
       <input type="text" formControlName="venue">
     </label>
     <label>Indirizzo
-      <input type="text" formControlName="address">
+      <input type="text" formControlName="address" list="concert-address-suggestions" (input)="onAddressInput($any($event.target).value)">
+      <datalist id="concert-address-suggestions">
+        <option *ngFor="let item of addressSuggestions" [value]="item"></option>
+      </datalist>
     </label>
+    <div class="span-2">
+      <button type="button" class="btn-outline" (click)="launchExpenseCalculator()">Calcola Spese</button>
+    </div>
     <label>Compenso pattuito
       <input type="number" formControlName="agreedFee" min="0">
     </label>

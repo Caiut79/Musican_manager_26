@@ -243,7 +243,13 @@
           <span class="pr-group-note" *ngIf="p.paymentMode === 'pattuito_fattura' && p.groupInvoiceNote">
             {{ p.groupInvoiceNote }}
           </span>
+          <span class="pr-group-note" *ngIf="p.cooperativeManaged">
+            {{ cooperativeSettlementLabel(p) }} • Costi coop {{ p.cooperativeFeeAmount | currency:'EUR':'symbol':'1.0-2' }} • Netto {{ p.cooperativeNetAmount | currency:'EUR':'symbol':'1.0-2' }}
+          </span>
           <span class="pr-amount">{{ p.receivedAmount | currency:'EUR':'symbol':'1.0-2' }}</span>
+          <button type="button" class="btn-pay-add btn-pay-text" *ngIf="p.cooperativeManaged && p.cooperativeSettlementState !== 'settled'" (click)="markCooperativeSettled(p.id)">
+            {{ cooperativeActionLabel(p) }}
+          </button>
           <button type="button" class="btn-delete" (click)="deletePayment(p.id)" title="Elimina" aria-label="Elimina pagamento">
             <i class="ti ti-trash"></i>
           </button>
@@ -306,9 +312,16 @@
                   <small>Fattura emessa dal musicista: il committente paga importo + IVA</small>
                 </span>
               </label>
+              <label class="pf-mode-opt" *ngIf="!isDraftMonthlyConcert() && cooperativeProfileForConcerts">
+                <input type="radio" [name]="'payMode_' + ev.id" value="pattuito_fattura" [(ngModel)]="draft.paymentMode">
+                <span class="pmo-label">
+                  <strong>Gestione cooperativa</strong>
+                  <small>I pagamenti elettronici arrivano in cooperativa, poi viene bonificato il netto</small>
+                </span>
+              </label>
             </div>
             <div class="pf-inline-info" *ngIf="!isDraftMonthlyConcert() && draft.paymentMethod !== 'contanti'">
-              Metodo tracciato selezionato: modalità impostata automaticamente su <strong>Importo in fattura diretta</strong>
+              Metodo tracciato selezionato: modalità impostata automaticamente su <strong>{{ cooperativeProfileForConcerts ? 'Gestione cooperativa' : 'Importo in fattura diretta' }}</strong>
             </div>
           </div>
 
@@ -317,6 +330,30 @@
             <input type="text" [(ngModel)]="draft.groupInvoiceNote"
                    placeholder="Es. Fattura n.5/2026 — gruppo X divide IVA">
           </label>
+
+          <div class="full pf-iva-box" *ngIf="isCooperativeManagedDraft()">
+            <div class="pf-iva-row">
+              <label class="iva-pct-lbl">
+                <span>Commissione cooperativa (%)</span>
+                <input type="number" [(ngModel)]="draft.cooperativeFeePercent" min="0" max="60" step="0.5">
+              </label>
+              <label class="iva-pct-lbl">
+                <span>Costo fisso cooperativa (€)</span>
+                <input type="number" [(ngModel)]="draft.cooperativeFixedFee" min="0" step="0.01">
+              </label>
+              <div class="pf-iva-calc">
+                <div>Importo incassato cliente: <strong>{{ draft.receivedAmount | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
+                <div>Costi cooperativa: <strong>{{ draftCooperativeFeeAmount | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
+                <div class="pf-iva-total">Netto musicista: <strong>{{ draftCooperativeNetAmount | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
+              </div>
+            </div>
+            <p class="pf-iva-note" *ngIf="draft.paymentMethod !== 'contanti'">
+              Pagamento elettronico: incasso diretto in cooperativa, netto disponibile al musicista dopo il ribonifico.
+            </p>
+            <p class="pf-iva-note" *ngIf="draft.paymentMethod === 'contanti'">
+              Pagamento in contanti: calcolato quanto versare alla cooperativa (costi) e quanto resta netto al musicista.
+            </p>
+          </div>
 
           <div class="full pf-iva-box" *ngIf="draft.paymentMode === 'fattura_diretta'">
             <label class="pf-iva-exempt" *ngIf="draft.reimbursableExpenses > 0">

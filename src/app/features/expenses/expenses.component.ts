@@ -1,5 +1,6 @@
 import { Component, OnInit, AfterViewInit, OnDestroy, ElementRef, ViewChild } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormArray, FormControl } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import * as L from 'leaflet';
 import { Expense, ExpenseExtra } from '../../models/expense';
 import { SupabaseService } from '../../core/supabase.service';
@@ -81,7 +82,11 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   tollVehicleType = '2AxlesAuto';
   originSuggestions: string[] = [];
   destinationSuggestions: string[] = [];
+  waypointSuggestions: string[] = [];
   activeAddressField: AddressField | null = null;
+  activeWaypointIndex: number | null = null;
+  fromConcertFlow = false;
+  fromDashboardFlow = false;
 
   private map!: L.Map;
   private markerOrigin?: L.Marker;
@@ -91,8 +96,10 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   private draftWaypointMarkers: L.Marker[] = [];
   private addressSearchTimers: Partial<Record<AddressField, ReturnType<typeof setTimeout>>> = {};
   private addressSearchAborters: Partial<Record<AddressField, AbortController>> = {};
+  private waypointTimer: ReturnType<typeof setTimeout> | null = null;
+  private waypointAborter: AbortController | null = null;
 
-  constructor(private fb: FormBuilder, private supabase: SupabaseService) {}
+  constructor(private fb: FormBuilder, private supabase: SupabaseService, private route: ActivatedRoute, private router: Router) {}
 
   ngOnInit() {
     this.expenses = JSON.parse(localStorage.getItem('mm_expenses') || '[]');
@@ -110,6 +117,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
       vehicleConsumption: [savedConsumption, [Validators.required, Validators.min(0)]],
       extras: this.fb.array([]),
     });
+    this.applyExpenseSourceContext();
   }
 
   ngAfterViewInit() {
@@ -122,6 +130,8 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
       if (timer) clearTimeout(timer);
       this.addressSearchAborters[field]?.abort();
     });
+    if (this.waypointTimer) clearTimeout(this.waypointTimer);
+    this.waypointAborter?.abort();
     if (this.map) { this.map.remove(); }
   }
 
@@ -173,6 +183,45 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
 
   removeWaypoint(i: number) {
     this.waypointsArray.removeAt(i);
+    if (this.activeWaypointIndex === i) {
+      this.activeWaypointIndex = null;
+      this.waypointSuggestions = [];
+    } else if (this.activeWaypointIndex !== null && this.activeWaypointIndex > i) {
+      this.activeWaypointIndex -= 1;
+    }
+    this.renderDraftWaypointMarkers();
+  }
+
+  onWaypointFocus(index: number): void {
+    this.activeWaypointIndex = index;
+    const value = `${this.waypointsArray.at(index)?.value || ''}`.trim();
+    if (value.length >= 2) this.onWaypointInput(index, value);
+  }
+
+  onWaypointInput(index: number, rawValue: string): void {
+    this.activeWaypointIndex = index;
+    const value = `${rawValue || ''}`.trim();
+    if (this.waypointTimer) clearTimeout(this.waypointTimer);
+    if (value.length < 2) {
+      this.waypointSuggestions = [];
+      return;
+    }
+    this.waypointTimer = setTimeout(() => {
+      void this.fetchWaypointSuggestions(index, value);
+    }, 220);
+  }
+
+  onWaypointBlur(index: number): void {
+    setTimeout(() => {
+      if (this.activeWaypointIndex === index) this.activeWaypointIndex = null;
+      this.waypointSuggestions = [];
+    }, 160);
+  }
+
+  selectWaypointSuggestion(index: number, value: string): void {
+    this.waypointsArray.at(index)?.setValue(value);
+    this.activeWaypointIndex = null;
+    this.waypointSuggestions = [];
     this.renderDraftWaypointMarkers();
   }
 
@@ -306,6 +355,69 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private normalizeAddressText(value: string): string {
     return `${value || ''}`.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  private async fetchWaypointSuggestions(index: number, query: string): Promise<void> {
+    this.waypointAborter?.abort();
+    const controller = new AbortController();
+    this.waypointAborter = controller;
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&countrycodes=it&addressdetails=1`;
+      const res = await fetch(url, {
+        headers: { 'Accept-Language': 'it' },
+        signal: controller.signal
+      });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const currentValue = `${this.waypointsArray.at(index)?.value || ''}`.trim();
+      if (this.normalizeAddressText(currentValue) !== this.normalizeAddressText(query)) return;
+      if (this.activeWaypointIndex !== index) return;
+      this.waypointSuggestions = this.rankNominatimRows(rows, query).slice(0, 6).map(x => x.label);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') this.waypointSuggestions = [];
+    }
+  }
+
+  loadExpenseIntoConcert(): void {
+    if (!this.result) return;
+    const payload = {
+      totalExpense: Number(this.result.total || 0),
+      distanceKm: Number(this.result.distanceKm || 0),
+      totalFuel: Number(this.result.totalFuel || 0),
+      totalExtras: Number(this.result.totalExtras || 0),
+      tollRoundTrip: Number(this.result.tollRoundTrip || 0),
+      origin: `${this.form.value.origin || ''}`.trim(),
+      destination: `${this.form.value.destination || ''}`.trim(),
+      createdAt: new Date().toISOString()
+    };
+    if (this.fromDashboardFlow) {
+      const contextRaw = localStorage.getItem('mm_dashboard_expense_context');
+      if (!contextRaw) return;
+      localStorage.setItem('mm_dashboard_expense_result', JSON.stringify(payload));
+      this.router.navigate(['/dashboard'], { queryParams: { fromExpense: 'dashboard' } });
+      return;
+    }
+    const contextRaw = localStorage.getItem('mm_concert_expense_context');
+    if (!contextRaw) return;
+    localStorage.setItem('mm_concert_expense_result', JSON.stringify(payload));
+    this.router.navigate(['/concerts'], { queryParams: { fromExpense: '1' } });
+  }
+
+  private applyExpenseSourceContext(): void {
+    const isFromConcert = this.route.snapshot.queryParamMap.get('fromConcert') === '1';
+    const isFromDashboard = this.route.snapshot.queryParamMap.get('fromDashboard') === '1';
+    this.fromConcertFlow = isFromConcert;
+    this.fromDashboardFlow = isFromDashboard;
+    if (!isFromConcert && !isFromDashboard) return;
+    const contextKey = isFromDashboard ? 'mm_dashboard_expense_context' : 'mm_concert_expense_context';
+    const contextRaw = localStorage.getItem(contextKey);
+    if (!contextRaw) return;
+    const context = JSON.parse(contextRaw || '{}');
+    const draft = context?.draft || {};
+    const destination = `${draft.address || draft.venue || ''}`.trim();
+    if (!destination) return;
+    const origin = `${this.form.get('origin')?.value || ''}`.trim();
+    this.form.patchValue({ origin, destination });
   }
 
   private rankNominatimRows(rows: any[], query: string): Array<{ row: any; label: string; score: number }> {

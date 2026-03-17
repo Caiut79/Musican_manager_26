@@ -10,6 +10,7 @@ export type PaymentMode   = 'pattuito_extra' | 'pattuito_fattura' | 'fattura_dir
 export type PaymentMethod = 'contanti' | 'bonifico' | 'assegno' | 'pos';
 export type PaymentType   = 'acconto' | 'saldo' | 'mensile';
 export type PaymentCategory = 'concerto' | 'lezione';
+export type CooperativeSettlementState = 'none' | 'pending_transfer_to_musician' | 'pending_transfer_to_coop' | 'settled';
 
 export type ServicePayment = {
   id: string;
@@ -30,6 +31,13 @@ export type ServicePayment = {
   includeExpensesInInvoice: boolean;
   enpalsExempt: boolean;
   groupInvoiceNote: string;
+  cooperativeManaged: boolean;
+  cooperativeFeePercent: number;
+  cooperativeFixedFee: number;
+  cooperativeFeeAmount: number;
+  cooperativeNetAmount: number;
+  cooperativeSettlementState: CooperativeSettlementState;
+  cooperativeSettledAt: string;
   confirmed: boolean;
   confirmedAt: string;
   notes: string;
@@ -51,6 +59,8 @@ type PaymentDraft = {
   includeExpensesInInvoice: boolean;
   enpalsExempt: boolean;
   groupInvoiceNote: string;
+  cooperativeFeePercent: number;
+  cooperativeFixedFee: number;
   notes: string;
 };
 
@@ -89,6 +99,7 @@ export class AccountingComponent implements OnInit {
   focusedEventId = '';
   showTaxTool = false;
   annualInvoicedConcertIncome = 0;
+  cooperativeProfileForConcerts = false;
   serataTaxInput: SerataTaxInput = {
     imponibile: 150,
     componentCount: 1,
@@ -111,6 +122,8 @@ export class AccountingComponent implements OnInit {
     const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
     this.isTeacher           = profile?.isTeacher === true;
     this.enpalsExemptProfile = profile?.inpsExempt === true;
+    this.cooperativeProfileForConcerts = this.detectCooperativeProfileForConcerts(profile);
+    this.payments = this.normalizePayments(this.payments);
     this.annualInvoicedConcertIncome = this.computeAnnualInvoicedConcertIncome();
     this.irpefInput.annualTaxableIncome = this.annualInvoicedConcertIncome;
 
@@ -191,13 +204,15 @@ export class AccountingComponent implements OnInit {
   }
 
   totalReceivedForEvent(eventId: string): number {
-    return this.paymentsForEvent(eventId).reduce((s, p) => s + p.receivedAmount, 0);
+    return this.paymentsForEvent(eventId).reduce((s, p) => s + this.effectiveReceivedAmount(p), 0);
   }
 
   // ─── Payment form ──────────────────────────────────────────────────────────
   openPaymentForm(event: EventDetail): void {
     const category: PaymentCategory = event.type === 'lesson' ? 'lezione' : 'concerto';
-    const defaultMode: PaymentMode  = event.compensoType === 'in_fattura' ? 'fattura_diretta' : 'pattuito_extra';
+    const defaultMode: PaymentMode  = category === 'concerto' && this.cooperativeProfileForConcerts
+      ? 'pattuito_fattura'
+      : (event.compensoType === 'in_fattura' ? 'fattura_diretta' : 'pattuito_extra');
     this.draft = {
       eventId: event.id,
       category,
@@ -213,6 +228,8 @@ export class AccountingComponent implements OnInit {
       includeExpensesInInvoice: !this.eventExtraExpensesOutsideInvoice(event),
       enpalsExempt: this.enpalsExemptProfile,
       groupInvoiceNote: '',
+      cooperativeFeePercent: 12,
+      cooperativeFixedFee: 0,
       notes: ''
     };
     this.showPaymentForm = true;
@@ -267,7 +284,7 @@ export class AccountingComponent implements OnInit {
   private enforceImmediateConcertRules(): void {
     if (this.isDraftMonthlyConcert()) return;
     if (this.draft.paymentMethod === 'contanti') return;
-    this.draft.paymentMode = 'fattura_diretta';
+    this.draft.paymentMode = this.cooperativeProfileForConcerts ? 'pattuito_fattura' : 'fattura_diretta';
   }
 
   closePaymentForm(): void {
@@ -291,6 +308,23 @@ export class AccountingComponent implements OnInit {
     if (this.draft.paymentMode !== 'fattura_diretta') return amount;
     const expenses = this.draft.includeExpensesInInvoice ? Number(this.draft.reimbursableExpenses || 0) : 0;
     return amount + expenses;
+  }
+
+  get draftCooperativeFeeAmount(): number {
+    if (!this.isCooperativeManagedDraft()) return 0;
+    const base = Number(this.draft.receivedAmount || 0);
+    const percent = Math.max(0, Number(this.draft.cooperativeFeePercent || 0)) / 100;
+    const fixed = Math.max(0, Number(this.draft.cooperativeFixedFee || 0));
+    return this.round2(base * percent + fixed);
+  }
+
+  get draftCooperativeNetAmount(): number {
+    if (!this.isCooperativeManagedDraft()) return Number(this.draft.receivedAmount || 0);
+    return this.round2(Math.max(0, Number(this.draft.receivedAmount || 0) - this.draftCooperativeFeeAmount));
+  }
+
+  isCooperativeManagedDraft(): boolean {
+    return this.draft.category === 'concerto' && this.draft.paymentMode === 'pattuito_fattura';
   }
 
   get invoiced5000Counter(): number {
@@ -393,6 +427,10 @@ export class AccountingComponent implements OnInit {
 
   savePayment(): void {
     if (!this.draft.receivedAmount || this.draft.receivedAmount <= 0) return;
+    const cooperativeManaged = this.isCooperativeManagedDraft();
+    const cooperativeSettlementState: CooperativeSettlementState = !cooperativeManaged
+      ? 'none'
+      : (this.draft.paymentMethod === 'contanti' ? 'pending_transfer_to_coop' : 'pending_transfer_to_musician');
     const payment: ServicePayment = {
       id:              crypto.randomUUID(),
       category:        this.draft.category,
@@ -412,6 +450,13 @@ export class AccountingComponent implements OnInit {
       includeExpensesInInvoice: this.draft.includeExpensesInInvoice,
       enpalsExempt:    this.draft.enpalsExempt,
       groupInvoiceNote: this.draft.groupInvoiceNote,
+      cooperativeManaged,
+      cooperativeFeePercent: cooperativeManaged ? Math.max(0, Number(this.draft.cooperativeFeePercent || 0)) : 0,
+      cooperativeFixedFee: cooperativeManaged ? Math.max(0, Number(this.draft.cooperativeFixedFee || 0)) : 0,
+      cooperativeFeeAmount: cooperativeManaged ? this.draftCooperativeFeeAmount : 0,
+      cooperativeNetAmount: cooperativeManaged ? this.draftCooperativeNetAmount : Number(this.draft.receivedAmount || 0),
+      cooperativeSettlementState,
+      cooperativeSettledAt: '',
       confirmed:       true,
       confirmedAt:     new Date().toISOString(),
       notes:           this.draft.notes,
@@ -422,6 +467,19 @@ export class AccountingComponent implements OnInit {
     this.closePaymentForm();
   }
 
+  markCooperativeSettled(paymentId: string): void {
+    this.payments = this.payments.map(payment => {
+      if (payment.id !== paymentId) return payment;
+      if (!payment.cooperativeManaged || payment.cooperativeSettlementState === 'settled') return payment;
+      return {
+        ...payment,
+        cooperativeSettlementState: 'settled',
+        cooperativeSettledAt: new Date().toISOString()
+      };
+    });
+    localStorage.setItem('mm_service_payments', JSON.stringify(this.payments));
+  }
+
   deletePayment(id: string): void {
     this.payments = this.payments.filter(p => p.id !== id);
     localStorage.setItem('mm_service_payments', JSON.stringify(this.payments));
@@ -429,9 +487,9 @@ export class AccountingComponent implements OnInit {
 
   // ─── Totali ────────────────────────────────────────────────────────────────
   get totalConcertiAgreed(): number   { return this.concertEvents.reduce((s, e) => s + (e.grossFee || 0), 0); }
-  get totalConcertiReceived(): number { return this.payments.filter(p => p.category === 'concerto').reduce((s, p) => s + p.receivedAmount, 0); }
+  get totalConcertiReceived(): number { return this.payments.filter(p => p.category === 'concerto').reduce((s, p) => s + this.effectiveReceivedAmount(p), 0); }
   get totalLezioniAgreed(): number    { return this.lessonEvents.reduce((s, e) => s + (e.grossFee || 0), 0); }
-  get totalLezioniReceived(): number  { return this.payments.filter(p => p.category === 'lezione').reduce((s, p) => s + p.receivedAmount, 0); }
+  get totalLezioniReceived(): number  { return this.payments.filter(p => p.category === 'lezione').reduce((s, p) => s + this.effectiveReceivedAmount(p), 0); }
   get totalAllAgreed(): number        { return this.totalConcertiAgreed + this.totalLezioniAgreed; }
   get totalAllReceived(): number      { return this.totalConcertiReceived + this.totalLezioniReceived; }
   get totalAllPending(): number       { return this.totalAllAgreed - this.totalAllReceived; }
@@ -440,7 +498,7 @@ export class AccountingComponent implements OnInit {
   paymentModeLabel(mode: PaymentMode): string {
     const map: Record<PaymentMode, string> = {
       pattuito_extra:    'Fuori fattura',
-      pattuito_fattura:  'In fattura (gruppo)',
+      pattuito_fattura:  'Gestione cooperativa',
       fattura_diretta:   'In fattura diretta'
     };
     return map[mode] || mode;
@@ -485,6 +543,20 @@ export class AccountingComponent implements OnInit {
     return Number(this.events.find(e => e.id === eventId)?.grossFee || 0);
   }
 
+  cooperativeSettlementLabel(payment: ServicePayment): string {
+    if (!payment.cooperativeManaged) return '';
+    if (payment.cooperativeSettlementState === 'pending_transfer_to_musician') return 'In attesa bonifico netto da cooperativa';
+    if (payment.cooperativeSettlementState === 'pending_transfer_to_coop') return 'Da versare alla cooperativa';
+    if (payment.cooperativeSettlementState === 'settled') return 'Regolato con cooperativa';
+    return '';
+  }
+
+  cooperativeActionLabel(payment: ServicePayment): string {
+    if (payment.cooperativeSettlementState === 'pending_transfer_to_musician') return 'Conferma netto ricevuto';
+    if (payment.cooperativeSettlementState === 'pending_transfer_to_coop') return 'Conferma versamento cooperativa';
+    return '';
+  }
+
   private applyRouteContext(): void {
     const qp = this.route.snapshot.queryParamMap;
     const eventId = `${qp.get('eventId') || ''}`.trim();
@@ -520,12 +592,49 @@ export class AccountingComponent implements OnInit {
     return Math.round((Number(value) || 0) * 100) / 100;
   }
 
+  private effectiveReceivedAmount(payment: ServicePayment): number {
+    if (!payment.cooperativeManaged) return Number(payment.receivedAmount || 0);
+    if (payment.cooperativeSettlementState === 'pending_transfer_to_musician') return 0;
+    return Number(payment.cooperativeNetAmount || 0);
+  }
+
+  private normalizePayments(payments: ServicePayment[]): ServicePayment[] {
+    return (payments || []).map(payment => {
+      const cooperativeManaged = !!payment.cooperativeManaged || payment.paymentMode === 'pattuito_fattura';
+      const feePercent = Number(payment.cooperativeFeePercent || 0);
+      const fixed = Number(payment.cooperativeFixedFee || 0);
+      const feeAmount = cooperativeManaged
+        ? Number(payment.cooperativeFeeAmount || this.round2(Number(payment.receivedAmount || 0) * (feePercent / 100) + fixed))
+        : 0;
+      const net = cooperativeManaged
+        ? Number(payment.cooperativeNetAmount || this.round2(Math.max(0, Number(payment.receivedAmount || 0) - feeAmount)))
+        : Number(payment.receivedAmount || 0);
+      const settlement = (payment.cooperativeSettlementState || (cooperativeManaged ? 'settled' : 'none')) as CooperativeSettlementState;
+      return {
+        ...payment,
+        cooperativeManaged,
+        cooperativeFeePercent: cooperativeManaged ? feePercent : 0,
+        cooperativeFixedFee: cooperativeManaged ? fixed : 0,
+        cooperativeFeeAmount: cooperativeManaged ? feeAmount : 0,
+        cooperativeNetAmount: net,
+        cooperativeSettlementState: cooperativeManaged ? settlement : 'none',
+        cooperativeSettledAt: `${payment.cooperativeSettledAt || ''}`
+      };
+    });
+  }
+
+  private detectCooperativeProfileForConcerts(profile: any): boolean {
+    const workerType = `${profile?.workerType || ''}`.toLowerCase();
+    return workerType.includes('cooperativa');
+  }
+
   private emptyDraft(): PaymentDraft {
     return {
       eventId: '', category: 'concerto', serviceTitle: '', serviceDate: '',
       agreedFee: 0, receivedAmount: 0,
       paymentType: 'saldo', paymentMethod: 'contanti', paymentMode: 'pattuito_extra',
-      ivaPercent: 22, reimbursableExpenses: 0, includeExpensesInInvoice: false, enpalsExempt: false, groupInvoiceNote: '', notes: ''
+      ivaPercent: 22, reimbursableExpenses: 0, includeExpensesInInvoice: false, enpalsExempt: false, groupInvoiceNote: '',
+      cooperativeFeePercent: 12, cooperativeFixedFee: 0, notes: ''
     };
   }
 }

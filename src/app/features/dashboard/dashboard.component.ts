@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { EventDetail } from '../../models/event-detail';
 import { AppNotification } from '../../models/notification';
@@ -44,7 +44,7 @@ type ContactEntry = {
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss']
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
   musicianName = '';
   todayEvents: EventDetail[] = [];
   upcomingEvents: EventDetail[] = [];
@@ -70,9 +70,13 @@ export class DashboardComponent implements OnInit {
   };
   notifications: AppNotification[] = [];
   unreadCount = 0;
-  today = new Date().toISOString().split('T')[0];
+  today = this.toLocalIsoDate(new Date());
   isTeacherProfile = false;
+  addressSuggestions: string[] = [];
+  addressFocused = false;
   private refundedConcertIds = new Set<string>();
+  private addressTimer: ReturnType<typeof setTimeout> | null = null;
+  private addressAborter: AbortController | null = null;
 
   dayHeaders = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
 
@@ -110,6 +114,12 @@ export class DashboardComponent implements OnInit {
     const storedNotifications: AppNotification[] = JSON.parse(localStorage.getItem('mm_notifications') || '[]');
     this.notifications = storedNotifications.slice(0, 5);
     this.unreadCount   = storedNotifications.filter(n => !n.read).length;
+    this.applyExpenseReturnContext();
+  }
+
+  ngOnDestroy(): void {
+    if (this.addressTimer) clearTimeout(this.addressTimer);
+    this.addressAborter?.abort();
   }
 
   get quickLinks() {
@@ -169,6 +179,56 @@ export class DashboardComponent implements OnInit {
     if (!this.draft.notes) this.draft.notes = selected.notes || '';
     if (!this.draft.grossFee && selected.averageFee > 0) this.draft.grossFee = selected.averageFee;
     if (!this.draft.netFee && selected.averageFee > 0) this.draft.netFee = selected.averageFee;
+  }
+
+  onDraftAddressInput(rawValue: string): void {
+    const value = `${rawValue || ''}`.trim();
+    if (this.addressTimer) clearTimeout(this.addressTimer);
+    if (value.length < 2) {
+      this.addressSuggestions = [];
+      return;
+    }
+    this.addressTimer = setTimeout(() => {
+      void this.fetchDraftAddressSuggestions(value);
+    }, 220);
+  }
+
+  onDraftAddressFocus(): void {
+    this.addressFocused = true;
+    const value = `${this.draft.address || ''}`.trim();
+    if (value.length >= 2) this.onDraftAddressInput(value);
+  }
+
+  onDraftAddressBlur(): void {
+    setTimeout(() => {
+      this.addressFocused = false;
+      this.addressSuggestions = [];
+    }, 160);
+  }
+
+  selectDraftAddressSuggestion(value: string): void {
+    this.draft.address = value;
+    this.addressFocused = false;
+    this.addressSuggestions = [];
+  }
+
+  launchExpenseCalculatorFromDraft(): void {
+    const destination = `${this.draft.address || this.draft.venue || ''}`.trim();
+    if (!destination) {
+      this.quickCreateError = 'Inserisci prima almeno indirizzo o venue';
+      return;
+    }
+    if (!this.selectedDate) {
+      this.quickCreateError = 'Seleziona prima il giorno evento nel calendario';
+      return;
+    }
+    localStorage.setItem('mm_dashboard_expense_context', JSON.stringify({
+      from: 'dashboard',
+      selectedDate: this.selectedDate,
+      draft: this.draft,
+      createdAt: new Date().toISOString()
+    }));
+    this.router.navigate(['/expenses'], { queryParams: { fromDashboard: '1' } });
   }
 
   toggleInlineContact(): void {
@@ -262,7 +322,7 @@ export class DashboardComponent implements OnInit {
       netFee: Number(this.draft.netFee || 0),
       compensoType: billing.compensoType,
       notes: this.draft.notes || '',
-      status: 'confirmed',
+      status: 'pending',
       createdAt: now
     };
     const selected = this.contacts.find(x => x.id === this.draft.contactId);
@@ -319,7 +379,7 @@ export class DashboardComponent implements OnInit {
 
   private isEventCompleted(event: EventDetail): boolean {
     if (event.status === 'cancelled') return false;
-    if (event.status === 'confirmed' && event.date <= this.today) return true;
+    if (event.status === 'confirmed' && event.date < this.today) return true;
     return event.date < this.today;
   }
 
@@ -402,7 +462,7 @@ export class DashboardComponent implements OnInit {
       const row: CalendarCell[] = [];
       for (let d = 0; d < 7; d++) {
         const cur = new Date(firstCellDate.getFullYear(), firstCellDate.getMonth(), firstCellDate.getDate() + (w * 7 + d));
-        const iso = cur.toISOString().split('T')[0];
+        const iso = this.toLocalIsoDate(cur);
         row.push({
           date: iso,
           day: cur.getDate(),
@@ -487,11 +547,11 @@ export class DashboardComponent implements OnInit {
     const paidIds = new Set(payments.map(p => p.eventId));
     const past7  = new Date(); past7.setDate(past7.getDate() - 7);
     const next3  = new Date(); next3.setDate(next3.getDate() + 3);
-    const from = past7.toISOString().split('T')[0];
-    const to   = next3.toISOString().split('T')[0];
+    const from = this.toLocalIsoDate(past7);
+    const to   = this.toLocalIsoDate(next3);
     return this.allEvents
       .filter(e => (e.type === 'concert' || e.type === 'lesson'))
-      .filter(e => e.date >= from && e.date <= to)
+      .filter(e => e.date >= from && e.date <= this.today)
       .filter(e => !paidIds.has(e.id))
       .map(e => ({
         id: e.id,
@@ -516,6 +576,7 @@ export class DashboardComponent implements OnInit {
       const onlyAcconto = evPayments.every(p => p.paymentType === 'acconto');
       const event = this.allEvents.find(e => e.id === eventId);
       if (onlyAcconto && event) {
+        if (event.date > this.today) continue;
         const acconto = evPayments.reduce((s, p) => s + p.receivedAmount, 0);
         results.push({
           id: event.id,
@@ -530,12 +591,126 @@ export class DashboardComponent implements OnInit {
     return results;
   }
 
+  private applyExpenseReturnContext(): void {
+    const contextRaw = localStorage.getItem('mm_dashboard_expense_context');
+    if (!contextRaw) return;
+    const resultRaw = localStorage.getItem('mm_dashboard_expense_result');
+    const context = JSON.parse(contextRaw || '{}');
+    const draft = context?.draft || {};
+    this.selectedDate = `${context?.selectedDate || this.today}`;
+    this.quickCreateError = '';
+    this.quickCreateDone = false;
+    this.quickCreateLabel = '';
+    this.draft = {
+      kind: draft.kind === 'lesson' ? 'lesson' : 'concert',
+      title: `${draft.title || (draft.kind === 'lesson' ? 'Lezione' : 'Concerto')}`,
+      contactId: `${draft.contactId || ''}`,
+      timeStart: `${draft.timeStart || (draft.kind === 'lesson' ? '16:00' : '21:00')}`,
+      timeEnd: `${draft.timeEnd || ''}`,
+      venue: `${draft.venue || ''}`,
+      address: `${draft.address || ''}`,
+      grossFee: Number(draft.grossFee || 0),
+      netFee: Number(draft.netFee || 0),
+      notes: `${draft.notes || ''}`
+    };
+    if (resultRaw) {
+      const result = JSON.parse(resultRaw || '{}');
+      const totalExpense = Number(result?.totalExpense || 0);
+      if (Number.isFinite(totalExpense) && totalExpense > 0) {
+        const gross = Number(this.draft.grossFee || 0);
+        const currentNet = Number(this.draft.netFee || gross);
+        this.draft.netFee = +(currentNet + totalExpense).toFixed(2);
+        const currentNotes = `${this.draft.notes || ''}`.replace(/\s*\[Spese viaggio:[^\]]+\]/gi, '').trim();
+        const routeText = `${result?.origin || ''} → ${result?.destination || ''}`.trim();
+        const noteAddon = `[Spese viaggio: ${totalExpense.toFixed(2)}€${routeText ? ` • ${routeText}` : ''}]`;
+        this.draft.notes = `${currentNotes}${currentNotes ? ' ' : ''}${noteAddon}`.trim();
+      }
+    }
+    localStorage.removeItem('mm_dashboard_expense_context');
+    localStorage.removeItem('mm_dashboard_expense_result');
+  }
+
   private eventCounterpartLabel(event: EventDetail): string {
     const venue = `${event.venue || ''}`.trim();
     if (venue) return venue;
     const firstBand = `${event.band?.[0]?.name || ''}`.trim();
     if (firstBand) return firstBand;
     return event.type === 'lesson' ? 'allievo da definire' : 'destinazione da definire';
+  }
+
+  private async fetchDraftAddressSuggestions(query: string): Promise<void> {
+    this.addressAborter?.abort();
+    const controller = new AbortController();
+    this.addressAborter = controller;
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=7&countrycodes=it&addressdetails=1`;
+      const res = await fetch(url, {
+        headers: { 'Accept-Language': 'it' },
+        signal: controller.signal
+      });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const current = `${this.draft.address || ''}`.trim();
+      if (this.normalizeAddress(current) !== this.normalizeAddress(query)) return;
+      this.addressSuggestions = this.rankAddressRows(rows, query).slice(0, 7).map(x => x.label);
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') this.addressSuggestions = [];
+    }
+  }
+
+  private rankAddressRows(rows: any[], query: string): Array<{ label: string; score: number }> {
+    const normalizedQuery = this.normalizeAddress(query);
+    const seen = new Set<string>();
+    const ranked: Array<{ label: string; score: number }> = [];
+    for (const row of rows) {
+      const label = this.formatAddressLabel(row);
+      const key = this.normalizeAddress(label);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
+      const importance = Number(row?.importance || 0);
+      let score = this.addressTypeScore(addresstype) + Math.max(0, Math.min(30, importance * 30));
+      if (key.startsWith(normalizedQuery)) score += 40;
+      else if (key.includes(normalizedQuery)) score += 20;
+      ranked.push({ label, score });
+    }
+    return ranked.sort((a, b) => b.score - a.score);
+  }
+
+  private formatAddressLabel(row: any): string {
+    const address = row?.address || {};
+    const place = `${address.city || address.town || address.village || address.municipality || address.hamlet || row?.name || ''}`.trim();
+    const province = `${address.county || ''}`.replace(/^Città metropolitana di\s+/i, '').trim();
+    const region = `${address.state || ''}`.trim();
+    const country = `${address.country || 'Italia'}`.trim();
+    const road = `${address.road || ''}`.trim();
+    const number = `${address.house_number || ''}`.trim();
+    const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
+    if (['road', 'house', 'residential'].includes(addresstype) && road) {
+      const roadLabel = `${road}${number ? ` ${number}` : ''}`.trim();
+      return [roadLabel, place, province, region, country].filter(Boolean).join(', ');
+    }
+    const compact = [place, province, region, country].filter(Boolean).join(', ');
+    return compact || `${row?.display_name || ''}`.trim();
+  }
+
+  private normalizeAddress(value: string): string {
+    return `${value || ''}`.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  private addressTypeScore(addresstype: string): number {
+    if (['city', 'town', 'village', 'municipality', 'hamlet', 'locality'].includes(addresstype)) return 60;
+    if (['county', 'province', 'state_district', 'state'].includes(addresstype)) return 45;
+    if (['suburb', 'neighbourhood', 'quarter'].includes(addresstype)) return 35;
+    if (['road', 'house', 'residential'].includes(addresstype)) return 25;
+    return 20;
+  }
+
+  private toLocalIsoDate(date: Date): string {
+    const y = date.getFullYear();
+    const m = `${date.getMonth() + 1}`.padStart(2, '0');
+    const d = `${date.getDate()}`.padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
   private cleanupDashboardDraftEvents(events: EventDetail[]): EventDetail[] {

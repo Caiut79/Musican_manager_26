@@ -1,0 +1,136 @@
+<div class="page-header">
+  <div class="page-header-left">
+    <h1>Preventivi e Contratti</h1>
+    <p class="subtitle">Gestisci proposte, invia e archivia i contratti firmati</p>
+  </div>
+  <div class="page-header-right">
+    <div class="status-counts">
+      <span class="count-badge draft">{{ totalDrafts() }} bozze</span>
+      <span class="count-badge sent">{{ totalSent() }} inviati</span>
+      <span class="count-badge signed">{{ totalSigned() }} firmati</span>
+      <span class="count-badge archived">{{ totalArchived() }} archiviati</span>
+    </div>
+    <button type="button" class="btn-primary" (click)="openCreateForm()">+ Nuovo contratto</button>
+  </div>
+</div>
+
+<!-- Tab switcher -->
+<div class="tab-bar">
+  <button type="button" class="tab-btn" *ngFor="let t of contractTypes"
+    [class.active]="activeTab === t.value"
+    (click)="setActiveTab(t.value)">
+    {{ t.icon }} {{ t.label }}
+  </button>
+</div>
+
+<!-- Search -->
+<div class="search-bar">
+  <input type="text" [(ngModel)]="searchQuery" placeholder="Cerca per cliente, evento, location…">
+</div>
+
+<!-- Create form -->
+<div class="form-panel" *ngIf="showCreateForm">
+  <div class="form-panel-header">
+    <h2>Nuovo contratto {{ contractTypeLabel(activeTab) }}</h2>
+    <button type="button" class="btn-ghost" (click)="closeCreateForm()">✕ Chiudi</button>
+  </div>
+  <form [formGroup]="form" (ngSubmit)="createContract()">
+    <div class="row">
+      <label>Cliente *
+        <input type="text" formControlName="customerName" placeholder="Nome e cognome / Ragione sociale"
+          [class.invalid]="isInvalid('customerName')">
+      </label>
+      <label>Responsabile firmatario *
+        <input type="text" formControlName="responsibleName" placeholder="Nome e cognome del firmatario"
+          [class.invalid]="isInvalid('responsibleName')">
+      </label>
+      <label>Email cliente *
+        <input type="email" formControlName="customerEmail" placeholder="email@cliente.com"
+          [class.invalid]="isInvalid('customerEmail')">
+      </label>
+      <label>Telefono
+        <input type="tel" formControlName="customerPhone" placeholder="+39 …">
+      </label>
+    </div>
+    <div class="row">
+      <label>Titolo evento *
+        <input type="text" formControlName="eventTitle" placeholder="es. Matrimonio Rossi — Villa Serena"
+          [class.invalid]="isInvalid('eventTitle')">
+      </label>
+      <label>Data evento *
+        <input type="date" formControlName="eventDate"
+          [class.invalid]="isInvalid('eventDate')">
+      </label>
+      <label>Location
+        <input type="text" formControlName="eventLocation" placeholder="Indirizzo o nome venue">
+      </label>
+    </div>
+    <div class="row">
+      <label>Compenso concordato (€) *
+        <input type="number" formControlName="agreedFee" min="0" step="10"
+          [class.invalid]="isInvalid('agreedFee')">
+      </label>
+      <label>Fatturazione
+        <select formControlName="billingMode">
+          <option value="fuori_fattura">Fuori fattura / Privato</option>
+          <option value="in_fattura">In fattura</option>
+        </select>
+      </label>
+    </div>
+    <label>Note / condizioni
+      <textarea rows="2" formControlName="notes" placeholder="Orario arrivo, extra, dettagli logistici…"></textarea>
+    </label>
+    <label>Testo clausole contrattuali
+      <textarea rows="4" formControlName="contractText" placeholder="Inserisci qui il testo del contratto (facoltativo). Se vuoto verrà usato il testo standard."></textarea>
+      <span class="field-hint">Campo opzionale: lascia vuoto per usare il testo standard o inserisci le tue clausole personalizzate.</span>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary" [disabled]="form.invalid">Crea bozza contratto</button>
+    </div>
+  </form>
+</div>
+
+<!-- Contracts list -->
+<div class="contracts-list" *ngIf="!showCreateForm">
+  <div class="empty-state" *ngIf="filteredContracts.length === 0">
+    <span class="empty-icon">📋</span>
+    <p>Nessun contratto {{ contractTypeLabel(activeTab) }} presente</p>
+    <button type="button" class="btn-primary" (click)="openCreateForm()">Crea il primo</button>
+  </div>
+
+  <div class="contract-card" *ngFor="let c of filteredContracts">
+    <div class="cc-left">
+      <div class="cc-icon">{{ contractIcon(c.contractType) }}</div>
+      <div class="cc-body">
+        <div class="cc-title">{{ c.eventTitle }}</div>
+        <div class="cc-meta">
+          <span>{{ c.customerName }}</span>
+          <span>·</span>
+          <span>{{ formatDate(c.eventDate) }}</span>
+          <span *ngIf="c.eventLocation">· {{ c.eventLocation }}</span>
+        </div>
+        <div class="cc-fee">{{ c.agreedFee | currency:'EUR':'symbol':'1.0-0' }} —
+          {{ c.billingMode === 'in_fattura' ? 'In fattura' : 'Fuori fattura' }}
+        </div>
+      </div>
+    </div>
+    <div class="cc-right">
+      <span class="cc-status" [class]="'status-' + c.status">
+        {{ statusIcons[c.status] }} {{ statusLabels[c.status] }}
+      </span>
+      <div class="cc-actions">
+        <button type="button" class="btn-icon" title="Scarica PDF" (click)="downloadContractPdf(c.id)">📄</button>
+        <button type="button" class="btn-icon" title="Copia link" (click)="copyLink(c.id)">
+          {{ copiedId === c.id ? '✓' : '🔗' }}
+        </button>
+        <button type="button" class="btn-icon" title="Invia" *ngIf="c.status === 'draft'" (click)="sendContract(c.id)">
+          📧
+        </button>
+        <button type="button" class="btn-icon" title="Archivia" *ngIf="c.status === 'signed'" (click)="archiveContract(c.id)">
+          📁
+        </button>
+        <button type="button" class="btn-icon" title="Elimina" (click)="deleteContract(c.id)">🗑</button>
+      </div>
+    </div>
+  </div>
+</div>

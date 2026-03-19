@@ -18,6 +18,14 @@ const ENPALS_CATEGORIES = [
 ];
 
 type ProfileAddressField = 'birthPlace' | 'residence' | 'homeBase';
+type MonthlyTaxPlanRow = {
+  month: string;
+  revenue: number;
+  costs: number;
+  taxReserve: number;
+  netCash: number;
+  cumulativeTaxReserve: number;
+};
 
 @Component({
   selector: 'app-musician-form',
@@ -30,7 +38,7 @@ export class MusicianFormComponent {
   styles      = STYLES;
   enpalsCategories = ENPALS_CATEGORIES;
 
-  steps = ['Anagrafica', 'Profilo musicale', 'Social', 'ENPALS & Fiscale', 'Ruolo'];
+  steps = ['Anagrafica', 'Profilo musicale', 'Social', 'ENPALS & Fiscale', 'Colori agenda'];
   currentStep = 0;
   submitting  = false;
   resultCode: string | null = null;
@@ -71,6 +79,7 @@ export class MusicianFormComponent {
     fiscalCode: [''],
     residence:  [''],
     homeBase:   [''],
+    isMusician: [true],
     // Step 1 – Profilo musicale
     instrument:      [''],
     level:           [''],
@@ -87,6 +96,12 @@ export class MusicianFormComponent {
     workerType:         [''],
     lessonBillingMode:  ['fuori_fattura'],
     musicBillingMode:   ['fuori_fattura'],
+    taxRegime:          ['ordinario'],
+    vatMode:            ['iva_ordinaria'],
+    irpefBracket:       ['23'],
+    substituteTaxPercent:[15],
+    estimatedAnnualRevenue:[0],
+    estimatedAnnualCosts:[0],
     inpsExempt:         [false],
     exemptReasonUnder18: [false],
     exemptReasonStudentUnder25: [false],
@@ -101,8 +116,10 @@ export class MusicianFormComponent {
     inpsEndDate:        [''],
     // Step 4 – Ruolo
     isTeacher:   [false],
+    isDj:        [false],
     lessonColor: ['#2e7d32'],
     concertColor:['#1565c0'],
+    djColor:     ['#8b5cf6'],
   });
 
   constructor(private fb: FormBuilder, private supabase: SupabaseService, private router: Router) {
@@ -134,6 +151,7 @@ export class MusicianFormComponent {
     if (Object.keys(patch).length) this.form.patchValue(patch);
     const savedLicenseEmail = localStorage.getItem('mm_user_email');
     if (savedLicenseEmail) this.form.patchValue({ licenseEmail: savedLicenseEmail });
+    this.onRolesChanged();
     this.refreshIncompleteSteps();
   }
 
@@ -144,6 +162,7 @@ export class MusicianFormComponent {
       const restored = await this.supabase.loadRegistryProfileForCurrentContext();
       if (!restored) return;
       this.form.patchValue(restored);
+      this.onRolesChanged();
       localStorage.setItem('mm_profile_snapshot', JSON.stringify({ ...restored, licenseEmail: this.form.get('licenseEmail')?.value || '' }));
       if (restored['firstName']) localStorage.setItem('mm_firstName', restored['firstName']);
       if (restored['lastName']) localStorage.setItem('mm_lastName', restored['lastName']);
@@ -273,7 +292,54 @@ export class MusicianFormComponent {
 
   get workerType(): string { return this.form.get('workerType')?.value || ''; }
   get inpsExempt(): boolean { return this.form.get('inpsExempt')?.value === true; }
+  get isMusician(): boolean { return this.form.get('isMusician')?.value !== false; }
   get isTeacher(): boolean { return this.form.get('isTeacher')?.value === true; }
+  get isDj(): boolean { return this.form.get('isDj')?.value === true; }
+  get hasLiveRole(): boolean { return this.isMusician || this.isDj; }
+  get hasLessonRole(): boolean { return this.isTeacher; }
+  get taxRegime(): string { return `${this.form.get('taxRegime')?.value || 'ordinario'}`; }
+  get vatMode(): string { return `${this.form.get('vatMode')?.value || 'iva_ordinaria'}`; }
+  get estimatedTaxableIncome(): number {
+    const revenue = Number(this.form.get('estimatedAnnualRevenue')?.value || 0);
+    const costs = Number(this.form.get('estimatedAnnualCosts')?.value || 0);
+    return Math.max(0, revenue - costs);
+  }
+  get estimatedTaxAmount(): number {
+    const taxable = this.estimatedTaxableIncome;
+    if (this.taxRegime === 'forfettario') {
+      const pct = Math.max(0, Number(this.form.get('substituteTaxPercent')?.value || 15));
+      return (taxable * pct) / 100;
+    }
+    const bracket = Math.max(0, Number(this.form.get('irpefBracket')?.value || 23));
+    return (taxable * bracket) / 100;
+  }
+  get estimatedNetAfterTaxes(): number {
+    const revenue = Number(this.form.get('estimatedAnnualRevenue')?.value || 0);
+    const costs = Number(this.form.get('estimatedAnnualCosts')?.value || 0);
+    return Math.max(0, revenue - costs - this.estimatedTaxAmount);
+  }
+  get monthlyTaxPlan(): MonthlyTaxPlanRow[] {
+    const monthLabels = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
+    const annualRevenue = Number(this.form.get('estimatedAnnualRevenue')?.value || 0);
+    const annualCosts = Number(this.form.get('estimatedAnnualCosts')?.value || 0);
+    const annualTaxes = Number(this.estimatedTaxAmount || 0);
+    const monthlyRevenue = this.round2(annualRevenue / 12);
+    const monthlyCosts = this.round2(annualCosts / 12);
+    const monthlyTaxes = this.round2(annualTaxes / 12);
+    let cumulative = 0;
+    return monthLabels.map(month => {
+      cumulative = this.round2(cumulative + monthlyTaxes);
+      const netCash = this.round2(Math.max(0, monthlyRevenue - monthlyCosts - monthlyTaxes));
+      return {
+        month,
+        revenue: monthlyRevenue,
+        costs: monthlyCosts,
+        taxReserve: monthlyTaxes,
+        netCash,
+        cumulativeTaxReserve: cumulative
+      };
+    });
+  }
   get exemptionReasons(): string[] {
     const reasons: string[] = [];
     if (this.form.get('exemptReasonUnder18')?.value) reasons.push('Giovani fino a 18 anni');
@@ -309,6 +375,34 @@ export class MusicianFormComponent {
     }
   }
 
+  onRolesChanged(): void {
+    if (this.isDj && this.inpsExempt) {
+      this.form.patchValue({ inpsExempt: false });
+    }
+    if (!this.hasLiveRole) {
+      this.form.patchValue({
+        workerType: '',
+        musicBillingMode: 'fuori_fattura',
+        inpsExempt: false,
+        empalsPosition: ''
+      });
+      return;
+    }
+    if (!this.workerType) {
+      const suggestedWorkerType = this.isDj ? 'cooperativa' : 'libero_professionista';
+      this.form.patchValue({ workerType: suggestedWorkerType });
+      this.onWorkerTypeChange(suggestedWorkerType);
+    }
+    if (!this.isMusician) {
+      this.form.patchValue({
+        instrument: '',
+        level: '',
+        stylesPlayed: [],
+        searchableStyles: []
+      });
+    }
+  }
+
   // ── Styles chip helpers ─────────────────────────────────────
   isStyleSelected(style: string, field: 'stylesPlayed' | 'searchableStyles'): boolean {
     const val: string[] = this.form.get(field)?.value || [];
@@ -325,7 +419,12 @@ export class MusicianFormComponent {
   // ────────────────────────────────────────────────────────────
 
   goToStep(i: number): void {
-    if (i >= 0 && i < this.steps.length) this.currentStep = i;
+    if (i < 0 || i >= this.steps.length) return;
+    if (i === 1 && !this.isMusician) {
+      this.currentStep = 2;
+      return;
+    }
+    this.currentStep = i;
   }
 
   goToFirstIncompleteStep(): void {
@@ -338,10 +437,16 @@ export class MusicianFormComponent {
       ['firstName', 'lastName'].forEach(f => this.form.get(f)?.markAsTouched());
       if (this.form.get('firstName')?.invalid || this.form.get('lastName')?.invalid) return;
     }
-    this.currentStep = Math.min(this.currentStep + 1, this.steps.length - 1);
+    let next = Math.min(this.currentStep + 1, this.steps.length - 1);
+    if (next === 1 && !this.isMusician) next = 2;
+    this.currentStep = next;
   }
 
-  prevStep(): void { this.currentStep = Math.max(this.currentStep - 1, 0); }
+  prevStep(): void {
+    let prev = Math.max(this.currentStep - 1, 0);
+    if (prev === 1 && !this.isMusician) prev = 0;
+    this.currentStep = prev;
+  }
 
   controlInvalid(name: string): boolean {
     const c = this.form.get(name);
@@ -437,12 +542,13 @@ export class MusicianFormComponent {
   }
 
   private isStepIncomplete(stepIndex: number): boolean {
+    if (stepIndex === 1 && !this.isMusician) return false;
     const fieldsByStep: Record<number, string[]> = {
       0: ['firstName', 'lastName', 'phone', 'licenseEmail', 'birthDate', 'birthPlace', 'fiscalCode', 'residence', 'homeBase'],
       1: ['instrument', 'level', 'stylesPlayed', 'searchableStyles'],
       2: ['instagram', 'facebook', 'youtube', 'tiktok', 'website'],
-      3: ['empalsPosition', 'workerType', 'exemptEmployer', 'inpsNumber', 'inpsStartDate', 'inpsEndDate'],
-      4: ['isTeacher', 'lessonColor', 'concertColor']
+      3: ['empalsPosition', 'workerType', 'taxRegime', 'vatMode', 'irpefBracket', 'substituteTaxPercent', 'estimatedAnnualRevenue', 'estimatedAnnualCosts', 'exemptEmployer', 'inpsNumber', 'inpsStartDate', 'inpsEndDate'],
+      4: ['lessonColor', 'concertColor', 'djColor']
     };
     const fields = fieldsByStep[stepIndex] || [];
     if (!fields.length) return false;
@@ -468,12 +574,18 @@ export class MusicianFormComponent {
       }
       return;
     }
+    const v = this.form.value;
+    if (v.isMusician !== true && v.isTeacher !== true && v.isDj !== true) {
+      this.error = 'Seleziona almeno un ruolo: Musicista, DJ o Insegnante';
+      this.currentStep = 0;
+      return;
+    }
     this.submitting = true;
     try {
-      const v = this.form.value;
-      const isExempt = !!v.inpsExempt;
+      const isExempt = !!v.inpsExempt && v.isDj !== true;
+      const djCodeDraft = v.isDj ? this.ensureDjCode(v.firstName || '', v.lastName || '') : '';
       const persist: [string, string | null | undefined][] = [
-        ['lessonColor',   v.lessonColor],  ['concertColor',  v.concertColor],
+        ['lessonColor',   v.lessonColor],  ['concertColor',  v.concertColor], ['djColor', v.djColor],
         ['mm_firstName',  v.firstName],    ['mm_lastName',   v.lastName],
         ['mm_homeBase',   v.homeBase],     ['mm_phone',      v.phone],
         ['mm_fiscalCode', v.fiscalCode],
@@ -493,15 +605,21 @@ export class MusicianFormComponent {
         workerType:     (v.workerType as Musician['workerType']) || undefined,
         lessonBillingMode: (v.lessonBillingMode as Musician['lessonBillingMode']) || undefined,
         musicBillingMode: (v.musicBillingMode as Musician['musicBillingMode']) || undefined,
+        taxRegime:      (v.taxRegime as Musician['taxRegime']) || undefined,
+        vatMode:        (v.vatMode as Musician['vatMode']) || undefined,
+        irpefBracket:   (v.irpefBracket as Musician['irpefBracket']) || undefined,
+        substituteTaxPercent: Number(v.substituteTaxPercent || 0) || undefined,
+        estimatedAnnualRevenue: Number(v.estimatedAnnualRevenue || 0),
+        estimatedAnnualCosts: Number(v.estimatedAnnualCosts || 0),
         empalsPosition: v.empalsPosition || undefined,
         enpalsCategory: v.empalsPosition || undefined,
         exemptEmployer: v.exemptEmployer || undefined,
         exemptEmployerType: (v.exemptEmployerType as Musician['exemptEmployerType']) || undefined,
         homeBase:       v.homeBase || undefined,
-        instrument:     v.instrument || undefined,
-        level:          v.level || undefined,
-        stylesPlayed:   v.stylesPlayed || [],
-        searchableStyles: v.searchableStyles || [],
+        instrument:     v.isMusician ? (v.instrument || undefined) : undefined,
+        level:          v.isMusician ? (v.level || undefined) : undefined,
+        stylesPlayed:   v.isMusician ? (v.stylesPlayed || []) : [],
+        searchableStyles: v.isMusician ? (v.searchableStyles || []) : [],
         social: {
           instagram: v.instagram || undefined,
           facebook:  v.facebook  || undefined,
@@ -517,9 +635,13 @@ export class MusicianFormComponent {
             endDate: v.inpsEndDate || undefined
           }
           : null,
+        isMusician:  v.isMusician !== false,
         isTeacher:   v.isTeacher   || false,
+        isDj:        v.isDj        || false,
         lessonColor: v.lessonColor  || null,
         concertColor:v.concertColor || null,
+        djColor:     v.djColor      || null,
+        djCode:      djCodeDraft || undefined,
         signatureData: localStorage.getItem('mm_signature') || undefined,
       };
 
@@ -534,13 +656,21 @@ export class MusicianFormComponent {
       if (!resolvedCode) throw new Error('Codice musicista non assegnato');
       localStorage.setItem('musicianCode', resolvedCode);
       localStorage.setItem('mm_affiliation_code', resolvedCode);
+      let resolvedDjCode = djCodeDraft || localStorage.getItem('mm_dj_code') || '';
+      if (v.isDj) {
+        resolvedDjCode = this.ensureDjCode(v.firstName || '', v.lastName || '');
+      } else {
+        localStorage.removeItem('mm_dj_code');
+      }
       if (resolvedId) {
         await this.supabase.syncAllFromLocalStorage(resolvedId);
       }
       this.hasSavedProfile = true;
       this.refreshIncompleteSteps();
       this.savedOk = true;
-      this.resultCode = resolvedCode;
+      this.resultCode = v.isMusician && v.isDj
+        ? `MU ${resolvedCode} · DJ ${resolvedDjCode}`
+        : (v.isDj ? `DJ ${resolvedDjCode}` : `MU ${resolvedCode}`);
       this.router.navigateByUrl('/dashboard');
     } catch (e: any) {
       this.error = e?.message ? `Salvataggio non riuscito: ${e.message}` : 'Salvataggio non riuscito';
@@ -559,5 +689,20 @@ export class MusicianFormComponent {
       .filter((p: any) => p?.category === 'concerto' && `${p?.serviceDate || ''}`.startsWith(`${year}-`))
       .filter((p: any) => p?.paymentMode === 'fattura_diretta' || p?.paymentMode === 'pattuito_fattura')
       .reduce((sum: number, p: any) => sum + Number(p?.taxableBase || p?.receivedAmount || 0), 0);
+  }
+
+  private round2(value: number): number {
+    return Math.round((Number(value) || 0) * 100) / 100;
+  }
+
+  private ensureDjCode(firstName: string, lastName: string): string {
+    const existing = `${localStorage.getItem('mm_dj_code') || ''}`.trim();
+    if (existing) return existing;
+    const seed = `${firstName}${lastName}${Date.now()}`.toUpperCase();
+    let hash = 0;
+    for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) % 10000;
+    const code = `DJ${`${hash}`.padStart(4, '0')}`;
+    localStorage.setItem('mm_dj_code', code);
+    return code;
   }
 }

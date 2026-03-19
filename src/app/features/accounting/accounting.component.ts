@@ -259,12 +259,12 @@ export class AccountingComponent implements OnInit {
   }
 
   isMonthlyConcert(event: EventDetail): boolean {
-    if (event.type !== 'concert') return false;
+    if (event.type !== 'concert' && event.type !== 'dj_set') return false;
     return `${event.notes || ''}`.toLowerCase().includes('pagamento mensile');
   }
 
   isImmediateConcert(event: EventDetail): boolean {
-    return event.type === 'concert' && !this.isMonthlyConcert(event);
+    return (event.type === 'concert' || event.type === 'dj_set') && !this.isMonthlyConcert(event);
   }
 
   isDraftMonthlyConcert(): boolean {

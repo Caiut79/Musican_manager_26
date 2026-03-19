@@ -24,6 +24,8 @@ import { SchoolPortalComponent }    from './features/school-portal/school-portal
 import { ReportsComponent }         from './features/reports/reports.component';
 import { ContactsComponent }        from './features/contacts/contacts.component';
 import { PrivacyConsentComponent }  from './features/privacy-consent/privacy-consent.component';
+import { ContractsComponent }        from './features/contracts/contracts.component';
+import { ContractViewComponent }     from './features/contract-view/contract-view.component';
 
 const routes: Routes = [
   { path: '',              redirectTo: 'register', pathMatch: 'full' },
@@ -45,6 +47,8 @@ const routes: Routes = [
   { path: 'archive',      component: ArchiveComponent },
   { path: 'history',      component: HistoryComponent },
   { path: 'accounting',   component: AccountingComponent },
+  { path: 'contracts',    component: ContractsComponent },
+  { path: 'contract/:id', component: ContractViewComponent },
   { path: '**',           redirectTo: 'dashboard' },
 ];
 
@@ -67,6 +71,8 @@ const routes: Routes = [
     PrivacyConsentComponent,
     HistoryComponent,
     AccountingComponent,
+    ContractsComponent,
+    ContractViewComponent,
     RegisterComponent,
     BookingRequestComponent,
   ],

@@ -34,6 +34,7 @@ export class SidebarComponent {
     { label: 'Comunicazione', icon: 'ti-message-circle',   route: '/communication' },
     { label: 'Rubrica',       icon: 'ti-address-book',     route: '/contacts' },
     { label: 'Archivio',      icon: 'ti-archive',          route: '/archive' },
+    { label: 'Contratti',     icon: 'ti-file-text',        route: '/contracts' },
     { label: 'Storico',       icon: 'ti-clock',            route: '/history' },
     { label: 'Contabilità',   icon: 'ti-briefcase',        route: '/accounting' },
     { label: 'Profilo',       icon: 'ti-user-circle',      route: '/profile' },

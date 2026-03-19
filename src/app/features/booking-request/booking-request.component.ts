@@ -13,6 +13,7 @@ export class BookingRequestComponent implements OnInit {
   affiliationCode = '';
   allowBandInvites = true;
   sent = false;
+  error = '';
 
   form = this.fb.group({
     customerName: ['', Validators.required],
@@ -39,6 +40,12 @@ export class BookingRequestComponent implements OnInit {
       this.form.markAllAsTouched();
       return;
     }
+    const selectedDate = `${this.form.value.eventDate || ''}`.trim();
+    if (selectedDate && this.isPerformanceDateBusy(selectedDate)) {
+      this.error = 'Data non disponibile: il calendario è già occupato da evento musica/DJ';
+      return;
+    }
+    this.error = '';
     const listRaw = localStorage.getItem('mm_booking_requests');
     const list = listRaw ? JSON.parse(listRaw) : [];
     list.push({
@@ -57,6 +64,15 @@ export class BookingRequestComponent implements OnInit {
       eventDate: '',
       eventType: 'Serata privata',
       message: ''
+    });
+  }
+
+  private isPerformanceDateBusy(date: string): boolean {
+    const events = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    if (!Array.isArray(events)) return false;
+    return events.some((event: any) => {
+      if (`${event?.status || ''}` === 'cancelled') return false;
+      return (`${event?.date || ''}` === date) && (`${event?.type || ''}` === 'concert' || `${event?.type || ''}` === 'dj_set');
     });
   }
 }

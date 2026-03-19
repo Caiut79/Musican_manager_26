@@ -389,6 +389,48 @@ input.invalid {
   &.info-purple { background: var(--clr-primary-light); border: 1px solid #ddd6fe; color: #4c1d95; }
 }
 
+.monthly-plan-wrap {
+  margin-top: 10px;
+
+  h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 8px;
+  }
+}
+
+.monthly-plan-table {
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius-sm);
+  overflow: auto;
+  background: #fff;
+
+  table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  th, td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th {
+    background: #f8fafc;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+}
+
 /* ── Signature pad ── */
 .signature-section {
   margin-top: 8px;

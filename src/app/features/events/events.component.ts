@@ -16,6 +16,7 @@ export class EventsComponent implements OnInit {
 
   eventTypes = [
     { value: 'concert',   label: 'Concerto' },
+    { value: 'dj_set',    label: 'DJ Set' },
     { value: 'lesson',    label: 'Lezione' },
     { value: 'rehearsal', label: 'Prova' },
     { value: 'other',     label: 'Altro' },
@@ -77,6 +78,10 @@ export class EventsComponent implements OnInit {
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
 
     const v = this.form.value;
+    if ((v.type === 'concert' || v.type === 'dj_set') && this.hasPerformanceConflict(`${v.date || ''}`)) {
+      window.alert('Data già occupata da un evento musica/DJ');
+      return;
+    }
     const newEvent: EventDetail = {
       id:           crypto.randomUUID(),
       title:        v.title,
@@ -150,5 +155,13 @@ export class EventsComponent implements OnInit {
       apple:  `http://maps.apple.com/?q=${enc}`,
     };
     window.open(urls[app], '_blank');
+  }
+
+  private hasPerformanceConflict(date: string): boolean {
+    return this.events.some(event => {
+      if (event.status === 'cancelled') return false;
+      const performance = event.type === 'concert' || event.type === 'dj_set';
+      return performance && event.date === date;
+    });
   }
 }

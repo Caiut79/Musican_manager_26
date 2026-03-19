@@ -217,6 +217,10 @@
     color: #15803d;
   }
 
+  &.dj {
+    color: #7c3aed;
+  }
+
   &.active {
     background: var(--clr-primary-light);
     border-color: #c4b5fd;
@@ -411,6 +415,7 @@
   border-radius: 3px;
   line-height: 1.2;
   color: #fff;
+  border-left: 3px solid transparent;
 }
 
 .cal-chip-title {
@@ -436,6 +441,10 @@
   background: #facc15;
   color: #111827;
 }
+.chip-lesson { border-left-color: #22c55e; }
+.chip-concert { border-left-color: #60a5fa; }
+.chip-dj { border-left-color: #c084fc; }
+.chip-other { border-left-color: #94a3b8; }
 .chip-more    { background: #e5e7eb; color: var(--text-muted); }
 
 /* ── Accesso Rapido ── */

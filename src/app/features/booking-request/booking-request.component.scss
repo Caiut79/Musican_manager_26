@@ -69,3 +69,12 @@ textarea {
   color: #065f46;
   padding: 10px 12px;
 }
+
+.error {
+  margin-top: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+  color: #991b1b;
+  padding: 10px 12px;
+}

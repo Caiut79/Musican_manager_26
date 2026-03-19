@@ -151,6 +151,11 @@ export class ConcertsComponent implements OnInit, OnDestroy {
       return;
     }
     const v = this.form.value;
+    const selectedDate = `${v.date || ''}`.trim();
+    if (this.hasDjConflictOnDate(selectedDate)) {
+      window.alert('Data già occupata da un DJ set');
+      return;
+    }
     const record: ConcertRecord = {
       id: crypto.randomUUID(),
       title: `${v.title || ''}`.trim(),
@@ -227,6 +232,12 @@ export class ConcertsComponent implements OnInit, OnDestroy {
     const deduped = events.filter(e => e.id !== event.id);
     deduped.push(event);
     localStorage.setItem('mm_events', JSON.stringify(deduped));
+  }
+
+  private hasDjConflictOnDate(date: string): boolean {
+    if (!date) return false;
+    const events: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    return events.some(event => event.status !== 'cancelled' && event.type === 'dj_set' && event.date === date);
   }
 
   private async syncSupabaseEvents(): Promise<void> {

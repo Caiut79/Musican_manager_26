@@ -86,10 +86,30 @@
         </datalist>
       </label>
     </div>
+    <div class="section-divider"></div>
+    <h2>Ruoli da coprire</h2>
+    <p class="field-hint field-hint-spaced">Seleziona i ruoli che vuoi coprire nel tuo profilo.</p>
+    <div class="check-row">
+      <label class="check-label">
+        <input type="checkbox" formControlName="isMusician" (change)="onRolesChanged()">
+        <span>Musicista</span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" formControlName="isTeacher" (change)="onRolesChanged()">
+        <span>Insegnante</span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" formControlName="isDj" (change)="onRolesChanged()">
+        <span>DJ</span>
+      </label>
+    </div>
+    <div class="enpals-note" *ngIf="isDj">
+      Profilo DJ: gestione INPS sempre attiva (non esente).
+    </div>
   </section>
 
   <!-- ── Step 1: Profilo musicale ── -->
-  <section *ngIf="currentStep === 1">
+  <section *ngIf="currentStep === 1 && isMusician">
     <h2>Profilo musicale</h2>
     <div class="row">
       <label>Strumento principale
@@ -129,6 +149,11 @@
     </div>
   </section>
 
+  <section *ngIf="currentStep === 1 && !isMusician">
+    <h2>Profilo musicale</h2>
+    <p class="field-hint field-hint-spaced">Hai disattivato il ruolo musicista: questa sezione viene saltata.</p>
+  </section>
+
   <!-- ── Step 2: Social ── -->
   <section *ngIf="currentStep === 2">
     <h2>Profili social</h2>
@@ -154,7 +179,11 @@
   <!-- ── Step 3: ENPALS & Fiscale ── -->
   <section *ngIf="currentStep === 3">
     <h2>Posizione ENPALS (Gestione Spettacolo INPS)</h2>
-    <div class="row">
+    <div class="info-box info-amber" *ngIf="!hasLiveRole">
+      <h4>Profilo senza attività live</h4>
+      <p>Non hai selezionato Musicista o DJ: la sezione ENPALS live viene disattivata e resta attiva solo la parte fiscale generale.</p>
+    </div>
+    <div class="row" *ngIf="hasLiveRole">
       <label class="span-2">Categoria
         <select formControlName="empalsPosition">
           <option *ngFor="let c of enpalsCategories" [value]="c.value">{{ c.label }}</option>
@@ -162,11 +191,11 @@
       </label>
     </div>
 
-    <div class="section-divider"></div>
-    <h2>Tipo di attività</h2>
-    <p class="field-hint field-hint-spaced">Seleziona come operi professionalmente come musicista</p>
+    <div class="section-divider" *ngIf="hasLiveRole"></div>
+    <h2 *ngIf="hasLiveRole">Tipo di attività live</h2>
+    <p class="field-hint field-hint-spaced" *ngIf="hasLiveRole">Seleziona come operi professionalmente per serate live e DJ set</p>
 
-    <div class="worker-type-grid">
+    <div class="worker-type-grid" *ngIf="hasLiveRole">
       <label class="worker-card" [class.selected]="workerType === 'cooperativa'">
         <input type="radio" formControlName="workerType" value="cooperativa" (change)="onWorkerTypeChange('cooperativa')">
         <span class="wc-icon">🏢</span>
@@ -193,8 +222,7 @@
       </label>
     </div>
 
-    <!-- Info boxes per tipo -->
-    <div class="info-box info-blue" *ngIf="workerType === 'cooperativa'">
+    <div class="info-box info-blue" *ngIf="hasLiveRole && workerType === 'cooperativa'">
       <h4>🏢 Cooperativa di spettacolo</h4>
       <p>La cooperativa è il tuo datore di lavoro e gestisce i contributi ENPALS:</p>
       <ul>
@@ -204,7 +232,7 @@
       </ul>
     </div>
 
-    <div class="info-box info-green" *ngIf="workerType === 'libero_professionista'">
+    <div class="info-box info-green" *ngIf="hasLiveRole && workerType === 'libero_professionista'">
       <h4>💼 Libero professionista con P.IVA</h4>
       <p>Come libero professionista nel settore spettacolo:</p>
       <ul>
@@ -214,7 +242,7 @@
       </ul>
     </div>
 
-    <div class="info-box info-amber" *ngIf="workerType === 'insegnante_piva'">
+    <div class="info-box info-amber" *ngIf="hasLiveRole && workerType === 'insegnante_piva'">
       <h4>🎓 Insegnante con P.IVA (doppio uso)</h4>
       <p>Se usi la stessa P.IVA per lezioni e serate:</p>
       <ul>
@@ -225,7 +253,7 @@
       </ul>
     </div>
 
-    <div class="info-box info-purple" *ngIf="workerType === 'misto_piva_lezioni_cooperativa_musica'">
+    <div class="info-box info-purple" *ngIf="hasLiveRole && workerType === 'misto_piva_lezioni_cooperativa_musica'">
       <h4>🧾 Regime misto</h4>
       <p>Configurazione supportata: lezioni con P.IVA, serate con cooperativa.</p>
       <ul>
@@ -237,13 +265,13 @@
     <div class="section-divider"></div>
     <h2>Modalità fatturazione per attività</h2>
     <div class="row">
-      <label>Lezioni
+      <label *ngIf="hasLessonRole">Lezioni
         <select formControlName="lessonBillingMode">
           <option value="in_fattura">In fattura</option>
           <option value="fuori_fattura">Fuori fattura</option>
         </select>
       </label>
-      <label>Musica dal vivo
+      <label *ngIf="hasLiveRole">Musica dal vivo / DJ set
         <select formControlName="musicBillingMode">
           <option value="in_fattura">In fattura</option>
           <option value="fuori_fattura">Fuori fattura / cooperativa</option>
@@ -252,9 +280,82 @@
     </div>
 
     <div class="section-divider"></div>
+    <h2>Regime fiscale e IVA</h2>
+    <div class="row">
+      <label>Regime fiscale
+        <select formControlName="taxRegime">
+          <option value="ordinario">Ordinario</option>
+          <option value="forfettario">Forfettario</option>
+        </select>
+      </label>
+      <label>Gestione IVA
+        <select formControlName="vatMode">
+          <option value="iva_ordinaria">IVA ordinaria</option>
+          <option value="esente">Esente IVA</option>
+          <option value="forfettario">Forfettario senza IVA</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="section-divider"></div>
+    <h2>Simulatore IRPEF / imposta</h2>
+    <div class="row">
+      <label>Fatturato annuo stimato (€)
+        <input type="number" formControlName="estimatedAnnualRevenue" min="0" step="100">
+      </label>
+      <label>Costi deducibili stimati (€)
+        <input type="number" formControlName="estimatedAnnualCosts" min="0" step="100">
+      </label>
+      <label *ngIf="taxRegime === 'ordinario'">Scaglione IRPEF prevalente
+        <select formControlName="irpefBracket">
+          <option value="23">23%</option>
+          <option value="35">35%</option>
+          <option value="43">43%</option>
+        </select>
+      </label>
+      <label *ngIf="taxRegime === 'forfettario'">Imposta sostitutiva (%)
+        <input type="number" formControlName="substituteTaxPercent" min="0" max="30" step="1">
+      </label>
+    </div>
+    <div class="info-box info-green">
+      <h4>Stima fiscale annuale</h4>
+      <p>Imponibile stimato: <strong>{{ estimatedTaxableIncome | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+      <p>Imposte stimate: <strong>{{ estimatedTaxAmount | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+      <p>Netto dopo costi e imposte: <strong>{{ estimatedNetAfterTaxes | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+    </div>
+    <div class="monthly-plan-wrap">
+      <h3>Piano mensile cassa e accantonamento imposte</h3>
+      <div class="monthly-plan-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Mese</th>
+              <th>Entrate</th>
+              <th>Costi</th>
+              <th>Accantonamento imposte</th>
+              <th>Netto mese</th>
+              <th>Accantonamento cumulato</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of monthlyTaxPlan">
+              <td>{{ row.month }}</td>
+              <td>{{ row.revenue | currency:'EUR':'symbol':'1.0-2' }}</td>
+              <td>{{ row.costs | currency:'EUR':'symbol':'1.0-2' }}</td>
+              <td>{{ row.taxReserve | currency:'EUR':'symbol':'1.0-2' }}</td>
+              <td>{{ row.netCash | currency:'EUR':'symbol':'1.0-2' }}</td>
+              <td>{{ row.cumulativeTaxReserve | currency:'EUR':'symbol':'1.0-2' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-divider"></div>
     <h2>Esenzione ENPALS</h2>
-    <p class="field-hint field-hint-spaced">Puoi essere esente anche se lavori in cooperativa o come libero professionista</p>
-    <div class="check-row">
+    <p class="field-hint field-hint-spaced" *ngIf="hasLiveRole && !isDj">Attiva l'esenzione solo se hai i requisiti previdenziali previsti</p>
+    <p class="field-hint field-hint-spaced" *ngIf="isDj">Profilo DJ: esenzione ENPALS non applicabile</p>
+    <div class="check-row" *ngIf="hasLiveRole && !isDj">
       <label class="check-label">
         <input type="checkbox" formControlName="inpsExempt">
         <span>Sono esente ENPALS (ho un'altra occupazione principale che versa contributi INPS)</span>
@@ -262,7 +363,7 @@
     </div>
 
     <!-- ── Sezione esente ── -->
-    <div *ngIf="inpsExempt">
+    <div *ngIf="hasLiveRole && inpsExempt && !isDj">
       <div class="info-box info-purple">
         <h4>🛡 Esenzione ENPALS (agibilità in esenzione)</h4>
         <p>Se hai un contratto di lavoro dipendente (o sei pensionato INPS) puoi esibirti presentando il <strong>modulo di esenzione agibilità</strong> per ogni serata. Non versi contributi ENPALS sull'evento.</p>
@@ -318,16 +419,11 @@
     </div>
   </section>
 
-  <!-- ── Step 4: Ruolo ── -->
+  <!-- ── Step 4: Colori agenda ── -->
   <section *ngIf="currentStep === 4">
-    <h2>Ruolo</h2>
-    <div class="check-row">
-      <label class="check-label">
-        <input type="checkbox" formControlName="isTeacher">
-        <span>Sono anche insegnante</span>
-      </label>
-    </div>
-    <div class="row color-row" *ngIf="isTeacher">
+    <h2>Colori agenda</h2>
+    <p class="field-hint field-hint-spaced" *ngIf="!isTeacher && !isDj">Nessun colore extra da impostare: hai selezionato solo il ruolo musicista.</p>
+    <div class="row color-row" *ngIf="isTeacher || isDj">
       <div class="color-field">
         <label for="lessonColorInput">Colore lezioni</label>
         <div class="color-input-group">
@@ -340,6 +436,13 @@
         <div class="color-input-group">
           <input id="concertColorInput" type="color" formControlName="concertColor">
           <span class="color-name">Colore per i concerti in agenda</span>
+        </div>
+      </div>
+      <div class="color-field" *ngIf="isDj">
+        <label for="djColorInput">Colore DJ set</label>
+        <div class="color-input-group">
+          <input id="djColorInput" type="color" formControlName="djColor">
+          <span class="color-name">Colore per i DJ set in agenda</span>
         </div>
       </div>
     </div>

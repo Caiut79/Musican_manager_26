@@ -11,7 +11,7 @@ export type EventDetail = {
   timeEnd?: string;
   venue: string;
   address: string;
-  type: 'concert' | 'lesson' | 'rehearsal' | 'other';
+  type: 'concert' | 'lesson' | 'dj_set' | 'rehearsal' | 'other';
   band: BandMember[];
   grossFee: number;
   netFee: number;

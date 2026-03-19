@@ -56,6 +56,7 @@
         </div>
         <div class="dcp-actions">
           <button type="button" class="dcp-btn concert" [class.active]="draft.kind === 'concert'" (click)="chooseCreate('concert')">Concerto</button>
+          <button type="button" class="dcp-btn dj" [class.active]="draft.kind === 'dj_set'" (click)="chooseCreate('dj_set')">DJ Set</button>
           <button type="button" class="dcp-btn lesson" [class.active]="draft.kind === 'lesson'" (click)="chooseCreate('lesson')">Lezione</button>
         </div>
         <div class="dcp-form">

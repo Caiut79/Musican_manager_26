@@ -16,6 +16,10 @@
     <span class="legend-dot" [style.background]="concertColor"></span>
     Concerti
   </span>
+  <span class="legend-item">
+    <span class="legend-dot" [style.background]="djColor"></span>
+    DJ Set
+  </span>
   <span class="legend-hint">I colori si personalizzano nel profilo</span>
 </div>
 
@@ -34,9 +38,11 @@
         <select formControlName="type">
           <option value="lesson">Lezione</option>
           <option value="concert">Concerto</option>
+          <option value="dj_set">DJ Set</option>
         </select>
       </label>
     </div>
+    <p class="form-error" *ngIf="formError">{{ formError }}</p>
     <div class="form-actions">
       <button type="submit" class="btn-primary">+ Aggiungi</button>
     </div>
@@ -57,7 +63,7 @@
 
   <div class="events-list">
     <div class="event-card" *ngFor="let e of events">
-      <div class="event-accent" [ngStyle]="{ background: e.type === 'lesson' ? lessonColor : concertColor }"></div>
+      <div class="event-accent" [ngStyle]="{ background: eventColor(e.type) }"></div>
       <div class="event-body">
         <div class="event-main">
           <div class="event-title">{{ e.title }}</div>
@@ -66,8 +72,8 @@
         <div class="event-meta">
           <span class="event-date">{{ e.date }}</span>
           <span class="event-badge"
-            [ngStyle]="{ background: e.type === 'lesson' ? lessonColor : concertColor }">
-            {{ e.type === 'lesson' ? 'Lezione' : 'Concerto' }}
+            [ngStyle]="{ background: eventColor(e.type) }">
+            {{ eventTypeLabel(e.type) }}
           </span>
         </div>
       </div>

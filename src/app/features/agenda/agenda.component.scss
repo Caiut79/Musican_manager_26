@@ -148,6 +148,13 @@ select {
   display: flex;
 }
 
+.form-error {
+  margin: 6px 0 0;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;

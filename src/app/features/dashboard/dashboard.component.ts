@@ -11,7 +11,7 @@ type CalendarCell = {
   events: EventDetail[];
 };
 
-type QuickCreateKind = 'concert' | 'lesson';
+type QuickCreateKind = 'concert' | 'lesson' | 'dj_set';
 
 type QuickCreateDraft = {
   kind: QuickCreateKind;
@@ -37,6 +37,18 @@ type ContactEntry = {
   monthlySettlement?: 'acconto' | 'bonifico';
   notes: string;
   createdAt: string;
+};
+
+type SignedContractSnapshot = {
+  id: string;
+  contractType: 'musicista' | 'dj' | 'insegnante';
+  eventTitle: string;
+  eventDate: string;
+  eventLocation: string;
+  agreedFee: number;
+  billingMode: 'in_fattura' | 'fuori_fattura';
+  notes?: string;
+  status: 'draft' | 'sent' | 'signed' | 'archived';
 };
 
 @Component({
@@ -86,7 +98,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     { label: 'Calcola Spese',  icon: 'ti-map-pin',    route: '/expenses',  sub: 'Rimborsi km' },
     { label: 'Report',         icon: 'ti-chart-bar',  route: '/reports',   sub: 'Statistiche' },
     { label: 'Rubrica',        icon: 'ti-address-book', route: '/contacts', sub: 'Band e singoli' },
-    { label: 'Archivio',       icon: 'ti-archive',    route: '/archive',   sub: 'Documenti' }
+    { label: 'Archivio',       icon: 'ti-archive',    route: '/archive',   sub: 'Documenti' },
+    { label: 'Contratti',     icon: 'ti-file-text',  route: '/contracts', sub: 'Preventivi e contratti' }
   ];
 
   constructor(private router: Router, private supabase: SupabaseService) {}
@@ -99,7 +112,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.isTeacherProfile = profile?.isTeacher === true;
 
     const storedEvents: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
-    const cleanedEvents = this.cleanupDashboardDraftEvents(storedEvents);
+    const withSignedContracts = this.ensureSignedContractsInEvents(storedEvents);
+    const cleanedEvents = this.cleanupDashboardDraftEvents(withSignedContracts);
     this.allEvents = [...cleanedEvents].sort((a, b) => a.date.localeCompare(b.date));
     const now = this.today;
     this.todayEvents    = cleanedEvents.filter(e => e.date === now);
@@ -138,7 +152,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   go(route: string) { this.router.navigate([route]); }
 
   openUnpaidAlert(alert: { id: string; type: string }): void {
-    if (alert.type === 'concert') {
+    if (alert.type === 'concert' || alert.type === 'dj_set') {
       this.router.navigate(['/concerts'], { queryParams: { eventId: alert.id, source: 'dashboard' } });
       return;
     }
@@ -305,8 +319,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.quickCreateError = 'Inserisci ora inizio';
       return;
     }
+    if (this.isPerformanceKind(this.draft.kind) && this.hasPerformanceConflict(this.selectedDate)) {
+      this.quickCreateError = 'Data già occupata da un evento musica/DJ';
+      return;
+    }
     const now = new Date().toISOString();
     const isLesson = this.draft.kind === 'lesson';
+    const isDjSet = this.draft.kind === 'dj_set';
     const billing = this.resolveBillingForDraft(this.draft.kind);
     const event: EventDetail = {
       id: crypto.randomUUID(),
@@ -316,7 +335,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       timeEnd: this.draft.timeEnd || undefined,
       venue: this.draft.venue,
       address: this.draft.address,
-      type: isLesson ? 'lesson' : 'concert',
+      type: isLesson ? 'lesson' : (isDjSet ? 'dj_set' : 'concert'),
       band: [],
       grossFee: Number(this.draft.grossFee || 0),
       netFee: Number(this.draft.netFee || 0),
@@ -344,7 +363,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.refreshEventCollections(all);
     this.buildCalendar();
     this.quickCreateDone = true;
-    this.quickCreateLabel = isLesson ? 'Lezione inserita' : 'Concerto inserito';
+    this.quickCreateLabel = isLesson ? 'Lezione inserita' : (isDjSet ? 'DJ set inserito' : 'Concerto inserito');
     this.quickCreateError = '';
     setTimeout(() => {
       this.closeCreatePicker();
@@ -371,16 +390,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   chipClasses(event: EventDetail): string[] {
-    if (this.refundedConcertIds.has(event.id)) return ['chip-refunded'];
-    if (event.status === 'cancelled') return ['chip-cancelled'];
-    if (this.isEventCompleted(event)) return ['chip-done'];
-    return ['chip-todo'];
+    if (this.refundedConcertIds.has(event.id)) return ['chip-refunded', this.typeClass(event)];
+    if (event.status === 'cancelled') return ['chip-cancelled', this.typeClass(event)];
+    if (this.isEventCompleted(event)) return ['chip-done', this.typeClass(event)];
+    return ['chip-todo', this.typeClass(event)];
   }
 
   private isEventCompleted(event: EventDetail): boolean {
     if (event.status === 'cancelled') return false;
-    if (event.status === 'confirmed' && event.date < this.today) return true;
-    return event.date < this.today;
+    if (event.date >= this.today) return false;
+    if (!this.hasAnyPayment(event.id)) return false;
+    return event.status === 'confirmed' || event.status === 'pending';
   }
 
   private refreshRefundedConcertIds(): void {
@@ -390,6 +410,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   eventGroupLabel(event: EventDetail): string {
+    if (event.type === 'dj_set') return `${event.venue || event.address || ''}`.trim();
     if (event.type !== 'concert') return '';
     const venue = `${event.venue || ''}`.trim();
     if (venue) return venue;
@@ -446,6 +467,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   eventTypeLabel(type: string): string {
     const map: Record<string, string> = {
       concert: 'Concerto', lesson: 'Lezione',
+      dj_set: 'DJ Set',
       rehearsal: 'Prova', other: 'Altro'
     };
     return map[type] || type;
@@ -492,7 +514,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private createDefaultDraft(kind: QuickCreateKind): QuickCreateDraft {
     return {
       kind,
-      title: kind === 'lesson' ? 'Lezione' : 'Concerto',
+      title: kind === 'lesson' ? 'Lezione' : (kind === 'dj_set' ? 'DJ Set' : 'Concerto'),
       contactId: '',
       timeStart: kind === 'lesson' ? '16:00' : '21:00',
       timeEnd: '',
@@ -550,7 +572,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const from = this.toLocalIsoDate(past7);
     const to   = this.toLocalIsoDate(next3);
     return this.allEvents
-      .filter(e => (e.type === 'concert' || e.type === 'lesson'))
+      .filter(e => e.type === 'concert' || e.type === 'lesson' || e.type === 'dj_set')
       .filter(e => e.date >= from && e.date <= this.today)
       .filter(e => !paidIds.has(e.id))
       .map(e => ({
@@ -602,8 +624,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.quickCreateDone = false;
     this.quickCreateLabel = '';
     this.draft = {
-      kind: draft.kind === 'lesson' ? 'lesson' : 'concert',
-      title: `${draft.title || (draft.kind === 'lesson' ? 'Lezione' : 'Concerto')}`,
+      kind: draft.kind === 'lesson' ? 'lesson' : (draft.kind === 'dj_set' ? 'dj_set' : 'concert'),
+      title: `${draft.title || (draft.kind === 'lesson' ? 'Lezione' : (draft.kind === 'dj_set' ? 'DJ Set' : 'Concerto'))}`,
       contactId: `${draft.contactId || ''}`,
       timeStart: `${draft.timeStart || (draft.kind === 'lesson' ? '16:00' : '21:00')}`,
       timeEnd: `${draft.timeEnd || ''}`,
@@ -636,6 +658,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const firstBand = `${event.band?.[0]?.name || ''}`.trim();
     if (firstBand) return firstBand;
     return event.type === 'lesson' ? 'allievo da definire' : 'destinazione da definire';
+  }
+
+  private isPerformanceKind(kind: QuickCreateKind): boolean {
+    return kind === 'concert' || kind === 'dj_set';
+  }
+
+  private hasPerformanceConflict(date: string): boolean {
+    return this.allEvents.some(event => {
+      if (event.status === 'cancelled') return false;
+      const performanceType = event.type === 'concert' || event.type === 'dj_set';
+      return performanceType && event.date === date;
+    });
+  }
+
+  private typeClass(event: EventDetail): string {
+    if (event.type === 'lesson') return 'chip-lesson';
+    if (event.type === 'dj_set') return 'chip-dj';
+    if (event.type === 'concert') return 'chip-concert';
+    return 'chip-other';
   }
 
   private async fetchDraftAddressSuggestions(query: string): Promise<void> {
@@ -711,6 +752,57 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const m = `${date.getMonth() + 1}`.padStart(2, '0');
     const d = `${date.getDate()}`.padStart(2, '0');
     return `${y}-${m}-${d}`;
+  }
+
+  private hasAnyPayment(eventId: string): boolean {
+    const payments: { eventId?: string }[] = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
+    return payments.some(payment => payment.eventId === eventId);
+  }
+
+  private ensureSignedContractsInEvents(events: EventDetail[]): EventDetail[] {
+    const contracts: SignedContractSnapshot[] = JSON.parse(localStorage.getItem('mm_contracts') || '[]');
+    if (!Array.isArray(contracts) || contracts.length === 0) return events;
+    const merged = [...events];
+    let changed = false;
+    for (const contract of contracts) {
+      if (contract.status !== 'signed') continue;
+      if (!`${contract.eventDate || ''}`.trim()) continue;
+      const marker = `contract:${contract.id}`;
+      const existing = merged.find(event => `${event.notes || ''}`.includes(marker));
+      if (existing) {
+        if (existing.status !== 'pending' && !this.hasAnyPayment(existing.id)) {
+          existing.status = 'pending';
+          changed = true;
+        }
+        continue;
+      }
+      const eventType: EventDetail['type'] = contract.contractType === 'insegnante'
+        ? 'lesson'
+        : (contract.contractType === 'dj' ? 'dj_set' : 'concert');
+      merged.push({
+        id: crypto.randomUUID(),
+        title: `${contract.eventTitle || (eventType === 'lesson' ? 'Lezione da contratto' : (eventType === 'dj_set' ? 'DJ Set da contratto' : 'Concerto da contratto'))}`,
+        date: `${contract.eventDate || ''}`,
+        timeStart: '',
+        timeEnd: '',
+        venue: `${contract.eventLocation || ''}`,
+        address: `${contract.eventLocation || ''}`,
+        type: eventType,
+        band: [],
+        grossFee: Number(contract.agreedFee || 0),
+        netFee: Number(contract.agreedFee || 0),
+        compensoType: contract.billingMode,
+        notes: `${contract.notes ? contract.notes + ' · ' : ''}${marker}`,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      });
+      changed = true;
+    }
+    if (changed) {
+      localStorage.setItem('mm_events', JSON.stringify(merged));
+      void this.syncSupabaseEvents();
+    }
+    return merged;
   }
 
   private cleanupDashboardDraftEvents(events: EventDetail[]): EventDetail[] {

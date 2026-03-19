@@ -25,6 +25,12 @@ export type Musician = {
   workerType?: 'cooperativa' | 'libero_professionista' | 'insegnante_piva' | 'misto_piva_lezioni_cooperativa_musica' | 'esente';
   lessonBillingMode?: 'in_fattura' | 'fuori_fattura';
   musicBillingMode?: 'in_fattura' | 'fuori_fattura';
+  taxRegime?: 'ordinario' | 'forfettario';
+  vatMode?: 'iva_ordinaria' | 'esente' | 'forfettario';
+  irpefBracket?: '23' | '35' | '43';
+  substituteTaxPercent?: number;
+  estimatedAnnualRevenue?: number;
+  estimatedAnnualCosts?: number;
   empalsPosition?: string;
   enpalsCategory?: string;
   exemptEmployer?: string;
@@ -37,9 +43,13 @@ export type Musician = {
   social?: SocialProfiles;
   inpsExempt?: boolean;
   inpsData?: InpsExemption | null;
+  isMusician?: boolean;
   isTeacher?: boolean;
+  isDj?: boolean;
   lessonColor?: string | null;
   concertColor?: string | null;
+  djColor?: string | null;
+  djCode?: string;
   signatureData?: string;
   createdAt?: string;
 };

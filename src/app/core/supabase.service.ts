@@ -108,7 +108,7 @@ export class SupabaseService {
     return code;
   }
 
-  async addEvent(musicianId: string, title: string, date: string, type: 'lesson' | 'concert'): Promise<void> {
+  async addEvent(musicianId: string, title: string, date: string, type: 'lesson' | 'concert' | 'dj_set'): Promise<void> {
     await this.init();
     if (!this.client) throw new Error('Supabase non inizializzato');
     const { error } = await this.client.from('events').insert({
@@ -393,6 +393,12 @@ export class SupabaseService {
       workerType: metadata.workerType || '',
       lessonBillingMode: metadata.lessonBillingMode || 'fuori_fattura',
       musicBillingMode: metadata.musicBillingMode || 'fuori_fattura',
+      taxRegime: metadata.taxRegime || 'ordinario',
+      vatMode: metadata.vatMode || 'iva_ordinaria',
+      irpefBracket: metadata.irpefBracket || '23',
+      substituteTaxPercent: Number(metadata.substituteTaxPercent || 15),
+      estimatedAnnualRevenue: Number(metadata.estimatedAnnualRevenue || 0),
+      estimatedAnnualCosts: Number(metadata.estimatedAnnualCosts || 0),
       empalsPosition: metadata.empalsPosition || '',
       exemptEmployer: metadata.exemptEmployer || '',
       exemptEmployerType: metadata.exemptEmployerType || 'dipendente',
@@ -408,9 +414,12 @@ export class SupabaseService {
       inpsNumber: metadata.inpsData?.number || '',
       inpsStartDate: metadata.inpsData?.startDate || '',
       inpsEndDate: metadata.inpsData?.endDate || '',
+      isMusician: metadata.isMusician !== false,
       isTeacher: metadata.isTeacher === true,
+      isDj: metadata.isDj === true,
       lessonColor: metadata.lessonColor || '#2e7d32',
-      concertColor: metadata.concertColor || '#1565c0'
+      concertColor: metadata.concertColor || '#1565c0',
+      djColor: metadata.djColor || '#8b5cf6'
     };
   }
 
@@ -655,6 +664,12 @@ export class SupabaseService {
       workerType: m.workerType ?? null,
       lessonBillingMode: m.lessonBillingMode ?? null,
       musicBillingMode: m.musicBillingMode ?? null,
+      taxRegime: m.taxRegime ?? 'ordinario',
+      vatMode: m.vatMode ?? 'iva_ordinaria',
+      irpefBracket: m.irpefBracket ?? '23',
+      substituteTaxPercent: m.substituteTaxPercent ?? 15,
+      estimatedAnnualRevenue: m.estimatedAnnualRevenue ?? 0,
+      estimatedAnnualCosts: m.estimatedAnnualCosts ?? 0,
       empalsPosition: m.empalsPosition ?? null,
       enpalsCategory: m.enpalsCategory ?? null,
       exemptEmployer: m.exemptEmployer ?? null,
@@ -665,11 +680,15 @@ export class SupabaseService {
       social: m.social ?? {},
       inpsExempt: m.inpsExempt ?? false,
       inpsData: m.inpsData ?? null,
+      isMusician: m.isMusician ?? true,
       isTeacher: m.isTeacher ?? false,
+      isDj: m.isDj ?? false,
       appSource: 'musician_manager',
       appKey: 'musician_manager',
       lessonColor: m.lessonColor ?? null,
       concertColor: m.concertColor ?? null,
+      djColor: m.djColor ?? null,
+      djCode: m.djCode ?? null,
       signatureData: m.signatureData ?? null
     };
   }

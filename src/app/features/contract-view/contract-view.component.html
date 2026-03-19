@@ -1,0 +1,123 @@
+<div class="cv-wrap">
+  <div class="cv-notfound" *ngIf="notFound">
+    <div class="cv-card">
+      <div class="cv-icon">🔗</div>
+      <h1>Contratto non trovato</h1>
+      <p>Il link potrebbe essere errato o il contratto non esiste.</p>
+      <p class="cv-hint">Contatta il musicista per ricevere un nuovo link.</p>
+    </div>
+  </div>
+
+  <div class="cv-signed" *ngIf="!notFound && alreadySigned && contract">
+    <div class="cv-card">
+      <div class="cv-icon">✅</div>
+      <h1>Contratto già firmato</h1>
+      <p>Questo contratto risulta già sottoscritto in data <strong>{{ formatDate(contract.signedAt!) }}</strong>.</p>
+      <div class="cv-signed-preview" *ngIf="contract.signatureData">
+        <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" [src]="contract.signatureData" alt="Firma" class="sig-img" (error)="$any($event.target).style.display='none'">
+      </div>
+      <button type="button" class="btn-outline" (click)="downloadPdf()">📄 Scarica PDF</button>
+      <a class="btn-ghost" routerLink="/">← Torna al sito</a>
+    </div>
+  </div>
+
+  <div class="cv-success" *ngIf="signSuccess && contract">
+    <div class="cv-card">
+      <div class="cv-icon">🎉</div>
+      <h1>Contratto firmato!</h1>
+      <p>Grazie <strong>{{ contract.customerName }}</strong>, il contratto per <strong>{{ contract.eventTitle }}</strong> del {{ formatDate(contract.eventDate) }} è stato sottoscritto.</p>
+      <p class="cv-hint">Una copia ti è stata inviata via email. Il musicista riceverà notifica automatica.</p>
+      <button type="button" class="btn-outline" (click)="downloadPdf()">📄 Scarica PDF</button>
+      <a class="btn-ghost" routerLink="/">← Torna al sito</a>
+    </div>
+  </div>
+
+  <div class="cv-main" *ngIf="contract && !alreadySigned && !signSuccess">
+    <div class="cv-card cv-contract-card">
+      <div class="cv-topbar">
+        <div class="cv-type-badge">{{ contractTypeLabel() }}</div>
+        <button type="button" class="btn-pdf-top" (click)="downloadPdf()">📄 PDF</button>
+      </div>
+      <div class="cv-title">{{ contract.eventTitle }}</div>
+      <div class="cv-meta">
+        <span>📅 {{ formatDate(contract.eventDate) }}</span>
+        <span *ngIf="contract.eventLocation">📍 {{ contract.eventLocation }}</span>
+      </div>
+
+      <div class="cv-parties">
+        <div class="cv-party">
+          <div class="cv-party-label">PRESTATORE</div>
+          <div class="cv-party-name">{{ contract.musicianName }}</div>
+          <div class="cv-party-detail" *ngIf="contract.musicianCode">Cod. {{ contract.musicianCode }}</div>
+          <div class="cv-party-detail" *ngIf="contract.djCode">DJ Cod. {{ contract.djCode }}</div>
+        </div>
+        <div class="cv-vs">→</div>
+        <div class="cv-party">
+          <div class="cv-party-label">CLIENTE</div>
+          <div class="cv-party-name">{{ contract.customerName }}</div>
+          <div class="cv-party-detail">Responsabile: {{ contract.responsibleName || contract.customerName }}</div>
+          <div class="cv-party-detail">{{ contract.customerEmail }}</div>
+          <div class="cv-party-detail" *ngIf="contract.customerPhone">{{ contract.customerPhone }}</div>
+        </div>
+      </div>
+
+      <div class="cv-details">
+        <div class="cv-detail-row">
+          <span>Compenso concordato</span>
+          <strong>{{ contract.agreedFee | currency:'EUR':'symbol':'1.0-0' }}</strong>
+        </div>
+        <div class="cv-detail-row">
+          <span>Modalità fatturazione</span>
+          <strong>{{ billingLabel() }}</strong>
+        </div>
+        <div class="cv-detail-row" *ngIf="contract.notes">
+          <span>Note</span>
+          <span>{{ contract.notes }}</span>
+        </div>
+      </div>
+
+      <div class="cv-clauses">
+        <div class="cv-clause-note" [class.cv-clause-custom]="contract.contractText" *ngIf="contract.contractType === 'dj'">
+          <strong *ngIf="!contract.contractText">⚠️ Obbligo agibilità INPS</strong>
+          <strong *ngIf="contract.contractText">📋 Clausole contrattuali</strong>
+          <p *ngIf="!contract.contractText">Per DJ è obbligatoria l'agibilità INPS prima dell'evento. Senza agibilità il contratto è nullo.</p>
+          <p *ngIf="contract.contractText">{{ contract.contractText }}</p>
+        </div>
+        <div class="cv-clause-note" [class.cv-clause-custom]="contract.contractText" *ngIf="contract.contractType === 'musicista'">
+          <strong *ngIf="!contract.contractText">📋 Condizioni generali</strong>
+          <strong *ngIf="contract.contractText">📋 Clausole contrattuali</strong>
+          <p *ngIf="!contract.contractText">Il presente contratto disciplina la prestazione musicale indicata. Il compenso sarà corrisposto secondo le modalità concordate.</p>
+          <p *ngIf="contract.contractText">{{ contract.contractText }}</p>
+        </div>
+        <div class="cv-clause-note" [class.cv-clause-custom]="contract.contractText" *ngIf="contract.contractType === 'insegnante'">
+          <strong *ngIf="!contract.contractText">📋 Contratto di insegnamento</strong>
+          <strong *ngIf="contract.contractText">📋 Clausole contrattuali</strong>
+          <p *ngIf="!contract.contractText">Il presente contratto disciplina l'attività di insegnamento indicata secondo il programma concordato.</p>
+          <p *ngIf="contract.contractText">{{ contract.contractText }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="cv-card cv-sign-card">
+      <h2>✍️ Firma responsabile</h2>
+      <p class="cv-sign-hint">Firma di {{ contract.responsibleName || contract.customerName }}</p>
+      <div class="sig-wrapper">
+        <canvas #sigCanvas class="sig-canvas"
+          width="520" height="140"
+          (mousedown)="onSigMouseDown($event)"
+          (mousemove)="onSigMouseMove($event)"
+          (mouseup)="onSigMouseUp()"
+          (mouseleave)="onSigMouseUp()"
+          (touchstart)="onSigTouchStart($event)"
+          (touchmove)="onSigTouchMove($event)"
+          (touchend)="onSigTouchEnd()">
+        </canvas>
+      </div>
+      <p class="sig-hint">☝️ Disegna con mouse o dito</p>
+      <div class="sig-actions">
+        <button type="button" class="btn-ghost-sm" (click)="clearSignature()">✕ Cancella</button>
+        <button type="button" class="btn-sign" (click)="signContract()">✅ Firma e invia</button>
+      </div>
+    </div>
+  </div>
+</div>

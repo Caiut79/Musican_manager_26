@@ -99,7 +99,7 @@ export class ContractsComponent implements OnInit {
   }
 
   get musicianCode(): string {
-    return localStorage.getItem('mm_affiliation_code') || localStorage.getItem('musicianCode') || '';
+    return localStorage.getItem('mm_musician_role_code') || localStorage.getItem('mm_affiliation_code') || localStorage.getItem('musicianCode') || '';
   }
 
   get djCode(): string {

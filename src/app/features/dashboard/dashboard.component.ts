@@ -319,8 +319,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.quickCreateError = 'Inserisci ora inizio';
       return;
     }
-    if (this.isPerformanceKind(this.draft.kind) && this.hasPerformanceConflict(this.selectedDate)) {
-      this.quickCreateError = 'Data già occupata da un evento musica/DJ';
+    if (this.hasScheduleConflict(this.selectedDate, this.draft.timeStart)) {
+      this.quickCreateError = 'Slot già occupato: scegli un altro orario';
       return;
     }
     const now = new Date().toISOString();
@@ -660,15 +660,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return event.type === 'lesson' ? 'allievo da definire' : 'destinazione da definire';
   }
 
-  private isPerformanceKind(kind: QuickCreateKind): boolean {
-    return kind === 'concert' || kind === 'dj_set';
-  }
-
-  private hasPerformanceConflict(date: string): boolean {
+  private hasScheduleConflict(date: string, timeStart: string): boolean {
+    if (!date || !timeStart) return false;
     return this.allEvents.some(event => {
       if (event.status === 'cancelled') return false;
-      const performanceType = event.type === 'concert' || event.type === 'dj_set';
-      return performanceType && event.date === date;
+      return event.date === date && `${event.timeStart || ''}` === timeStart;
     });
   }
 

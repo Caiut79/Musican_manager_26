@@ -176,6 +176,20 @@
 
   <!-- ── TAB: Concerti ─────────────────────────────────────────────────────── -->
   <div *ngIf="paymentTab === 'concerti'">
+    <div class="pay-flow-summary">
+      <div class="flow-card">
+        <div class="flow-title">Pagamenti a serata</div>
+        <div class="flow-line">Eventi: <strong>{{ immediateConcertEvents.length }}</strong></div>
+        <div class="flow-line">Pattuito: <strong>{{ immediateConcertAgreed | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+        <div class="flow-line">Incassato: <strong>{{ immediateConcertReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+      </div>
+      <div class="flow-card">
+        <div class="flow-title">Pagamenti mensili</div>
+        <div class="flow-line">Eventi: <strong>{{ monthlyConcertEvents.length }}</strong></div>
+        <div class="flow-line">Pattuito: <strong>{{ monthlyConcertAgreed | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+        <div class="flow-line">Incassato: <strong>{{ monthlyConcertReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
+      </div>
+    </div>
     <div class="pay-filter-row" *ngIf="availableBandFilters.length">
       <label>Filtra per band
         <select [(ngModel)]="selectedBandFilter">
@@ -206,6 +220,10 @@
           <span class="pay-status-badge" [ngClass]="paymentStatusClass(ev.id)">
             {{ paymentStatusLabel(ev.id) }}
           </span>
+          <button type="button" class="btn-pay-add btn-pay-text" (click)="toggleMiniTaxTool(ev)"
+                  title="Mini tool tasse serata" aria-label="Mini tool tasse serata">
+            {{ miniTaxEventId === ev.id ? 'Chiudi tool' : 'Mini tasse' }}
+          </button>
           <button type="button" class="btn-pay-add" (click)="openImmediateConcertPaymentForm(ev)"
                   *ngIf="isImmediateConcert(ev) && !(showPaymentForm && draft.eventId === ev.id)"
                   title="Registra pagamento" aria-label="Registra pagamento">
@@ -226,6 +244,61 @@
                   title="Annulla" aria-label="Annulla registrazione pagamento">
             <i class="ti ti-x"></i>
           </button>
+        </div>
+      </div>
+
+      <div class="mini-tax-box" *ngIf="miniTaxEventId === ev.id">
+        <div class="mini-tax-grid">
+          <label>Lordo serata
+            <input type="number" min="0" step="0.01" [(ngModel)]="miniTaxDraft.gross">
+          </label>
+          <label>Modalità fiscale
+            <select [(ngModel)]="miniTaxDraft.fiscalMode">
+              <option value="cooperativa">Cooperativa</option>
+              <option value="associazione">Associazione</option>
+              <option value="piva">Partita IVA</option>
+            </select>
+          </label>
+          <ng-container *ngIf="miniTaxDraft.fiscalMode !== 'piva'">
+            <label>Costo cooperativa %
+              <input type="number" min="0" step="0.1" [(ngModel)]="miniTaxDraft.cooperativeFeePercent">
+            </label>
+            <label>Contributi/tasse coop %
+              <input type="number" min="0" step="0.1" [(ngModel)]="miniTaxDraft.cooperativeTaxPercent">
+            </label>
+          </ng-container>
+          <ng-container *ngIf="miniTaxDraft.fiscalMode === 'piva'">
+            <label>Regime fiscale
+              <select [(ngModel)]="miniTaxDraft.taxRegime">
+                <option value="ordinario">Ordinario</option>
+                <option value="forfettario">Forfettario</option>
+                <option value="esente_eaps">Esente EAPS</option>
+              </select>
+            </label>
+            <label>Scaglione IRPEF
+              <select [(ngModel)]="miniTaxDraft.irpefBracket">
+                <option value="23">23%</option>
+                <option value="33">33%</option>
+                <option value="43">43%</option>
+              </select>
+            </label>
+            <label>Imposta sostitutiva %
+              <input type="number" min="0" step="1" [(ngModel)]="miniTaxDraft.substituteTaxPercent">
+            </label>
+            <label>IRAP %
+              <input type="number" min="0" step="0.1" [(ngModel)]="miniTaxDraft.irapPercent">
+            </label>
+            <label>INAIL %
+              <input type="number" min="0" step="0.1" [(ngModel)]="miniTaxDraft.inailPercent">
+            </label>
+          </ng-container>
+        </div>
+        <div class="mini-tax-results">
+          <span>Lordo: <strong>{{ miniTaxDraft.gross | currency:'EUR':'symbol':'1.0-2' }}</strong></span>
+          <span *ngIf="miniTaxDraft.fiscalMode !== 'piva'">Costi ente/cooperativa: <strong>{{ miniTaxCooperativeCosts | currency:'EUR':'symbol':'1.0-2' }}</strong></span>
+          <span *ngIf="miniTaxDraft.fiscalMode === 'piva'">Accantonamento tasse: <strong>{{ miniTaxDirectReserve | currency:'EUR':'symbol':'1.0-2' }}</strong></span>
+          <span>Netto immediato: <strong>{{ miniTaxImmediateNet | currency:'EUR':'symbol':'1.0-2' }}</strong></span>
+          <span>Netto stimato finale: <strong>{{ miniTaxEstimatedNet | currency:'EUR':'symbol':'1.0-2' }}</strong></span>
         </div>
       </div>
 

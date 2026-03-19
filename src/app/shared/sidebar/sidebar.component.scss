@@ -4,6 +4,17 @@
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
   z-index: 199;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.24s ease;
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  will-change: opacity;
+}
+
+.sidebar-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ════════════════════════════════════════
@@ -19,10 +30,11 @@
   flex-direction: column;
   z-index: 200;
   /* Smooth width transition */
-  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-              transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.22s ease;
+  transition: width 0.28s cubic-bezier(0.2, 0, 0, 1),
+              transform 0.28s cubic-bezier(0.2, 0, 0, 1),
+              box-shadow 0.28s ease;
   overflow: hidden;
+  will-change: width, transform;
 
   /* Labels sempre in DOM — opacity transition */
   .brand-name,
@@ -31,7 +43,7 @@
     opacity: 1;
     white-space: nowrap;
     overflow: hidden;
-    transition: opacity 0.15s ease;
+    transition: opacity 0.18s ease;
   }
 }
 
@@ -47,13 +59,19 @@
   .theme-lbl {
     opacity: 0;
     pointer-events: none;
+    width: 0;
+    max-width: 0;
+    flex: 0 0 0;
   }
 
   /* Centra le icone */
-  .nav-item { justify-content: center; padding: 10px 0; }
+  .nav-item { justify-content: center; padding: 10px 0; gap: 0; }
   .sidebar-header { justify-content: center; }
+  .brand-stack { flex-direction: column; gap: 6px; }
+  .brand-logo { width: 30px; height: 30px; }
+  .brand-mm { display: block; }
   .theme-row { align-items: stretch; flex-direction: column; gap: 2px; padding: 4px 8px 10px; }
-  .theme-btn { padding: 10px 0; width: auto; justify-content: center; }
+  .theme-btn { padding: 10px 0; width: auto; justify-content: center; gap: 0; }
 
   /* ── HOVER EXPAND (desktop & tablet con mouse) ── */
   @media (hover: hover) and (min-width: 768px) {
@@ -66,13 +84,19 @@
       .theme-lbl {
         opacity: 1;
         pointer-events: auto;
+        width: auto;
+        max-width: none;
+        flex: 1 1 auto;
         transition-delay: 0.06s;
       }
 
-      .nav-item  { justify-content: flex-start; padding: 10px 12px; }
+      .nav-item  { justify-content: flex-start; padding: 10px 12px; gap: 12px; }
       .sidebar-header { justify-content: flex-start; }
+      .brand-stack { flex-direction: row; gap: 10px; }
+      .brand-mm { display: none; }
       .theme-row { flex-direction: row; padding: 10px 10px; justify-content: flex-start; gap: 4px; }
-      .theme-btn { padding: 6px 10px; width: auto; justify-content: flex-start; }
+      .theme-row { flex-direction: row; padding: 10px 8px 14px; justify-content: flex-start; gap: 6px; }
+      .theme-btn { padding: 6px 6px; width: auto; justify-content: center; gap: 6px; flex: 1 1 0; min-width: 0; }
     }
   }
 }
@@ -116,10 +140,28 @@
   transition: justify-content 0.22s ease;
 }
 
-.brand-icon {
-  font-size: 22px;
-  color: #c4b5fd;
+.brand-stack {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
+}
+
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: block;
+  border-radius: 8px;
+}
+
+.brand-mm {
+  display: none;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #e9d5ff;
   line-height: 1;
 }
 
@@ -156,6 +198,7 @@
   color: rgba(255, 255, 255, 0.6);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.2;
   white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease, padding 0.22s ease, justify-content 0.22s ease;
 
@@ -175,6 +218,10 @@
   font-size: 20px;
   flex-shrink: 0;
   width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   line-height: 1;
   -webkit-font-smoothing: antialiased;
@@ -191,8 +238,8 @@
 .theme-row {
   display: flex;
   flex-direction: row;
-  gap: 4px;
-  padding: 10px 10px 14px;
+  gap: 6px;
+  padding: 10px 8px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
   transition: all 0.22s ease;
@@ -202,7 +249,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 6px 6px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   background: transparent;
@@ -211,9 +258,12 @@
   font-size: 13px;
   font-family: inherit;
   white-space: nowrap;
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
   transition: all 0.15s ease;
 
-  i { font-size: 16px; flex-shrink: 0; }
+  i { font-size: 16px; flex-shrink: 0; width: 18px; display: inline-flex; align-items: center; justify-content: center; }
 
   &:hover {
     background: rgba(255, 255, 255, 0.1);
@@ -228,7 +278,20 @@
   }
 }
 
-.theme-lbl { font-size: 11px; font-weight: 500; }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebar-backdrop,
+  .nav-item,
+  .theme-row,
+  .theme-btn,
+  .brand-name,
+  .nav-label,
+  .theme-lbl {
+    transition: none !important;
+  }
+}
+
+.theme-lbl { font-size: 11px; font-weight: 600; letter-spacing: 0.01em; }
 
 .visually-hidden {
   position: absolute;

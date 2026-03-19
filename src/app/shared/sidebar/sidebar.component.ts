@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, HostListener } from '@angular/core';
 import { ThemeService, Theme } from '../../services/theme.service';
 
 export type NavItem = {
@@ -19,6 +19,11 @@ export class SidebarComponent {
   @Output() sidebarClose = new EventEmitter<void>();
 
   constructor(public themeService: ThemeService) {}
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.mobileOpen) this.sidebarClose.emit();
+  }
 
   get currentTheme(): Theme { return this.themeService.theme; }
 

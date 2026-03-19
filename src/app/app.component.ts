@@ -17,6 +17,7 @@ export class AppComponent implements OnInit {
   ngOnInit() {
     this.themeService.init();
     this.checkBreakpoint();
+    this.applyBodyScrollLock();
   }
 
   @HostListener('window:resize')
@@ -33,6 +34,7 @@ export class AppComponent implements OnInit {
       // tablet + desktop: collapsed di default → hover per espandere
       this.sidebarCollapsed = true;
     }
+    this.applyBodyScrollLock();
   }
 
   toggleSidebar() {
@@ -41,10 +43,17 @@ export class AppComponent implements OnInit {
     } else {
       this.sidebarCollapsed = !this.sidebarCollapsed;
     }
+    this.applyBodyScrollLock();
   }
 
   closeMobileMenu() {
     this.mobileMenuOpen = false;
+    this.applyBodyScrollLock();
+  }
+
+  private applyBodyScrollLock(): void {
+    const locked = this.isMobile && this.mobileMenuOpen;
+    document.body.classList.toggle('mm-menu-open', locked);
   }
 
   isPublicRoute(): boolean {

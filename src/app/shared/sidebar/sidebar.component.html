@@ -1,20 +1,23 @@
 <!-- Mobile overlay backdrop -->
-<div class="sidebar-backdrop" *ngIf="mobileOpen" (click)="sidebarClose.emit()"></div>
+<div class="sidebar-backdrop" [class.open]="mobileOpen" (click)="sidebarClose.emit()" aria-hidden="true"></div>
 
 <!-- Sidebar panel -->
 <aside class="sidebar" [class.collapsed]="collapsed" [class.mobile-open]="mobileOpen">
 
   <!-- Header -->
   <div class="sidebar-header">
-    <i class="brand-icon ti ti-music"></i>
+    <div class="brand-stack">
+      <img class="brand-logo" src="assets/mm-logo.svg" alt="Musican Manager">
+      <div class="brand-mm">MM</div>
+    </div>
     <span class="brand-name">
-      <strong>Musicista</strong>
-      <small>By Band Manager</small>
+      <strong>Musican Manager</strong>
+      <small>Gestione professionale</small>
     </span>
   </div>
 
   <!-- Nav -->
-  <nav class="sidebar-nav">
+  <nav class="sidebar-nav" aria-label="Navigazione">
     <a
       *ngFor="let item of navItems"
       [routerLink]="item.route"

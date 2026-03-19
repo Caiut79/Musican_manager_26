@@ -12,6 +12,28 @@ export type InpsExemption = {
   endDate?: string;
 };
 
+export type RoleTaxSetup = {
+  code?: string;
+  fiscalMode?: 'cooperativa' | 'piva' | 'associazione';
+  supportEntity?: string;
+  vatNumber?: string;
+  taxRegime?: 'ordinario' | 'forfettario' | 'esente_eaps';
+  irpefBracket?: '23' | '33' | '43';
+  substituteTaxPercent?: number;
+  irapPercent?: number;
+  inailPercent?: number;
+  cooperativeFeePercent?: number;
+  cooperativeTaxPercent?: number;
+  eventGrossEstimate?: number;
+  inpsExempt?: boolean;
+};
+
+export type RoleSettings = {
+  musician?: RoleTaxSetup;
+  dj?: RoleTaxSetup;
+  teacher?: RoleTaxSetup;
+};
+
 export type Musician = {
   id?: string;
   code?: string;
@@ -27,7 +49,7 @@ export type Musician = {
   musicBillingMode?: 'in_fattura' | 'fuori_fattura';
   taxRegime?: 'ordinario' | 'forfettario';
   vatMode?: 'iva_ordinaria' | 'esente' | 'forfettario';
-  irpefBracket?: '23' | '35' | '43';
+  irpefBracket?: '23' | '33' | '43';
   substituteTaxPercent?: number;
   estimatedAnnualRevenue?: number;
   estimatedAnnualCosts?: number;
@@ -50,6 +72,7 @@ export type Musician = {
   concertColor?: string | null;
   djColor?: string | null;
   djCode?: string;
+  roleSettings?: RoleSettings;
   signatureData?: string;
   createdAt?: string;
 };

@@ -1,7 +1,8 @@
 <div class="booking-wrap">
   <div class="booking-card">
-    <h1>Richiesta musicista</h1>
+    <h1>Richiesta {{ roleLabel() }}</h1>
     <p class="subtitle">Stai richiedendo disponibilità per <strong>{{ musicianName }}</strong></p>
+    <p class="subtitle role-chip">Ruolo selezionato: <strong>{{ roleLabel() }}</strong></p>
     <p class="subtitle" *ngIf="affiliationCode">Codice di appartenenza: <strong>{{ affiliationCode }}</strong></p>
     <p class="subtitle ok-text" *ngIf="allowBandInvites">Questo profilo può essere aggiunto dalle band.</p>
 
@@ -15,8 +16,14 @@
       <label>Data evento
         <input type="date" formControlName="eventDate">
       </label>
+      <label>Orario inizio
+        <input type="time" formControlName="eventTime">
+      </label>
       <label>Tipo evento
         <input type="text" formControlName="eventType" placeholder="Serata privata">
+      </label>
+      <label>Codice di appartenenza (opzionale)
+        <input type="text" formControlName="bookingCode" placeholder="Inserisci codice ricevuto">
       </label>
       <label>Messaggio
         <textarea rows="4" formControlName="message" placeholder="Descrivi il tuo evento..."></textarea>

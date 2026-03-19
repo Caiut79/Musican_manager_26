@@ -78,8 +78,8 @@ export class EventsComponent implements OnInit {
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
 
     const v = this.form.value;
-    if ((v.type === 'concert' || v.type === 'dj_set') && this.hasPerformanceConflict(`${v.date || ''}`)) {
-      window.alert('Data già occupata da un evento musica/DJ');
+    if (this.hasScheduleConflict(`${v.date || ''}`, `${v.timeStart || ''}`)) {
+      window.alert('Slot già occupato in agenda: data e orario non disponibili');
       return;
     }
     const newEvent: EventDetail = {
@@ -157,11 +157,11 @@ export class EventsComponent implements OnInit {
     window.open(urls[app], '_blank');
   }
 
-  private hasPerformanceConflict(date: string): boolean {
+  private hasScheduleConflict(date: string, timeStart: string): boolean {
+    if (!date || !timeStart) return false;
     return this.events.some(event => {
       if (event.status === 'cancelled') return false;
-      const performance = event.type === 'concert' || event.type === 'dj_set';
-      return performance && event.date === date;
+      return event.date === date && `${event.timeStart || ''}` === timeStart;
     });
   }
 }

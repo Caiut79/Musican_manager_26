@@ -379,6 +379,10 @@ export class SupabaseService {
     const row: any = data[0] || {};
     const metadata = row.metadata || {};
     const social = metadata.social || {};
+    const roleSettings = metadata.roleSettings || {};
+    const musicianRole = roleSettings.musician || {};
+    const djRole = roleSettings.dj || {};
+    const teacherRole = roleSettings.teacher || {};
     return {
       firstName: row.first_name || '',
       lastName: row.last_name || '',
@@ -395,7 +399,7 @@ export class SupabaseService {
       musicBillingMode: metadata.musicBillingMode || 'fuori_fattura',
       taxRegime: metadata.taxRegime || 'ordinario',
       vatMode: metadata.vatMode || 'iva_ordinaria',
-      irpefBracket: metadata.irpefBracket || '23',
+      irpefBracket: `${metadata.irpefBracket || '23'}` === '35' ? '33' : (metadata.irpefBracket || '23'),
       substituteTaxPercent: Number(metadata.substituteTaxPercent || 15),
       estimatedAnnualRevenue: Number(metadata.estimatedAnnualRevenue || 0),
       estimatedAnnualCosts: Number(metadata.estimatedAnnualCosts || 0),
@@ -414,6 +418,44 @@ export class SupabaseService {
       inpsNumber: metadata.inpsData?.number || '',
       inpsStartDate: metadata.inpsData?.startDate || '',
       inpsEndDate: metadata.inpsData?.endDate || '',
+      musicianRoleCode: musicianRole.code || metadata.musicianRoleCode || '',
+      djRoleCode: djRole.code || metadata.djCode || '',
+      musicianFiscalMode: musicianRole.fiscalMode || 'cooperativa',
+      djFiscalMode: djRole.fiscalMode || 'cooperativa',
+      teacherFiscalMode: teacherRole.fiscalMode || 'associazione',
+      musicianSupportEntity: musicianRole.supportEntity || '',
+      djSupportEntity: djRole.supportEntity || '',
+      teacherSupportEntity: teacherRole.supportEntity || '',
+      musicianVatNumber: musicianRole.vatNumber || '',
+      djVatNumber: djRole.vatNumber || '',
+      teacherVatNumber: teacherRole.vatNumber || '',
+      musicianTaxRegime: musicianRole.taxRegime || 'ordinario',
+      djTaxRegime: djRole.taxRegime || 'ordinario',
+      teacherTaxRegime: teacherRole.taxRegime || 'forfettario',
+      musicianIrpefBracket: `${musicianRole.irpefBracket || '23'}` === '35' ? '33' : (musicianRole.irpefBracket || '23'),
+      djIrpefBracket: `${djRole.irpefBracket || '23'}` === '35' ? '33' : (djRole.irpefBracket || '23'),
+      teacherIrpefBracket: `${teacherRole.irpefBracket || '23'}` === '35' ? '33' : (teacherRole.irpefBracket || '23'),
+      musicianSubstituteTaxPercent: Number(musicianRole.substituteTaxPercent || 15),
+      djSubstituteTaxPercent: Number(djRole.substituteTaxPercent || 15),
+      teacherSubstituteTaxPercent: Number(teacherRole.substituteTaxPercent || 15),
+      musicianIrapPercent: Number(musicianRole.irapPercent || 3.9),
+      djIrapPercent: Number(djRole.irapPercent || 3.9),
+      teacherIrapPercent: Number(teacherRole.irapPercent || 3.9),
+      musicianInailPercent: Number(musicianRole.inailPercent || 0),
+      djInailPercent: Number(djRole.inailPercent || 0),
+      teacherInailPercent: Number(teacherRole.inailPercent || 0),
+      musicianCoopFeePercent: Number(musicianRole.cooperativeFeePercent || 12),
+      djCoopFeePercent: Number(djRole.cooperativeFeePercent || 12),
+      teacherCoopFeePercent: Number(teacherRole.cooperativeFeePercent || 8),
+      musicianCoopTaxPercent: Number(musicianRole.cooperativeTaxPercent || 9.19),
+      djCoopTaxPercent: Number(djRole.cooperativeTaxPercent || 9.19),
+      teacherCoopTaxPercent: Number(teacherRole.cooperativeTaxPercent || 5),
+      musicianEventGrossEstimate: Number(musicianRole.eventGrossEstimate || 0),
+      djEventGrossEstimate: Number(djRole.eventGrossEstimate || 0),
+      teacherEventGrossEstimate: Number(teacherRole.eventGrossEstimate || 0),
+      musicianInpsExemptRole: musicianRole.inpsExempt === true,
+      djInpsExemptRole: djRole.inpsExempt === true,
+      teacherInpsExemptRole: teacherRole.inpsExempt === true,
       isMusician: metadata.isMusician !== false,
       isTeacher: metadata.isTeacher === true,
       isDj: metadata.isDj === true,
@@ -688,6 +730,8 @@ export class SupabaseService {
       lessonColor: m.lessonColor ?? null,
       concertColor: m.concertColor ?? null,
       djColor: m.djColor ?? null,
+      musicianRoleCode: m.roleSettings?.musician?.code ?? null,
+      roleSettings: m.roleSettings ?? null,
       djCode: m.djCode ?? null,
       signatureData: m.signatureData ?? null
     };

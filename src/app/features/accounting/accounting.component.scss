@@ -214,6 +214,34 @@ tfoot td { font-weight: 600; border-top: 2px solid #e5e7eb; }
   }
 }
 
+.pay-flow-summary {
+  padding: 10px 20px 4px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  @media (max-width: 860px) { grid-template-columns: 1fr; }
+}
+
+.flow-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fafafa;
+  padding: 10px 12px;
+}
+
+.flow-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4c1d95;
+  margin-bottom: 4px;
+}
+
+.flow-line {
+  font-size: 12px;
+  color: #6b7280;
+  strong { color: #111827; }
+}
+
 .pec-top {
   display: flex;
   align-items: center;
@@ -278,6 +306,47 @@ tfoot td { font-weight: 600; border-top: 2px solid #e5e7eb; }
     font-size: 11px;
     font-weight: 600;
   }
+}
+
+.mini-tax-box {
+  margin: 0 20px 10px;
+  padding: 10px;
+  border: 1px solid #ddd6fe;
+  border-radius: 10px;
+  background: #f5f3ff;
+}
+
+.mini-tax-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+
+  label {
+    display: grid;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #4b5563;
+  }
+
+  input, select {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    background: #fff;
+  }
+}
+
+.mini-tax-results {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 12px;
+  color: #5b21b6;
+  strong { color: #111827; }
 }
 
 /* ── Payments list ──────────────────────────────────────────── */

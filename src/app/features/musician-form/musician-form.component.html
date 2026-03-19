@@ -178,90 +178,228 @@
 
   <!-- ── Step 3: ENPALS & Fiscale ── -->
   <section *ngIf="currentStep === 3">
-    <h2>Posizione ENPALS (Gestione Spettacolo INPS)</h2>
-    <div class="info-box info-amber" *ngIf="!hasLiveRole">
-      <h4>Profilo senza attività live</h4>
-      <p>Non hai selezionato Musicista o DJ: la sezione ENPALS live viene disattivata e resta attiva solo la parte fiscale generale.</p>
-    </div>
-    <div class="row" *ngIf="hasLiveRole">
-      <label class="span-2">Categoria
-        <select formControlName="empalsPosition">
-          <option *ngFor="let c of enpalsCategories" [value]="c.value">{{ c.label }}</option>
-        </select>
-      </label>
+    <div class="section-divider"></div>
+    <h2>Impostazioni separate per mansione</h2>
+    <p class="field-hint field-hint-spaced">Compila solo i blocchi dei ruoli selezionati. Ogni mansione mantiene configurazioni fiscali indipendenti.</p>
+
+    <div class="role-setup-card" *ngIf="isMusician">
+      <h3>🎵 Configurazione Musicista</h3>
+      <div class="row">
+        <label>Codice Musicista
+          <input type="text" formControlName="musicianRoleCode" placeholder="MU0000" readonly>
+        </label>
+        <label>Modalità fiscale
+          <select formControlName="musicianFiscalMode">
+            <option value="cooperativa">Cooperativa</option>
+            <option value="piva">Partita IVA</option>
+          </select>
+        </label>
+        <label>Cooperativa/Studio di riferimento
+          <input type="text" formControlName="musicianSupportEntity" placeholder="Nome cooperativa o studio">
+        </label>
+      </div>
+      <div class="row">
+        <label>Partita IVA
+          <input type="text" formControlName="musicianVatNumber" placeholder="IT...">
+        </label>
+        <label>Regime fiscale
+          <select formControlName="musicianTaxRegime">
+            <option value="ordinario">Ordinario</option>
+            <option value="forfettario">Forfettario</option>
+            <option value="esente_eaps">Esente EAPS</option>
+          </select>
+        </label>
+        <label>IRPEF prevalente
+          <select formControlName="musicianIrpefBracket">
+            <option value="23">23%</option>
+            <option value="33">33%</option>
+            <option value="43">43%</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Imposta sostitutiva (%)
+          <input type="number" formControlName="musicianSubstituteTaxPercent" min="0" max="30" step="1">
+        </label>
+        <label>IRAP (%)
+          <input type="number" formControlName="musicianIrapPercent" min="0" max="20" step="0.1">
+        </label>
+        <label>INAIL (%)
+          <input type="number" formControlName="musicianInailPercent" min="0" max="20" step="0.1">
+        </label>
+      </div>
+      <div class="row">
+        <label>Compenso lordo serata (€)
+          <input type="number" formControlName="musicianEventGrossEstimate" min="0" step="10">
+        </label>
+        <label>Costo cooperativa (%)
+          <input type="number" formControlName="musicianCoopFeePercent" min="0" max="50" step="0.1">
+        </label>
+        <label>Contributi/tasse cooperativa (%)
+          <input type="number" formControlName="musicianCoopTaxPercent" min="0" max="50" step="0.1">
+        </label>
+      </div>
+      <div class="check-row">
+        <label class="check-label">
+          <input type="checkbox" formControlName="musicianInpsExemptRole">
+          <span>Esente INPS ex ENPALS per attività musicista</span>
+        </label>
+      </div>
+      <div class="info-box info-purple" *ngIf="form.get('musicianInpsExemptRole')?.value">
+        <h4>Esenzione INPS ex ENPALS attiva</h4>
+        <p>Impostazione applicata solo al ruolo Musicista. Puoi usare la firma qui sotto per i moduli di esenzione.</p>
+      </div>
+      <div class="signature-section" *ngIf="form.get('musicianInpsExemptRole')?.value">
+        <h3>✍ Firma digitale Musicista</h3>
+        <p class="field-hint">Firma usata per i moduli di esenzione ENPALS del ruolo Musicista.</p>
+        <div class="sig-wrapper">
+          <canvas #sigCanvas class="sig-canvas"
+            width="560" height="160"
+            (mousedown)="onSigMouseDown($event)"
+            (mousemove)="onSigMouseMove($event)"
+            (mouseup)="onSigMouseUp()"
+            (mouseleave)="onSigMouseUp()"
+            (touchstart)="onSigTouchStart($event)"
+            (touchmove)="onSigTouchMove($event)"
+            (touchend)="onSigTouchEnd()">
+          </canvas>
+        </div>
+        <p class="sig-hint">☝️ Disegna la firma nel riquadro con mouse o dito</p>
+        <div class="sig-actions">
+          <button type="button" class="btn-ghost" (click)="clearSignature()">✕ Cancella</button>
+          <button type="button" class="btn-outline" (click)="saveSignature()">
+            {{ signatureSaved ? '✓ Firma salvata' : '💾 Salva firma' }}
+          </button>
+        </div>
+      </div>
+      <div class="info-box info-blue">
+        <h4>Simulazione Musicista</h4>
+        <p>Lordo serata: <strong>{{ musicianSimulation.gross | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+        <p *ngIf="musicianSimulation.mode === 'cooperativa'">Netto stimato dopo cooperativa: <strong>{{ musicianSimulation.netAfterTaxes | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+        <p *ngIf="musicianSimulation.mode === 'piva'">Incasso immediato: <strong>{{ musicianSimulation.netImmediate | currency:'EUR':'symbol':'1.0-2' }}</strong> · Accantonamento tasse stimato: <strong>{{ musicianSimulation.taxReserve | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+      </div>
     </div>
 
-    <div class="section-divider" *ngIf="hasLiveRole"></div>
-    <h2 *ngIf="hasLiveRole">Tipo di attività live</h2>
-    <p class="field-hint field-hint-spaced" *ngIf="hasLiveRole">Seleziona come operi professionalmente per serate live e DJ set</p>
-
-    <div class="worker-type-grid" *ngIf="hasLiveRole">
-      <label class="worker-card" [class.selected]="workerType === 'cooperativa'">
-        <input type="radio" formControlName="workerType" value="cooperativa" (change)="onWorkerTypeChange('cooperativa')">
-        <span class="wc-icon">🏢</span>
-        <span class="wc-title">Cooperativa</span>
-        <span class="wc-desc">Lavoro attraverso una cooperativa di musica/spettacolo</span>
-      </label>
-      <label class="worker-card" [class.selected]="workerType === 'libero_professionista'">
-        <input type="radio" formControlName="workerType" value="libero_professionista" (change)="onWorkerTypeChange('libero_professionista')">
-        <span class="wc-icon">💼</span>
-        <span class="wc-title">Libero professionista</span>
-        <span class="wc-desc">Ho partita IVA e fattura direttamente le serate</span>
-      </label>
-      <label class="worker-card" [class.selected]="workerType === 'insegnante_piva'">
-        <input type="radio" formControlName="workerType" value="insegnante_piva" (change)="onWorkerTypeChange('insegnante_piva')">
-        <span class="wc-icon">🎓</span>
-        <span class="wc-title">Insegnante + serate</span>
-        <span class="wc-desc">Uso la stessa P.IVA per lezioni e serate dal vivo</span>
-      </label>
-      <label class="worker-card" [class.selected]="workerType === 'misto_piva_lezioni_cooperativa_musica'">
-        <input type="radio" formControlName="workerType" value="misto_piva_lezioni_cooperativa_musica" (change)="onWorkerTypeChange('misto_piva_lezioni_cooperativa_musica')">
-        <span class="wc-icon">🧾</span>
-        <span class="wc-title">Misto: P.IVA lezioni + cooperativa musica</span>
-        <span class="wc-desc">Fatturo lezioni con P.IVA e gestisco serate con cooperativa</span>
-      </label>
+    <div class="role-setup-card" *ngIf="isDj">
+      <h3>🎧 Configurazione DJ</h3>
+      <div class="row">
+        <label>Codice DJ
+          <input type="text" formControlName="djRoleCode" placeholder="DJ0000" readonly>
+        </label>
+        <label>Modalità fiscale
+          <select formControlName="djFiscalMode">
+            <option value="cooperativa">Cooperativa</option>
+            <option value="piva">Partita IVA</option>
+          </select>
+        </label>
+        <label>Cooperativa/Studio di riferimento
+          <input type="text" formControlName="djSupportEntity" placeholder="Nome cooperativa o studio">
+        </label>
+      </div>
+      <div class="row">
+        <label>Partita IVA
+          <input type="text" formControlName="djVatNumber" placeholder="IT...">
+        </label>
+        <label>Regime fiscale
+          <select formControlName="djTaxRegime">
+            <option value="ordinario">Ordinario</option>
+            <option value="forfettario">Forfettario</option>
+          </select>
+        </label>
+        <label>IRPEF prevalente
+          <select formControlName="djIrpefBracket">
+            <option value="23">23%</option>
+            <option value="33">33%</option>
+            <option value="43">43%</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>Imposta sostitutiva (%)
+          <input type="number" formControlName="djSubstituteTaxPercent" min="0" max="30" step="1">
+        </label>
+        <label>IRAP (%)
+          <input type="number" formControlName="djIrapPercent" min="0" max="20" step="0.1">
+        </label>
+        <label>INAIL (%)
+          <input type="number" formControlName="djInailPercent" min="0" max="20" step="0.1">
+        </label>
+      </div>
+      <div class="row">
+        <label>Compenso lordo serata (€)
+          <input type="number" formControlName="djEventGrossEstimate" min="0" step="10">
+        </label>
+        <label>Costo cooperativa (%)
+          <input type="number" formControlName="djCoopFeePercent" min="0" max="50" step="0.1">
+        </label>
+        <label>Contributi/tasse cooperativa (%)
+          <input type="number" formControlName="djCoopTaxPercent" min="0" max="50" step="0.1">
+        </label>
+      </div>
+      <div class="info-box info-purple">
+        <h4>Simulazione DJ</h4>
+        <p>Lordo serata: <strong>{{ djSimulation.gross | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+        <p *ngIf="djSimulation.mode === 'cooperativa'">Netto stimato dopo cooperativa: <strong>{{ djSimulation.netAfterTaxes | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+        <p *ngIf="djSimulation.mode === 'piva'">Incasso immediato: <strong>{{ djSimulation.netImmediate | currency:'EUR':'symbol':'1.0-2' }}</strong> · Accantonamento tasse stimato: <strong>{{ djSimulation.taxReserve | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+      </div>
     </div>
 
-    <div class="info-box info-blue" *ngIf="hasLiveRole && workerType === 'cooperativa'">
-      <h4>🏢 Cooperativa di spettacolo</h4>
-      <p>La cooperativa è il tuo datore di lavoro e gestisce i contributi ENPALS:</p>
-      <ul>
-        <li>Contributo a carico del <strong>lavoratore</strong>: ~9,19% del lordo</li>
-        <li>Contributo a carico della <strong>cooperativa</strong>: ~24% del lordo</li>
-        <li>Totale Gestione Spettacolo INPS: circa 33% del lordo</li>
-      </ul>
+    <div class="role-setup-card" *ngIf="isTeacher">
+      <h3>🎓 Configurazione Insegnante</h3>
+      <div class="row">
+        <label>Modalità fiscale
+          <select formControlName="teacherFiscalMode">
+            <option value="associazione">Associazione d'appoggio</option>
+            <option value="piva">Partita IVA</option>
+            <option value="cooperativa">Cooperativa</option>
+          </select>
+        </label>
+        <label>Associazione/Studio di riferimento
+          <input type="text" formControlName="teacherSupportEntity" placeholder="Nome associazione o studio">
+        </label>
+        <label>Partita IVA
+          <input type="text" formControlName="teacherVatNumber" placeholder="IT...">
+        </label>
+      </div>
+      <div class="row">
+        <label>Regime fiscale
+          <select formControlName="teacherTaxRegime">
+            <option value="ordinario">Ordinario</option>
+            <option value="forfettario">Forfettario</option>
+            <option value="esente_eaps">Esente EAPS</option>
+          </select>
+        </label>
+        <label>IRPEF prevalente
+          <select formControlName="teacherIrpefBracket">
+            <option value="23">23%</option>
+            <option value="33">33%</option>
+            <option value="43">43%</option>
+          </select>
+        </label>
+        <label>Imposta sostitutiva (%)
+          <input type="number" formControlName="teacherSubstituteTaxPercent" min="0" max="30" step="1">
+        </label>
+      </div>
+      <div class="row">
+        <label>Compenso lordo lezione/evento (€)
+          <input type="number" formControlName="teacherEventGrossEstimate" min="0" step="10">
+        </label>
+        <label>Costo ente d'appoggio (%)
+          <input type="number" formControlName="teacherCoopFeePercent" min="0" max="50" step="0.1">
+        </label>
+        <label>Contributi/tasse ente (%)
+          <input type="number" formControlName="teacherCoopTaxPercent" min="0" max="50" step="0.1">
+        </label>
+      </div>
+      <div class="info-box info-green">
+        <h4>Simulazione Insegnante</h4>
+        <p>Lordo: <strong>{{ teacherSimulation.gross | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+        <p *ngIf="teacherSimulation.mode !== 'piva'">Netto stimato dopo trattenute ente: <strong>{{ teacherSimulation.netAfterTaxes | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+        <p *ngIf="teacherSimulation.mode === 'piva'">Incasso immediato: <strong>{{ teacherSimulation.netImmediate | currency:'EUR':'symbol':'1.0-2' }}</strong> · Accantonamento tasse stimato: <strong>{{ teacherSimulation.taxReserve | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
+      </div>
     </div>
 
-    <div class="info-box info-green" *ngIf="hasLiveRole && workerType === 'libero_professionista'">
-      <h4>💼 Libero professionista con P.IVA</h4>
-      <p>Come libero professionista nel settore spettacolo:</p>
-      <ul>
-        <li>Richiedi l'<strong>agibilità INPS</strong> per ogni scrittura</li>
-        <li>Contributi Gestione Spettacolo INPS: ~33% del compenso lordo</li>
-        <li>IVA 22% sulle fatture (o regime forfettario se idoneo)</li>
-      </ul>
-    </div>
-
-    <div class="info-box info-amber" *ngIf="hasLiveRole && workerType === 'insegnante_piva'">
-      <h4>🎓 Insegnante con P.IVA (doppio uso)</h4>
-      <p>Se usi la stessa P.IVA per lezioni e serate:</p>
-      <ul>
-        <li>Verifica con il commercialista che il codice ATECO copra anche le esibizioni</li>
-        <li><strong>Regime forfettario</strong>: nessuna IVA, imposta sostitutiva 5–15%</li>
-        <li>Obbligatoria l'iscrizione ENPALS se superi le prestazioni occasionali</li>
-        <li>Considera di separare l'attività di insegnamento da quella artistica</li>
-      </ul>
-    </div>
-
-    <div class="info-box info-purple" *ngIf="hasLiveRole && workerType === 'misto_piva_lezioni_cooperativa_musica'">
-      <h4>🧾 Regime misto</h4>
-      <p>Configurazione supportata: lezioni con P.IVA, serate con cooperativa.</p>
-      <ul>
-        <li>Lezioni: in fattura</li>
-        <li>Concerti / serate: fuori fattura in app, con nota gestione cooperativa</li>
-      </ul>
-    </div>
-
+    <ng-container *ngIf="false">
     <div class="section-divider"></div>
     <h2>Modalità fatturazione per attività</h2>
     <div class="row">
@@ -309,7 +447,7 @@
       <label *ngIf="taxRegime === 'ordinario'">Scaglione IRPEF prevalente
         <select formControlName="irpefBracket">
           <option value="23">23%</option>
-          <option value="35">35%</option>
+          <option value="33">33%</option>
           <option value="43">43%</option>
         </select>
       </label>
@@ -350,73 +488,8 @@
         </table>
       </div>
     </div>
+    </ng-container>
 
-    <div class="section-divider"></div>
-    <h2>Esenzione ENPALS</h2>
-    <p class="field-hint field-hint-spaced" *ngIf="hasLiveRole && !isDj">Attiva l'esenzione solo se hai i requisiti previdenziali previsti</p>
-    <p class="field-hint field-hint-spaced" *ngIf="isDj">Profilo DJ: esenzione ENPALS non applicabile</p>
-    <div class="check-row" *ngIf="hasLiveRole && !isDj">
-      <label class="check-label">
-        <input type="checkbox" formControlName="inpsExempt">
-        <span>Sono esente ENPALS (ho un'altra occupazione principale che versa contributi INPS)</span>
-      </label>
-    </div>
-
-    <!-- ── Sezione esente ── -->
-    <div *ngIf="hasLiveRole && inpsExempt && !isDj">
-      <div class="info-box info-purple">
-        <h4>🛡 Esenzione ENPALS (agibilità in esenzione)</h4>
-        <p>Se hai un contratto di lavoro dipendente (o sei pensionato INPS) puoi esibirti presentando il <strong>modulo di esenzione agibilità</strong> per ogni serata. Non versi contributi ENPALS sull'evento.</p>
-        <ul>
-          <li>Nessun contributo ENPALS sull'esibizione singola</li>
-          <li>Compenso soggetto a ritenuta d'acconto 20% (se supera soglia)</li>
-          <li>Il modulo firmato va consegnato all'organizzatore prima dell'esibizione</li>
-        </ul>
-      </div>
-
-      <div class="section-divider"></div>
-      <h2>Motivazioni esenzione</h2>
-      <div class="row exemption-reasons">
-        <label class="check-label"><input type="checkbox" formControlName="exemptReasonUnder18"><span>Giovani fino a 18 anni</span></label>
-        <label class="check-label"><input type="checkbox" formControlName="exemptReasonStudentUnder25"><span>Studenti fino a 25 anni</span></label>
-        <label class="check-label"><input type="checkbox" formControlName="exemptReasonPensionerOver65"><span>Pensionati di età superiore a 65 anni</span></label>
-        <label class="check-label"><input type="checkbox" formControlName="exemptReasonEmployee"><span>Dipendente di una qualsiasi azienda</span></label>
-        <label class="check-label"><input type="checkbox" formControlName="exemptReasonBusinessOwner"><span>Titolare di ditta e/o società</span></label>
-        <label class="check-label"><input type="checkbox" formControlName="exemptReasonProfessionalFund"><span>Professionista con cassa previdenziale</span></label>
-      </div>
-      <div class="info-box" [class.info-green]="enpalsExemptionEligible" [class.info-amber]="!enpalsExemptionEligible">
-        <h4>Contatore 5.000€ su fatturato</h4>
-        <p>Fatturato musicale annuo considerato: <strong>{{ annualInvoicedMusicIncome | currency:'EUR':'symbol':'1.0-2' }}</strong></p>
-        <p>Residuo soglia: <strong>{{ enpalsThresholdResidual | currency:'EUR':'symbol':'1.0-2' }}</strong> • Esenzione suggerita: <strong>{{ enpalsExemptionEligible ? 'SI' : 'NO' }}</strong></p>
-      </div>
-
-      <div class="section-divider"></div>
-
-      <!-- Signature pad -->
-      <div class="signature-section">
-        <h3>✍ Firma digitale</h3>
-        <p class="field-hint">La firma viene inserita automaticamente nei PDF del modulo di esenzione generati per ogni serata</p>
-        <div class="sig-wrapper">
-          <canvas #sigCanvas class="sig-canvas"
-            width="560" height="160"
-            (mousedown)="onSigMouseDown($event)"
-            (mousemove)="onSigMouseMove($event)"
-            (mouseup)="onSigMouseUp()"
-            (mouseleave)="onSigMouseUp()"
-            (touchstart)="onSigTouchStart($event)"
-            (touchmove)="onSigTouchMove($event)"
-            (touchend)="onSigTouchEnd()">
-          </canvas>
-        </div>
-        <p class="sig-hint">☝️ Disegna la firma nel riquadro con mouse o dito</p>
-        <div class="sig-actions">
-          <button type="button" class="btn-ghost" (click)="clearSignature()">✕ Cancella</button>
-          <button type="button" class="btn-outline" (click)="saveSignature()">
-            {{ signatureSaved ? '✓ Firma salvata' : '💾 Salva firma' }}
-          </button>
-        </div>
-      </div>
-    </div>
   </section>
 
   <!-- ── Step 4: Colori agenda ── -->

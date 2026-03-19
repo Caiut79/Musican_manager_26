@@ -3,7 +3,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { SupabaseService } from '../../core/supabase.service';
 import { EventDetail } from '../../models/event-detail';
 
-type EventItem = { id: string; title: string; date: string; type: 'lesson' | 'concert' | 'dj_set'; counterpart: string };
+type EventItem = { id: string; title: string; date: string; timeStart: string; type: 'lesson' | 'concert' | 'dj_set'; counterpart: string };
 
 @Component({
   selector: 'app-agenda',
@@ -17,6 +17,7 @@ export class AgendaComponent implements OnInit {
   form = this.fb.group({
     title: ['', Validators.required],
     date: ['', Validators.required],
+    timeStart: ['', Validators.required],
     type: ['lesson' as 'lesson' | 'concert' | 'dj_set', Validators.required]
   });
 
@@ -34,6 +35,7 @@ export class AgendaComponent implements OnInit {
         id: event.id,
         title: event.title,
         date: event.date,
+        timeStart: `${event.timeStart || ''}`,
         type: event.type === 'lesson' ? 'lesson' : (event.type === 'dj_set' ? 'dj_set' : 'concert'),
         counterpart: this.resolveCounterpart(event)
       } as EventItem))
@@ -44,18 +46,18 @@ export class AgendaComponent implements OnInit {
     if (this.form.invalid) return;
     const v = this.form.value;
     this.formError = '';
-    if ((v.type === 'concert' || v.type === 'dj_set') && this.hasPerformanceConflict(v.date || '')) {
-      this.formError = 'Data già occupata da un evento musica/DJ';
+    if (this.hasScheduleConflict(v.date || '', v.timeStart || '')) {
+      this.formError = 'Slot già occupato in agenda: cambia orario';
       return;
     }
-    const created: EventItem = { id: crypto.randomUUID(), title: v.title!, date: v.date!, type: v.type!, counterpart: '' };
+    const created: EventItem = { id: crypto.randomUUID(), title: v.title!, date: v.date!, timeStart: v.timeStart!, type: v.type!, counterpart: '' };
     this.events = [created, ...this.events].sort((a, b) => b.date.localeCompare(a.date));
     const mmEvents: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
     mmEvents.unshift({
       id: created.id,
       title: created.title,
       date: created.date,
-      timeStart: '',
+      timeStart: created.timeStart,
       venue: '',
       address: '',
       type: created.type,
@@ -101,12 +103,12 @@ export class AgendaComponent implements OnInit {
     return fromTitle?.[1]?.trim() || '';
   }
 
-  private hasPerformanceConflict(date: string): boolean {
+  private hasScheduleConflict(date: string, timeStart: string): boolean {
+    if (!date || !timeStart) return false;
     const allEvents: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
     return allEvents.some(event => {
       if (event.status === 'cancelled') return false;
-      const performance = event.type === 'concert' || event.type === 'dj_set';
-      return performance && event.date === date;
+      return event.date === date && `${event.timeStart || ''}` === timeStart;
     });
   }
 }

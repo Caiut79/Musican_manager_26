@@ -34,6 +34,9 @@
       <label>Data
         <input type="date" formControlName="date">
       </label>
+      <label>Ora inizio
+        <input type="time" formControlName="timeStart">
+      </label>
       <label>Tipo
         <select formControlName="type">
           <option value="lesson">Lezione</option>
@@ -71,6 +74,7 @@
         </div>
         <div class="event-meta">
           <span class="event-date">{{ e.date }}</span>
+          <span class="event-date" *ngIf="e.timeStart">{{ e.timeStart }}</span>
           <span class="event-badge"
             [ngStyle]="{ background: eventColor(e.type) }">
             {{ eventTypeLabel(e.type) }}

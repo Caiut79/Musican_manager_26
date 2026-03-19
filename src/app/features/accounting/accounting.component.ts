@@ -77,6 +77,18 @@ type IrpefInput = {
   regionalMunicipalRate: number;
 };
 
+type MiniTaxDraft = {
+  gross: number;
+  fiscalMode: 'cooperativa' | 'piva' | 'associazione';
+  taxRegime: 'ordinario' | 'forfettario' | 'esente_eaps';
+  irpefBracket: '23' | '33' | '43';
+  substituteTaxPercent: number;
+  irapPercent: number;
+  inailPercent: number;
+  cooperativeFeePercent: number;
+  cooperativeTaxPercent: number;
+};
+
 @Component({
   selector: 'app-accounting',
   templateUrl: './accounting.component.html',
@@ -100,6 +112,10 @@ export class AccountingComponent implements OnInit {
   showTaxTool = false;
   annualInvoicedConcertIncome = 0;
   cooperativeProfileForConcerts = false;
+  private profileSnapshot: any = {};
+  private concertCadenceByEventId = new Map<string, 'mensile' | 'prestazione'>();
+  miniTaxEventId = '';
+  miniTaxDraft: MiniTaxDraft = this.emptyMiniTaxDraft();
   serataTaxInput: SerataTaxInput = {
     imponibile: 150,
     componentCount: 1,
@@ -120,12 +136,14 @@ export class AccountingComponent implements OnInit {
     this.payments = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
 
     const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
-    this.isTeacher           = profile?.isTeacher === true;
-    this.enpalsExemptProfile = profile?.inpsExempt === true;
+    this.profileSnapshot = profile || {};
+    this.isTeacher = profile?.isTeacher === true;
+    this.enpalsExemptProfile = this.resolveEnpalsExemptionByRole(profile);
     this.cooperativeProfileForConcerts = this.detectCooperativeProfileForConcerts(profile);
     this.payments = this.normalizePayments(this.payments);
     this.annualInvoicedConcertIncome = this.computeAnnualInvoicedConcertIncome();
     this.irpefInput.annualTaxableIncome = this.annualInvoicedConcertIncome;
+    this.loadConcertCadenceMap();
 
     const monthSet = new Set([
       ...this.events.map(e => e.date.substring(0, 7)),
@@ -167,7 +185,7 @@ export class AccountingComponent implements OnInit {
   // ─── Payment: event lists ──────────────────────────────────────────────────
   get concertEvents(): EventDetail[] {
     return [...this.events]
-      .filter(e => e.type === 'concert')
+      .filter(e => e.type === 'concert' || e.type === 'dj_set')
       .filter(e => !this.selectedBandFilter || this.eventBandLabel(e).toLowerCase().includes(this.selectedBandFilter.toLowerCase()))
       .sort((a, b) => b.date.localeCompare(a.date));
   }
@@ -179,8 +197,32 @@ export class AccountingComponent implements OnInit {
   }
 
   get availableBandFilters(): string[] {
-    const unique = new Set(this.events.filter(e => e.type === 'concert').map(e => this.eventBandLabel(e)));
+    const unique = new Set(this.events.filter(e => e.type === 'concert' || e.type === 'dj_set').map(e => this.eventBandLabel(e)));
     return [...unique].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }
+
+  get immediateConcertEvents(): EventDetail[] {
+    return this.concertEvents.filter(event => this.isImmediateConcert(event));
+  }
+
+  get monthlyConcertEvents(): EventDetail[] {
+    return this.concertEvents.filter(event => this.isMonthlyConcert(event));
+  }
+
+  get immediateConcertAgreed(): number {
+    return this.immediateConcertEvents.reduce((sum, event) => sum + Number(event.grossFee || 0), 0);
+  }
+
+  get monthlyConcertAgreed(): number {
+    return this.monthlyConcertEvents.reduce((sum, event) => sum + Number(event.grossFee || 0), 0);
+  }
+
+  get immediateConcertReceived(): number {
+    return this.immediateConcertEvents.reduce((sum, event) => sum + this.totalReceivedForEvent(event.id), 0);
+  }
+
+  get monthlyConcertReceived(): number {
+    return this.monthlyConcertEvents.reduce((sum, event) => sum + this.totalReceivedForEvent(event.id), 0);
   }
 
   paymentsForEvent(eventId: string): ServicePayment[] {
@@ -210,7 +252,10 @@ export class AccountingComponent implements OnInit {
   // ─── Payment form ──────────────────────────────────────────────────────────
   openPaymentForm(event: EventDetail): void {
     const category: PaymentCategory = event.type === 'lesson' ? 'lezione' : 'concerto';
-    const defaultMode: PaymentMode  = category === 'concerto' && this.cooperativeProfileForConcerts
+    const roleSetup = this.getRoleSetupForEvent(event);
+    const roleFiscalMode = `${roleSetup?.fiscalMode || ''}`.toLowerCase();
+    const roleIsCoopManaged = roleFiscalMode === 'cooperativa' || roleFiscalMode === 'associazione';
+    const defaultMode: PaymentMode = roleIsCoopManaged
       ? 'pattuito_fattura'
       : (event.compensoType === 'in_fattura' ? 'fattura_diretta' : 'pattuito_extra');
     this.draft = {
@@ -226,9 +271,9 @@ export class AccountingComponent implements OnInit {
       ivaPercent:   22,
       reimbursableExpenses: Math.max(0, Number((event.netFee || 0) - (event.grossFee || 0))),
       includeExpensesInInvoice: !this.eventExtraExpensesOutsideInvoice(event),
-      enpalsExempt: this.enpalsExemptProfile,
+      enpalsExempt: roleSetup?.inpsExempt === true || (this.enpalsExemptProfile && event.type !== 'dj_set'),
       groupInvoiceNote: '',
-      cooperativeFeePercent: 12,
+      cooperativeFeePercent: Number(roleSetup?.cooperativeFeePercent || 12),
       cooperativeFixedFee: 0,
       notes: ''
     };
@@ -237,6 +282,10 @@ export class AccountingComponent implements OnInit {
   }
 
   openImmediateConcertPaymentForm(event: EventDetail): void {
+    if (this.isMonthlyConcert(event)) {
+      this.openMonthlyConcertPaymentForm(event, 'acconto');
+      return;
+    }
     this.openPaymentForm(event);
     this.draft.paymentType = 'saldo';
     this.draft.paymentMethod = 'contanti';
@@ -260,7 +309,12 @@ export class AccountingComponent implements OnInit {
 
   isMonthlyConcert(event: EventDetail): boolean {
     if (event.type !== 'concert' && event.type !== 'dj_set') return false;
-    return `${event.notes || ''}`.toLowerCase().includes('pagamento mensile');
+    const mappedCadence = this.concertCadenceByEventId.get(`${event.id || ''}`);
+    if (mappedCadence) return mappedCadence === 'mensile';
+    const notes = `${event.notes || ''}`.toLowerCase();
+    if (notes.includes('[paymentcadence:mensile]')) return true;
+    if (notes.includes('pagamento mensile')) return true;
+    return false;
   }
 
   isImmediateConcert(event: EventDetail): boolean {
@@ -284,13 +338,64 @@ export class AccountingComponent implements OnInit {
   private enforceImmediateConcertRules(): void {
     if (this.isDraftMonthlyConcert()) return;
     if (this.draft.paymentMethod === 'contanti') return;
-    this.draft.paymentMode = this.cooperativeProfileForConcerts ? 'pattuito_fattura' : 'fattura_diretta';
+    this.draft.paymentMode = this.currentDraftUsesCooperativeProfile() ? 'pattuito_fattura' : 'fattura_diretta';
   }
 
   closePaymentForm(): void {
     this.showPaymentForm = false;
     this.focusedEventId = '';
     this.draft = this.emptyDraft();
+  }
+
+  toggleMiniTaxTool(event: EventDetail): void {
+    if (this.miniTaxEventId === event.id) {
+      this.miniTaxEventId = '';
+      return;
+    }
+    this.miniTaxEventId = event.id;
+    const roleSetup = this.getRoleSetupForEvent(event) || {};
+    this.miniTaxDraft = {
+      gross: Math.max(0, Number(event.grossFee || 0)),
+      fiscalMode: this.resolveMiniFiscalMode(`${roleSetup?.fiscalMode || ''}`),
+      taxRegime: this.resolveMiniTaxRegime(`${roleSetup?.taxRegime || ''}`),
+      irpefBracket: this.resolveMiniIrpefBracket(`${roleSetup?.irpefBracket || ''}`),
+      substituteTaxPercent: Number(roleSetup?.substituteTaxPercent || 15),
+      irapPercent: Number(roleSetup?.irapPercent || 3.9),
+      inailPercent: Number(roleSetup?.inailPercent || 0),
+      cooperativeFeePercent: Number(roleSetup?.cooperativeFeePercent || 12),
+      cooperativeTaxPercent: Number(roleSetup?.cooperativeTaxPercent || 9.19)
+    };
+  }
+
+  get miniTaxCooperativeCosts(): number {
+    if (this.miniTaxDraft.fiscalMode === 'piva') return 0;
+    const gross = Math.max(0, Number(this.miniTaxDraft.gross || 0));
+    const fee = Math.max(0, Number(this.miniTaxDraft.cooperativeFeePercent || 0));
+    const coopTax = Math.max(0, Number(this.miniTaxDraft.cooperativeTaxPercent || 0));
+    return this.round2(gross * (fee + coopTax) / 100);
+  }
+
+  get miniTaxDirectReserve(): number {
+    if (this.miniTaxDraft.fiscalMode !== 'piva') return 0;
+    const gross = Math.max(0, Number(this.miniTaxDraft.gross || 0));
+    const irap = Math.max(0, Number(this.miniTaxDraft.irapPercent || 0));
+    const inail = Math.max(0, Number(this.miniTaxDraft.inailPercent || 0));
+    const directTax = this.miniTaxDraft.taxRegime === 'forfettario'
+      ? Math.max(0, Number(this.miniTaxDraft.substituteTaxPercent || 0))
+      : (this.miniTaxDraft.taxRegime === 'esente_eaps' ? 0 : Number(this.miniTaxDraft.irpefBracket || '23'));
+    return this.round2(gross * (directTax + irap + inail) / 100);
+  }
+
+  get miniTaxImmediateNet(): number {
+    const gross = Math.max(0, Number(this.miniTaxDraft.gross || 0));
+    if (this.miniTaxDraft.fiscalMode === 'piva') return gross;
+    return this.round2(Math.max(0, gross - this.miniTaxCooperativeCosts));
+  }
+
+  get miniTaxEstimatedNet(): number {
+    const gross = Math.max(0, Number(this.miniTaxDraft.gross || 0));
+    if (this.miniTaxDraft.fiscalMode !== 'piva') return this.miniTaxImmediateNet;
+    return this.round2(Math.max(0, gross - this.miniTaxDirectReserve));
   }
 
   get draftIvaAmount(): number {
@@ -567,7 +672,7 @@ export class AccountingComponent implements OnInit {
     if (band) this.selectedBandFilter = band;
     if (!eventId) return;
     this.paymentTab = 'concerti';
-    const target = this.events.find(e => e.id === eventId && e.type === 'concert');
+    const target = this.events.find(e => e.id === eventId && (e.type === 'concert' || e.type === 'dj_set'));
     if (!target) return;
     if (paymentCadence === 'mensile') {
       this.openMonthlyConcertPaymentForm(target, monthlyAction === 'bonifico' ? 'bonifico' : 'acconto');
@@ -590,6 +695,26 @@ export class AccountingComponent implements OnInit {
 
   private round2(value: number): number {
     return Math.round((Number(value) || 0) * 100) / 100;
+  }
+
+  private resolveMiniFiscalMode(value: string): MiniTaxDraft['fiscalMode'] {
+    const mode = value.toLowerCase();
+    if (mode === 'piva') return 'piva';
+    if (mode === 'associazione') return 'associazione';
+    return 'cooperativa';
+  }
+
+  private resolveMiniTaxRegime(value: string): MiniTaxDraft['taxRegime'] {
+    const regime = value.toLowerCase();
+    if (regime === 'forfettario') return 'forfettario';
+    if (regime === 'esente_eaps') return 'esente_eaps';
+    return 'ordinario';
+  }
+
+  private resolveMiniIrpefBracket(value: string): MiniTaxDraft['irpefBracket'] {
+    if (value === '33') return '33';
+    if (value === '43') return '43';
+    return '23';
   }
 
   private effectiveReceivedAmount(payment: ServicePayment): number {
@@ -624,8 +749,52 @@ export class AccountingComponent implements OnInit {
   }
 
   private detectCooperativeProfileForConcerts(profile: any): boolean {
+    const roleSettings = profile?.roleSettings || {};
+    const musicianMode = `${roleSettings?.musician?.fiscalMode || ''}`.toLowerCase();
+    const djMode = `${roleSettings?.dj?.fiscalMode || ''}`.toLowerCase();
+    if (musicianMode || djMode) {
+      const musicianCoop = musicianMode === 'cooperativa' || musicianMode === 'associazione';
+      const djCoop = djMode === 'cooperativa' || djMode === 'associazione';
+      return musicianCoop || djCoop;
+    }
     const workerType = `${profile?.workerType || ''}`.toLowerCase();
     return workerType.includes('cooperativa');
+  }
+
+  private loadConcertCadenceMap(): void {
+    this.concertCadenceByEventId.clear();
+    const concerts = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
+    if (!Array.isArray(concerts)) return;
+    for (const concert of concerts) {
+      const id = `${concert?.id || ''}`.trim();
+      if (!id) continue;
+      const cadence = `${concert?.paymentCadence || ''}`.toLowerCase() === 'mensile' ? 'mensile' : 'prestazione';
+      this.concertCadenceByEventId.set(id, cadence);
+    }
+  }
+
+  private resolveEnpalsExemptionByRole(profile: any): boolean {
+    const roleSettings = profile?.roleSettings || {};
+    if (roleSettings?.musician && typeof roleSettings.musician.inpsExempt === 'boolean') {
+      return roleSettings.musician.inpsExempt === true;
+    }
+    return profile?.inpsExempt === true;
+  }
+
+  private getRoleSetupForEvent(event: EventDetail): any {
+    const roleSettings = this.profileSnapshot?.roleSettings || {};
+    if (event.type === 'lesson') return roleSettings.teacher || null;
+    if (event.type === 'dj_set') return roleSettings.dj || null;
+    return roleSettings.musician || null;
+  }
+
+  private currentDraftUsesCooperativeProfile(): boolean {
+    const event = this.events.find(e => e.id === this.draft.eventId);
+    if (!event) return this.cooperativeProfileForConcerts;
+    const roleSetup = this.getRoleSetupForEvent(event);
+    const roleFiscalMode = `${roleSetup?.fiscalMode || ''}`.toLowerCase();
+    if (!roleFiscalMode) return this.cooperativeProfileForConcerts;
+    return roleFiscalMode === 'cooperativa' || roleFiscalMode === 'associazione';
   }
 
   private emptyDraft(): PaymentDraft {
@@ -635,6 +804,20 @@ export class AccountingComponent implements OnInit {
       paymentType: 'saldo', paymentMethod: 'contanti', paymentMode: 'pattuito_extra',
       ivaPercent: 22, reimbursableExpenses: 0, includeExpensesInInvoice: false, enpalsExempt: false, groupInvoiceNote: '',
       cooperativeFeePercent: 12, cooperativeFixedFee: 0, notes: ''
+    };
+  }
+
+  private emptyMiniTaxDraft(): MiniTaxDraft {
+    return {
+      gross: 0,
+      fiscalMode: 'cooperativa',
+      taxRegime: 'ordinario',
+      irpefBracket: '23',
+      substituteTaxPercent: 15,
+      irapPercent: 3.9,
+      inailPercent: 0,
+      cooperativeFeePercent: 12,
+      cooperativeTaxPercent: 9.19
     };
   }
 }

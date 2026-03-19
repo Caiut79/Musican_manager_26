@@ -389,6 +389,21 @@ input.invalid {
   &.info-purple { background: var(--clr-primary-light); border: 1px solid #ddd6fe; color: #4c1d95; }
 }
 
+.role-setup-card {
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  background: #fff;
+  margin-bottom: 14px;
+
+  h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0 0 10px;
+  }
+}
+
 .monthly-plan-wrap {
   margin-top: 10px;
 

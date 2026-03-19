@@ -26,6 +26,17 @@ h1 {
   color: var(--text-muted);
 }
 
+.role-chip {
+  margin-top: -8px;
+  strong {
+    color: #5b21b6;
+    background: #ede9fe;
+    border: 1px solid #ddd6fe;
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+}
+
 .ok-text {
   color: #065f46;
 }

@@ -25,6 +25,10 @@ $mobile-header-h: 52px;
   }
 }
 
+body.mm-menu-open {
+  overflow: hidden;
+}
+
 /* ── Mobile top bar ── */
 .mobile-header {
   display: none; /* hidden on desktop */

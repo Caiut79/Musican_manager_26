@@ -176,6 +176,29 @@
 
   <!-- ── TAB: Concerti ─────────────────────────────────────────────────────── -->
   <div *ngIf="paymentTab === 'concerti'">
+    <div class="band-cadence-check">
+      <div class="bcc-col">
+        <div class="bcc-title">Band a prestazione (saldo immediato)</div>
+        <div class="bcc-list" *ngIf="immediateBandNames.length; else noImmediateBands">
+          <span class="bcc-chip" *ngFor="let b of immediateBandNames">{{ b }}</span>
+        </div>
+        <ng-template #noImmediateBands><div class="bcc-empty">Nessuna band in saldo immediato</div></ng-template>
+      </div>
+      <div class="bcc-col">
+        <div class="bcc-title">Band mensili · Acconto</div>
+        <div class="bcc-list" *ngIf="monthlyAccontoBandNames.length; else noMonthlyAccontoBands">
+          <span class="bcc-chip monthly" *ngFor="let b of monthlyAccontoBandNames">{{ b }}</span>
+        </div>
+        <ng-template #noMonthlyAccontoBands><div class="bcc-empty">Nessuna band mensile con acconto</div></ng-template>
+      </div>
+      <div class="bcc-col">
+        <div class="bcc-title">Band mensili · Bonifico</div>
+        <div class="bcc-list" *ngIf="monthlyBonificoBandNames.length; else noMonthlyBonificoBands">
+          <span class="bcc-chip monthly" *ngFor="let b of monthlyBonificoBandNames">{{ b }}</span>
+        </div>
+        <ng-template #noMonthlyBonificoBands><div class="bcc-empty">Nessuna band mensile con bonifico</div></ng-template>
+      </div>
+    </div>
     <div class="pay-flow-summary">
       <div class="flow-card">
         <div class="flow-title">Pagamenti a serata</div>
@@ -355,9 +378,9 @@
             <span>Metodo</span>
             <select [(ngModel)]="draft.paymentMethod" (ngModelChange)="onConcertPaymentMethodChanged()">
               <option value="contanti">Contanti</option>
-              <option value="bonifico">Bonifico bancario</option>
-              <option value="assegno">Assegno</option>
-              <option value="pos">POS / Carta</option>
+              <option value="bonifico" *ngIf="!isPattuitoExtraOnlyCash()">Bonifico bancario</option>
+              <option value="assegno" *ngIf="!isPattuitoExtraOnlyCash()">Assegno</option>
+              <option value="pos" *ngIf="!isPattuitoExtraOnlyCash()">POS / Carta</option>
             </select>
           </label>
 
@@ -365,36 +388,33 @@
             <span>Modalità di pagamento</span>
             <div class="pf-mode-radios">
               <label class="pf-mode-opt">
-                <input type="radio" [name]="'payMode_' + ev.id" value="pattuito_extra" [(ngModel)]="draft.paymentMode" [disabled]="isImmediateTrackedMethod()">
+                <input type="radio" [name]="'payMode_' + ev.id" value="pattuito_extra" [(ngModel)]="draft.paymentMode" (ngModelChange)="onPaymentModeChanged()" [disabled]="isImmediateTrackedMethod()">
                 <span class="pmo-label">
                   <strong>Pattuito fuori fattura</strong>
-                  <small>Pagamento del compenso pattuito senza emissione di fattura</small>
+                  <small>Solo contanti. Nessuna fattura emessa.</small>
                 </span>
               </label>
               <label class="pf-mode-opt" *ngIf="isDraftMonthlyConcert()">
-                <input type="radio" [name]="'payMode_' + ev.id" value="pattuito_fattura" [(ngModel)]="draft.paymentMode">
+                <input type="radio" [name]="'payMode_' + ev.id" value="pattuito_fattura" [(ngModel)]="draft.paymentMode" (ngModelChange)="onPaymentModeChanged()">
                 <span class="pmo-label">
                   <strong>Pattuito in fattura (gruppo)</strong>
                   <small>Il pattuito viene inserito in una fattura emessa dal gruppo; il gruppo copre IVA e spese aggiuntive</small>
                 </span>
               </label>
               <label class="pf-mode-opt" *ngIf="!isDraftMonthlyConcert()">
-                <input type="radio" [name]="'payMode_' + ev.id" value="fattura_diretta" [(ngModel)]="draft.paymentMode" [disabled]="isImmediateTrackedMethod()">
+                <input type="radio" [name]="'payMode_' + ev.id" value="fattura_diretta" [(ngModel)]="draft.paymentMode" (ngModelChange)="onPaymentModeChanged()">
                 <span class="pmo-label">
                   <strong>Importo in fattura diretta</strong>
-                  <small>Fattura emessa dal musicista: il committente paga importo + IVA</small>
-                </span>
-              </label>
-              <label class="pf-mode-opt" *ngIf="!isDraftMonthlyConcert() && cooperativeProfileForConcerts">
-                <input type="radio" [name]="'payMode_' + ev.id" value="pattuito_fattura" [(ngModel)]="draft.paymentMode">
-                <span class="pmo-label">
-                  <strong>Gestione cooperativa</strong>
-                  <small>I pagamenti elettronici arrivano in cooperativa, poi viene bonificato il netto</small>
+                  <small *ngIf="!isCooperativeProfileInCurrentDraft()">Il committente paga importo + IVA</small>
+                  <small *ngIf="isCooperativeProfileInCurrentDraft()">Flusso cooperativa automatico: il lordo va in cooperativa e poi ricevi il netto pulito</small>
                 </span>
               </label>
             </div>
             <div class="pf-inline-info" *ngIf="!isDraftMonthlyConcert() && draft.paymentMethod !== 'contanti'">
-              Metodo tracciato selezionato: modalità impostata automaticamente su <strong>{{ cooperativeProfileForConcerts ? 'Gestione cooperativa' : 'Importo in fattura diretta' }}</strong>
+              Metodo tracciato selezionato: modalità impostata su <strong>Importo in fattura diretta</strong>
+            </div>
+            <div class="pf-inline-info" *ngIf="!isDraftMonthlyConcert() && draft.paymentMode === 'pattuito_extra'">
+              Con pattuito fuori fattura è consentito solo il metodo <strong>contanti</strong>.
             </div>
           </div>
 
@@ -420,11 +440,14 @@
                 <div class="pf-iva-total">Netto musicista: <strong>{{ draftCooperativeNetAmount | currency:'EUR':'symbol':'1.0-2' }}</strong></div>
               </div>
             </div>
-            <p class="pf-iva-note" *ngIf="draft.paymentMethod !== 'contanti'">
-              Pagamento elettronico: incasso diretto in cooperativa, netto disponibile al musicista dopo il ribonifico.
+            <p class="pf-iva-note" *ngIf="draft.paymentMethod === 'bonifico' || draft.paymentMethod === 'pos'">
+              Bonifico/POS: il lordo arriva direttamente alla cooperativa, poi ricevi il netto pulito.
+            </p>
+            <p class="pf-iva-note" *ngIf="draft.paymentMethod === 'assegno'">
+              Assegno: consegna o deposito assegno a favore della cooperativa, poi ricevi il netto pulito.
             </p>
             <p class="pf-iva-note" *ngIf="draft.paymentMethod === 'contanti'">
-              Pagamento in contanti: calcolato quanto versare alla cooperativa (costi) e quanto resta netto al musicista.
+              Contanti: incassi sul posto e versi alla cooperativa solo i costi fattura (INAIL/INPS/IVA + costi cooperativa).
             </p>
           </div>
 

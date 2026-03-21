@@ -111,6 +111,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
     this.servicePayments = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
     this.contacts = this.readContacts();
     this.concerts = this.mergeConcertsFromAgenda(this.concerts);
+    this.concerts = this.applyBandPaymentProfile(this.concerts);
     this.persistConcerts();
     this.applyRouteContext();
     this.applyExpenseReturnContext();
@@ -728,6 +729,38 @@ export class ConcertsComponent implements OnInit, OnDestroy {
       });
     });
     return [...byId.values()];
+  }
+
+  private applyBandPaymentProfile(concerts: ConcertRecord[]): ConcertRecord[] {
+    const bandContacts = this.contacts.filter(c => c.type === 'band');
+    const byId = new Map(bandContacts.map(c => [c.id, c]));
+    const byName = new Map(
+      bandContacts
+        .filter(c => !!`${c.displayName || ''}`.trim())
+        .map(c => [this.normalizeBandKey(c.displayName), c] as const)
+    );
+
+    return concerts.map(concert => {
+      let contact: ContactEntry | undefined;
+      if (concert.contactId) contact = byId.get(concert.contactId);
+      if (!contact) {
+        const key = this.normalizeBandKey(this.concertBandLabel(concert));
+        contact = byName.get(key);
+      }
+      if (!contact) return concert;
+
+      return {
+        ...concert,
+        contactId: contact.id,
+        billingMode: contact.billingMode === 'in_fattura' ? 'in_fattura' : 'fuori_fattura',
+        paymentCadence: contact.paymentCadence === 'mensile' ? 'mensile' : 'prestazione',
+        monthlySettlement: contact.monthlySettlement === 'bonifico' ? 'bonifico' : 'acconto'
+      };
+    });
+  }
+
+  private normalizeBandKey(value: string): string {
+    return `${value || ''}`.toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
   private extractContactName(notes: string): string {

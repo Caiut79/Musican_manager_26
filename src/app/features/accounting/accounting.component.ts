@@ -114,6 +114,10 @@ export class AccountingComponent implements OnInit {
   cooperativeProfileForConcerts = false;
   private profileSnapshot: any = {};
   private concertCadenceByEventId = new Map<string, 'mensile' | 'prestazione'>();
+  private concertBandByEventId = new Map<string, string>();
+  private concertMonthlySettlementByEventId = new Map<string, 'acconto' | 'bonifico'>();
+  private contactCadenceByBandName = new Map<string, 'mensile' | 'prestazione'>();
+  private contactMonthlySettlementByBandName = new Map<string, 'acconto' | 'bonifico'>();
   miniTaxEventId = '';
   miniTaxDraft: MiniTaxDraft = this.emptyMiniTaxDraft();
   serataTaxInput: SerataTaxInput = {
@@ -143,7 +147,7 @@ export class AccountingComponent implements OnInit {
     this.payments = this.normalizePayments(this.payments);
     this.annualInvoicedConcertIncome = this.computeAnnualInvoicedConcertIncome();
     this.irpefInput.annualTaxableIncome = this.annualInvoicedConcertIncome;
-    this.loadConcertCadenceMap();
+    this.loadConcertMetaMaps();
 
     const monthSet = new Set([
       ...this.events.map(e => e.date.substring(0, 7)),
@@ -199,6 +203,34 @@ export class AccountingComponent implements OnInit {
   get availableBandFilters(): string[] {
     const unique = new Set(this.events.filter(e => e.type === 'concert' || e.type === 'dj_set').map(e => this.eventBandLabel(e)));
     return [...unique].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }
+
+  get immediateBandNames(): string[] {
+    const set = new Set<string>();
+    for (const event of this.immediateConcertEvents) set.add(this.eventBandLabel(event));
+    return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }
+
+  get monthlyBandNames(): string[] {
+    const set = new Set<string>();
+    for (const event of this.monthlyConcertEvents) set.add(this.eventBandLabel(event));
+    return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }
+
+  get monthlyAccontoBandNames(): string[] {
+    const set = new Set<string>();
+    for (const event of this.monthlyConcertEvents) {
+      if (this.monthlySettlementForEvent(event.id) === 'acconto') set.add(this.eventBandLabel(event));
+    }
+    return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }
+
+  get monthlyBonificoBandNames(): string[] {
+    const set = new Set<string>();
+    for (const event of this.monthlyConcertEvents) {
+      if (this.monthlySettlementForEvent(event.id) === 'bonifico') set.add(this.eventBandLabel(event));
+    }
+    return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
   }
 
   get immediateConcertEvents(): EventDetail[] {
@@ -309,6 +341,8 @@ export class AccountingComponent implements OnInit {
 
   isMonthlyConcert(event: EventDetail): boolean {
     if (event.type !== 'concert' && event.type !== 'dj_set') return false;
+    const bandCadence = this.contactCadenceByBandName.get(this.normalizeBandKey(this.eventBandLabel(event)));
+    if (bandCadence) return bandCadence === 'mensile';
     const mappedCadence = this.concertCadenceByEventId.get(`${event.id || ''}`);
     if (mappedCadence) return mappedCadence === 'mensile';
     const notes = `${event.notes || ''}`.toLowerCase();
@@ -331,14 +365,36 @@ export class AccountingComponent implements OnInit {
     return this.draft.paymentMethod !== 'contanti';
   }
 
+  isPattuitoExtraOnlyCash(): boolean {
+    return this.draft.paymentMode === 'pattuito_extra';
+  }
+
+  isCooperativeProfileInCurrentDraft(): boolean {
+    if (this.isDraftMonthlyConcert()) return true;
+    return this.currentDraftUsesCooperativeProfile();
+  }
+
+  onPaymentModeChanged(): void {
+    this.enforceImmediateConcertRules();
+  }
+
   onConcertPaymentMethodChanged(): void {
     this.enforceImmediateConcertRules();
   }
 
   private enforceImmediateConcertRules(): void {
     if (this.isDraftMonthlyConcert()) return;
-    if (this.draft.paymentMethod === 'contanti') return;
-    this.draft.paymentMode = this.currentDraftUsesCooperativeProfile() ? 'pattuito_fattura' : 'fattura_diretta';
+    if (this.draft.paymentMode === 'pattuito_extra') {
+      this.draft.paymentMethod = 'contanti';
+      return;
+    }
+    if (this.draft.paymentMethod !== 'contanti') {
+      this.draft.paymentMode = 'fattura_diretta';
+      return;
+    }
+    if (this.draft.paymentMode !== 'fattura_diretta') {
+      this.draft.paymentMode = 'fattura_diretta';
+    }
   }
 
   closePaymentForm(): void {
@@ -429,7 +485,9 @@ export class AccountingComponent implements OnInit {
   }
 
   isCooperativeManagedDraft(): boolean {
-    return this.draft.category === 'concerto' && this.draft.paymentMode === 'pattuito_fattura';
+    if (this.draft.category !== 'concerto') return false;
+    if (this.draft.paymentMode === 'pattuito_fattura') return true;
+    return this.draft.paymentMode === 'fattura_diretta' && this.currentDraftUsesCooperativeProfile();
   }
 
   get invoiced5000Counter(): number {
@@ -631,6 +689,8 @@ export class AccountingComponent implements OnInit {
   }
 
   eventBandLabel(event: EventDetail): string {
+    const mapped = this.concertBandByEventId.get(`${event.id || ''}`);
+    if (mapped) return mapped;
     const notes = `${event.notes || ''}`;
     const match = notes.match(/\[Rubrica:([^\]]+)\]/i);
     if (match?.[1]) return match[1].trim();
@@ -650,15 +710,15 @@ export class AccountingComponent implements OnInit {
 
   cooperativeSettlementLabel(payment: ServicePayment): string {
     if (!payment.cooperativeManaged) return '';
-    if (payment.cooperativeSettlementState === 'pending_transfer_to_musician') return 'In attesa bonifico netto da cooperativa';
-    if (payment.cooperativeSettlementState === 'pending_transfer_to_coop') return 'Da versare alla cooperativa';
+    if (payment.cooperativeSettlementState === 'pending_transfer_to_musician') return 'In attesa netto pulito da cooperativa';
+    if (payment.cooperativeSettlementState === 'pending_transfer_to_coop') return 'Da versare a cooperativa (costi fattura)';
     if (payment.cooperativeSettlementState === 'settled') return 'Regolato con cooperativa';
     return '';
   }
 
   cooperativeActionLabel(payment: ServicePayment): string {
-    if (payment.cooperativeSettlementState === 'pending_transfer_to_musician') return 'Conferma netto ricevuto';
-    if (payment.cooperativeSettlementState === 'pending_transfer_to_coop') return 'Conferma versamento cooperativa';
+    if (payment.cooperativeSettlementState === 'pending_transfer_to_musician') return 'Netto pulito ricevuto';
+    if (payment.cooperativeSettlementState === 'pending_transfer_to_coop') return 'Costi inviati a cooperativa';
     return '';
   }
 
@@ -761,8 +821,27 @@ export class AccountingComponent implements OnInit {
     return workerType.includes('cooperativa');
   }
 
-  private loadConcertCadenceMap(): void {
+  private loadConcertMetaMaps(): void {
     this.concertCadenceByEventId.clear();
+    this.concertBandByEventId.clear();
+    this.concertMonthlySettlementByEventId.clear();
+    this.contactCadenceByBandName.clear();
+    this.contactMonthlySettlementByBandName.clear();
+
+    const contacts = JSON.parse(localStorage.getItem('mm_contacts') || '[]');
+    if (Array.isArray(contacts)) {
+      for (const contact of contacts) {
+        if (`${contact?.type || ''}` !== 'band') continue;
+        const display = `${contact?.displayName || ''}`.trim();
+        if (!display) continue;
+        const key = this.normalizeBandKey(display);
+        const cadence = `${contact?.paymentCadence || ''}`.toLowerCase() === 'mensile' ? 'mensile' : 'prestazione';
+        const settlement = `${contact?.monthlySettlement || ''}`.toLowerCase() === 'bonifico' ? 'bonifico' : 'acconto';
+        this.contactCadenceByBandName.set(key, cadence);
+        this.contactMonthlySettlementByBandName.set(key, settlement);
+      }
+    }
+
     const concerts = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
     if (!Array.isArray(concerts)) return;
     for (const concert of concerts) {
@@ -770,7 +849,35 @@ export class AccountingComponent implements OnInit {
       if (!id) continue;
       const cadence = `${concert?.paymentCadence || ''}`.toLowerCase() === 'mensile' ? 'mensile' : 'prestazione';
       this.concertCadenceByEventId.set(id, cadence);
+      const monthlySettlement = `${concert?.monthlySettlement || ''}`.toLowerCase() === 'bonifico' ? 'bonifico' : 'acconto';
+      this.concertMonthlySettlementByEventId.set(id, monthlySettlement);
+      const band = this.resolveBandFromConcertRecord(concert);
+      if (band) this.concertBandByEventId.set(id, band);
     }
+  }
+
+  private monthlySettlementForEvent(eventId: string): 'acconto' | 'bonifico' {
+    const event = this.events.find(x => `${x?.id || ''}` === `${eventId || ''}`);
+    if (event) {
+      const byBand = this.contactMonthlySettlementByBandName.get(this.normalizeBandKey(this.eventBandLabel(event)));
+      if (byBand) return byBand;
+    }
+    return this.concertMonthlySettlementByEventId.get(`${eventId || ''}`) || 'acconto';
+  }
+
+  private resolveBandFromConcertRecord(concert: any): string {
+    const fromBands = Array.isArray(concert?.bands)
+      ? concert.bands.map((x: any) => `${x || ''}`.trim()).filter(Boolean)
+      : [];
+    if (fromBands.length) return fromBands.join(', ');
+    const venue = `${concert?.venue || ''}`.trim();
+    if (venue) return venue;
+    const title = `${concert?.title || ''}`.trim();
+    return title;
+  }
+
+  private normalizeBandKey(value: string): string {
+    return `${value || ''}`.toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
   private resolveEnpalsExemptionByRole(profile: any): boolean {

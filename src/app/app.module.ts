@@ -3,6 +3,9 @@ import { BrowserModule } from '@angular/platform-browser';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 import { HttpClientModule } from '@angular/common/http';
+import { LOCALE_ID } from '@angular/core';
+import { registerLocaleData } from '@angular/common';
+import localeIt from '@angular/common/locales/it';
 
 import { AppComponent }             from './app.component';
 import { MusicianFormComponent }    from './features/musician-form/musician-form.component';
@@ -26,6 +29,9 @@ import { ContactsComponent }        from './features/contacts/contacts.component
 import { PrivacyConsentComponent }  from './features/privacy-consent/privacy-consent.component';
 import { ContractsComponent }        from './features/contracts/contracts.component';
 import { ContractViewComponent }     from './features/contract-view/contract-view.component';
+import { InvoicingComponent }       from './features/invoicing/invoicing.component';
+
+registerLocaleData(localeIt);
 
 const routes: Routes = [
   { path: '',              redirectTo: 'register', pathMatch: 'full' },
@@ -47,6 +53,7 @@ const routes: Routes = [
   { path: 'archive',      component: ArchiveComponent },
   { path: 'history',      component: HistoryComponent },
   { path: 'accounting',   component: AccountingComponent },
+  { path: 'fatturazione', component: InvoicingComponent },
   { path: 'contracts',    component: ContractsComponent },
   { path: 'contract/:id', component: ContractViewComponent },
   { path: '**',           redirectTo: 'dashboard' },
@@ -75,6 +82,7 @@ const routes: Routes = [
     ContractViewComponent,
     RegisterComponent,
     BookingRequestComponent,
+    InvoicingComponent,
   ],
   imports: [
     BrowserModule,
@@ -83,7 +91,9 @@ const routes: Routes = [
     RouterModule.forRoot(routes),
     HttpClientModule,
   ],
-  providers: [],
+  providers: [
+    { provide: LOCALE_ID, useValue: 'it-IT' }
+  ],
   bootstrap: [AppComponent]
 })
 export class AppModule {}

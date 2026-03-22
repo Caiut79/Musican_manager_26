@@ -14,6 +14,8 @@
       <div><span class="k">Evento</span><strong>{{ concert.title | uppercase }}</strong></div>
       <div><span class="k">Luogo evento (locale e provincia)</span><strong>{{ eventPlace | uppercase }}</strong></div>
       <div><span class="k">Band / Progetto</span><strong>{{ eventBandLabel | uppercase }}</strong></div>
+      <div><span class="k">Partenza</span><strong>{{ travelOrigin | uppercase }}</strong></div>
+      <div><span class="k">Destinazione</span><strong>{{ travelDestination | uppercase }}</strong></div>
     </div>
     <p class="legal warn" *ngIf="eventProvinceHint">{{ eventProvinceHint }}</p>
   </section>

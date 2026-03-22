@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SupabaseService } from '../../core/supabase.service';
+import { formatItalianAddressLabel, italianAddressTypeScore } from '../../core/italian-geo';
 
 type ContactType = 'band' | 'school' | 'student';
 type PaymentCadence = 'prestazione' | 'mensile';
@@ -265,32 +266,11 @@ export class ContactsComponent implements OnInit {
   }
 
   private formatNominatimLabel(row: any): string {
-    const address = row?.address || {};
-    const place = `${address.city || address.town || address.village || address.municipality || address.hamlet || row?.name || ''}`.trim();
-    const province = this.normalizeProvince(`${address.county || ''}`);
-    const region = `${address.state || ''}`.trim();
-    const country = `${address.country || 'Italia'}`.trim();
-    const road = `${address.road || ''}`.trim();
-    const number = `${address.house_number || ''}`.trim();
-    const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
-    if (['road', 'house', 'residential'].includes(addresstype) && road) {
-      const roadLabel = `${road}${number ? ` ${number}` : ''}`.trim();
-      return [roadLabel, place, province, region, country].filter(Boolean).join(', ');
-    }
-    const compact = [place, province, region, country].filter(Boolean).join(', ');
-    return compact || `${row?.display_name || ''}`.trim();
-  }
-
-  private normalizeProvince(value: string): string {
-    return `${value || ''}`.replace(/^Città metropolitana di\s+/i, '').trim();
+    return formatItalianAddressLabel(row, value => this.normalizeSearch(value));
   }
 
   private addressTypeScore(addresstype: string): number {
-    if (['city', 'town', 'village', 'municipality', 'hamlet', 'locality'].includes(addresstype)) return 60;
-    if (['county', 'province', 'state_district', 'state'].includes(addresstype)) return 45;
-    if (['suburb', 'neighbourhood', 'quarter'].includes(addresstype)) return 35;
-    if (['road', 'house', 'residential'].includes(addresstype)) return 25;
-    return 20;
+    return italianAddressTypeScore(addresstype);
   }
 
   onConsentFileSelected(event: Event): void {

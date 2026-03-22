@@ -244,9 +244,9 @@
   <div class="expenses-list">
     <div class="expense-row" *ngFor="let ex of expenses">
       <div class="expense-route">
-        <span class="route-from">📍 {{ ex.origin }}</span>
+        <span class="route-from">📍 {{ formatExpenseAddress(ex.origin) }}</span>
         <span class="route-arrow">→</span>
-        <span class="route-to">{{ ex.destination }}</span>
+        <span class="route-to">{{ formatExpenseAddress(ex.destination) }}</span>
       </div>
       <div class="expense-details">
         <span>{{ ex.distanceKm }} km</span>

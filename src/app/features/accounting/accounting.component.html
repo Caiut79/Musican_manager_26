@@ -176,6 +176,25 @@
 
   <!-- ── TAB: Concerti ─────────────────────────────────────────────────────── -->
   <div *ngIf="paymentTab === 'concerti'">
+    <div class="band-monthly-box" *ngIf="showBandMonthlyPaymentForm">
+      <div class="bmb-head">
+        <div class="bmb-title">Pagamento mensile — {{ bandMonthlyBandName }}</div>
+        <div class="bmb-sub">Registra acconto/bonifico come credito in esubero: verrà usato per coprire gli eventi effettuati</div>
+      </div>
+      <div class="bmb-grid">
+        <label>Tipo
+          <select [(ngModel)]="bandMonthlyKind">
+            <option value="acconto">Acconto</option>
+            <option value="bonifico">Bonifico</option>
+          </select>
+        </label>
+        <label>Importo (€)
+          <input type="number" min="0" step="0.01" [(ngModel)]="bandMonthlyAmount">
+        </label>
+        <button type="button" class="btn-pay-add" (click)="saveBandMonthlyCredit()">Salva</button>
+      </div>
+      <div class="bmb-ok" *ngIf="bandMonthlySaved">Salvato.</div>
+    </div>
     <div class="band-cadence-check">
       <div class="bcc-col">
         <div class="bcc-title">Band a prestazione (saldo immediato)</div>
@@ -213,6 +232,10 @@
         <div class="flow-line">Incassato: <strong>{{ monthlyConcertReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></div>
       </div>
     </div>
+    <div class="pay-view-toggle" *ngIf="concertEvents.length">
+      <button type="button" class="btn-outline" [class.btn-active]="concertViewMode === 'band'" (click)="concertViewMode = 'band'">Band</button>
+      <button type="button" class="btn-outline" [class.btn-active]="concertViewMode === 'list'" (click)="concertViewMode = 'list'">Elenco</button>
+    </div>
     <div class="pay-filter-row" *ngIf="availableBandFilters.length">
       <label>Filtra per band
         <select [(ngModel)]="selectedBandFilter">
@@ -225,6 +248,91 @@
       <i class="ti ti-music-off"></i><span>Nessun concerto registrato</span>
     </div>
 
+    <div class="pay-band-groups" *ngIf="concertViewMode === 'band'">
+      <div class="pay-band-card" *ngFor="let g of concertBandGroups">
+        <button type="button" class="pay-band-btn" (click)="toggleConcertBandExpanded(g.key)">
+          <span class="pbb-left">
+            <span class="pbb-name">{{ g.name }}</span>
+            <span class="pbb-meta">{{ g.paymentCadence === 'mensile' ? ('Mensile - ' + g.monthlySettlement) : 'A serata' }}</span>
+          </span>
+          <span class="pbb-right">
+            <span class="pbb-chip" [class.monthly]="g.paymentCadence === 'mensile'">{{ g.events.length }} eventi</span>
+            <span class="pbb-chip">Incassato {{ g.received | currency:'EUR':'symbol':'1.0-0' }} / {{ g.agreed | currency:'EUR':'symbol':'1.0-0' }}</span>
+            <span class="pbb-chip">{{ expandedConcertBandKey === g.key ? 'Chiudi' : 'Apri' }}</span>
+          </span>
+        </button>
+        <div class="pay-band-details" *ngIf="expandedConcertBandKey === g.key">
+          <div class="pay-band-actions" *ngIf="g.paymentCadence === 'mensile'">
+            <button type="button" class="btn-pay-add btn-pay-text" (click)="openBandMonthlyCreditForm(g.name, 'acconto')">Aggiungi acconto</button>
+            <button type="button" class="btn-pay-add btn-pay-text" (click)="openBandMonthlyCreditForm(g.name, 'bonifico')">Aggiungi bonifico</button>
+          </div>
+          <div class="pay-event-card" *ngFor="let ev of g.events" [class.pay-focus]="focusedEventId === ev.id">
+            <div class="pec-top">
+              <div class="pec-info">
+                <span class="pec-date">{{ formatDate(ev.date) }}</span>
+                <span class="pec-title">{{ ev.title }}</span>
+                <span class="pec-date">Band: {{ eventBandLabel(ev) }}</span>
+                <span class="pec-date">Cadenza: {{ isMonthlyConcert(ev) ? 'Mensile' : 'Saldo immediato' }}</span>
+              </div>
+              <div class="pec-amounts">
+                <span class="pec-agreed">Pattuito <strong>{{ ev.grossFee | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+                <span class="pec-received" *ngIf="paymentsForEvent(ev.id).length > 0">
+                  Ricevuto <strong>{{ totalReceivedForEvent(ev.id) | currency:'EUR':'symbol':'1.0-0' }}</strong>
+                </span>
+              </div>
+              <div class="pec-right">
+                <span class="pay-status-badge" [ngClass]="paymentStatusClass(ev.id)">
+                  {{ paymentStatusLabel(ev.id) }}
+                </span>
+                <button type="button" class="btn-pay-add btn-pay-text" (click)="toggleMiniTaxTool(ev)"
+                        title="Mini tool tasse serata" aria-label="Mini tool tasse serata">
+                  {{ miniTaxEventId === ev.id ? 'Chiudi tool' : 'Mini tasse' }}
+                </button>
+                <button type="button" class="btn-pay-add" (click)="openImmediateConcertPaymentForm(ev)"
+                        *ngIf="isImmediateConcert(ev) && !(showPaymentForm && draft.eventId === ev.id)"
+                        title="Registra pagamento" aria-label="Registra pagamento">
+                  <i class="ti ti-plus"></i>
+                </button>
+                <button type="button" class="btn-pay-add btn-pay-text" (click)="openMonthlyConcertPaymentForm(ev, 'acconto')"
+                        *ngIf="isMonthlyConcert(ev) && !(showPaymentForm && draft.eventId === ev.id)"
+                        title="Aggiungi acconto" aria-label="Aggiungi acconto">
+                  Acconto
+                </button>
+                <button type="button" class="btn-pay-add btn-pay-text" (click)="openMonthlyConcertPaymentForm(ev, 'bonifico')"
+                        *ngIf="isMonthlyConcert(ev) && !(showPaymentForm && draft.eventId === ev.id)"
+                        title="Aggiungi bonifico" aria-label="Aggiungi bonifico">
+                  Bonifico
+                </button>
+              </div>
+            </div>
+            <div class="pec-payments" *ngIf="paymentsForEvent(ev.id).length > 0">
+              <div class="pec-pay" *ngFor="let p of paymentsForEvent(ev.id)">
+                <div class="pp-left">
+                  <strong>{{ p.receivedAmount | currency:'EUR':'symbol':'1.0-0' }}</strong>
+                  <span class="pp-meta">{{ p.paymentMethod }}</span>
+                  <span class="pp-meta">{{ p.paymentMode }}</span>
+                  <span class="pp-meta" *ngIf="p.cooperativeManaged">{{ cooperativeSettlementLabel(p) }}</span>
+                </div>
+                <div class="pp-right">
+                  <button type="button" class="btn-pay-add btn-pay-text" *ngIf="cooperativeActionLabel(p)" (click)="toggleCoopSettlement(p)">
+                    {{ cooperativeActionLabel(p) }}
+                  </button>
+                  <button type="button" class="btn-pay-remove" (click)="removePayment(p)">Rimuovi</button>
+                </div>
+              </div>
+            </div>
+            <div class="pec-form" *ngIf="showPaymentForm && draft.eventId === ev.id">
+              <ng-container [ngTemplateOutlet]="paymentFormTpl"></ng-container>
+            </div>
+            <div class="pec-mini-tax" *ngIf="miniTaxEventId === ev.id">
+              <ng-container [ngTemplateOutlet]="miniTaxTpl"></ng-container>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ng-container *ngIf="concertViewMode === 'list'">
     <div class="pay-event-card" *ngFor="let ev of concertEvents" [class.pay-focus]="focusedEventId === ev.id">
       <div class="pec-top">
         <div class="pec-info">
@@ -491,6 +599,7 @@
         </div>
       </div>
     </div>
+    </ng-container>
   </div>
 
   <!-- ── TAB: Lezioni ──────────────────────────────────────────────────────── -->

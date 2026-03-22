@@ -1,22 +1,127 @@
+<!-- ══════════════════════════════════════════ HEADER -->
 <div class="page-header">
   <div>
     <h1>Concerti</h1>
     <p class="subtitle">Gestisci serate, formazioni e link conferma in PDF</p>
   </div>
-  <button type="button" class="btn-primary" (click)="showForm = !showForm">
-    {{ showForm ? 'Chiudi' : 'Nuovo concerto' }}
-  </button>
+  <div class="header-actions">
+    <button type="button" class="btn-outline" (click)="openImport()">
+      ⬇︎ Importa concerti
+    </button>
+    <button type="button" class="btn-primary" (click)="showForm = !showForm">
+      {{ showForm ? '✕ Chiudi' : '＋ Nuovo concerto' }}
+    </button>
+  </div>
 </div>
 
-<section class="card" *ngIf="showForm" [formGroup]="form">
+<div class="import-backdrop" *ngIf="showImport" (click)="closeImport()">
+  <div class="import-modal" (click)="$event.stopPropagation()" (paste)="onImportPaste($event)">
+    <div class="im-head">
+      <div class="im-head-text">
+        <div class="im-title">Importa concerti</div>
+        <div class="im-sub">Incolla da Excel (TAB) o compila le righe qui sotto</div>
+      </div>
+      <div class="im-actions">
+        <button type="button" class="btn-ghost btn-sm" (click)="addImportRows(5)">+5 righe</button>
+        <button type="button" class="btn-outline btn-sm" (click)="resolveImportAddresses()" [disabled]="importResolving">
+          📍 Cerca indirizzi
+        </button>
+        <button type="button" class="btn-primary btn-sm" (click)="confirmImport()" [disabled]="!canConfirmImport">
+          Importa
+        </button>
+        <button type="button" class="btn-ghost btn-sm" (click)="closeImport()">Chiudi</button>
+      </div>
+    </div>
+
+    <div class="im-grid-wrap">
+      <table class="im-table">
+        <thead>
+          <tr>
+            <th class="col-idx">#</th>
+            <th>Data</th>
+            <th>Ora</th>
+            <th>Evento</th>
+            <th>Band</th>
+            <th>Luogo</th>
+            <th>Paese / indirizzo</th>
+            <th class="col-num">Compenso</th>
+            <th class="col-num">Rimborso</th>
+            <th>Note</th>
+            <th>Cadenza</th>
+            <th>Mensile</th>
+            <th>Fattura</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of importRows; index as i; trackBy: trackByImportRow">
+            <td class="col-idx">{{ i + 1 }}</td>
+            <td><input type="date" [(ngModel)]="r.date" [ngModelOptions]="{standalone: true}" (focus)="setImportFocus(r.id, 'date')"></td>
+            <td><input type="time" [(ngModel)]="r.timeStart" [ngModelOptions]="{standalone: true}" (focus)="setImportFocus(r.id, 'timeStart')"></td>
+            <td><input type="text" [(ngModel)]="r.eventTitle" [ngModelOptions]="{standalone: true}" placeholder="Serata live" (focus)="setImportFocus(r.id, 'eventTitle')"></td>
+            <td>
+              <input type="text"
+                     [(ngModel)]="r.bandName"
+                     (ngModelChange)="onImportBandChange(r)"
+                     [ngModelOptions]="{standalone: true}"
+                     list="import-band-suggestions"
+                     placeholder="Nome band"
+                     (focus)="setImportFocus(r.id, 'bandName')">
+            </td>
+            <td><input type="text" [(ngModel)]="r.venue" [ngModelOptions]="{standalone: true}" placeholder="Locale" (focus)="setImportFocus(r.id, 'venue')"></td>
+            <td><input type="text" [(ngModel)]="r.address" [ngModelOptions]="{standalone: true}" placeholder="Città, via…" (focus)="setImportFocus(r.id, 'address')"></td>
+            <td class="col-num"><input type="number" [(ngModel)]="r.agreedFee" [ngModelOptions]="{standalone: true}" min="0" placeholder="0" (focus)="setImportFocus(r.id, 'agreedFee')"></td>
+            <td class="col-num"><input type="number" [(ngModel)]="r.reimbursement" [ngModelOptions]="{standalone: true}" min="0" placeholder="0" (focus)="setImportFocus(r.id, 'reimbursement')"></td>
+            <td><input type="text" [(ngModel)]="r.notes" [ngModelOptions]="{standalone: true}" placeholder="" (focus)="setImportFocus(r.id, 'notes')"></td>
+            <td>
+              <select [(ngModel)]="r.paymentCadence" [ngModelOptions]="{standalone: true}" (focus)="setImportFocus(r.id, 'paymentCadence')">
+                <option value=""></option>
+                <option value="prestazione">A serata</option>
+                <option value="mensile">Mensile</option>
+              </select>
+            </td>
+            <td>
+              <select [(ngModel)]="r.monthlySettlement" [ngModelOptions]="{standalone: true}" [disabled]="r.paymentCadence !== 'mensile'" (focus)="setImportFocus(r.id, 'monthlySettlement')">
+                <option value=""></option>
+                <option value="acconto">Acconto</option>
+                <option value="bonifico">Bonifico</option>
+              </select>
+            </td>
+            <td>
+              <select [(ngModel)]="r.billingMode" [ngModelOptions]="{standalone: true}" (focus)="setImportFocus(r.id, 'billingMode')">
+                <option value=""></option>
+                <option value="fuori_fattura">Fuori</option>
+                <option value="in_fattura">In</option>
+              </select>
+            </td>
+            <td class="col-actions">
+              <button type="button" class="btn-remove" (click)="removeImportRow(r.id)" title="Rimuovi">✕</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <datalist id="import-band-suggestions">
+        <option *ngFor="let c of contactsByPriority" [value]="c.displayName"></option>
+      </datalist>
+    </div>
+
+    <div class="im-footer">
+      <span class="im-hint">Ordine colonne per incolla: Data, Ora, Evento, Band, Luogo, Paese/indirizzo, Compenso, Rimborso, Note</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ FORM NUOVO CONCERTO -->
+<section class="card form-card" *ngIf="showForm" [formGroup]="form">
+  <h2 class="card-title">Nuovo concerto</h2>
   <div class="grid">
-    <label>Titolo
+    <label>Titolo *
       <input type="text" formControlName="title" placeholder="Serata live">
     </label>
-    <label>Data
+    <label>Data *
       <input type="date" formControlName="date">
     </label>
-    <label>Ora
+    <label>Ora *
       <input type="time" formControlName="timeStart">
     </label>
     <label>Formato
@@ -29,24 +134,30 @@
       </select>
     </label>
     <label>Venue
-      <input type="text" formControlName="venue">
+      <input type="text" formControlName="venue" placeholder="Nome locale / teatro">
     </label>
     <label>Indirizzo
-      <input type="text" formControlName="address" list="concert-address-suggestions" (input)="onAddressInput($any($event.target).value)">
+      <input type="text" formControlName="address" list="concert-address-suggestions"
+             (input)="onAddressInput($any($event.target).value)"
+             placeholder="Città, via…">
       <datalist id="concert-address-suggestions">
         <option *ngFor="let item of addressSuggestions" [value]="item"></option>
       </datalist>
     </label>
-    <div class="span-2">
-      <button type="button" class="btn-outline" (click)="launchExpenseCalculator()">Calcola Spese</button>
+
+    <div class="span-2 expense-row">
+      <button type="button" class="btn-outline btn-icon" (click)="launchExpenseCalculator()">
+        🚗 Calcola spese di viaggio
+      </button>
     </div>
-    <label>Compenso pattuito
+
+    <label>Compenso pattuito (€)
       <input type="number" formControlName="agreedFee" min="0">
     </label>
-    <label>Rimborso spese
+    <label>Rimborso spese (€)
       <input type="number" formControlName="reimbursement" min="0">
     </label>
-    <label>Gestione spese extra
+    <label>Spese extra
       <select formControlName="extraExpensesOutsideInvoice">
         <option [ngValue]="true">Fuori fattura (default)</option>
         <option [ngValue]="false">In fattura</option>
@@ -54,9 +165,9 @@
     </label>
     <label>Rubrica
       <select formControlName="contactId" (change)="onContactPick()">
-        <option value="">Nessun contatto</option>
+        <option value="">— Nessun contatto —</option>
         <option *ngFor="let c of contactsByPriority" [value]="c.id">
-          {{ c.displayName }} • priorità {{ c.priority }} • medio {{ c.averageFee | currency:'EUR':'symbol':'1.0-0' }} • {{ c.paymentCadence === 'mensile' ? 'mensile' : 'prestazione' }}
+          {{ c.displayName }} · pri {{ c.priority }} · medio {{ c.averageFee | currency:'EUR':'symbol':'1.0-0' }} · {{ c.paymentCadence === 'mensile' ? 'mensile' : 'a serata' }}
         </option>
       </select>
     </label>
@@ -66,7 +177,7 @@
         <option value="fuori_fattura">Fuori fattura</option>
       </select>
     </label>
-    <label>Pagamento
+    <label>Cadenza pagamento
       <select formControlName="paymentCadence">
         <option value="prestazione">A prestazione (saldo immediato)</option>
         <option value="mensile">Mensile</option>
@@ -78,117 +189,139 @@
         <option value="bonifico">Bonifico</option>
       </select>
     </label>
-    <div class="span-2 inline-contact">
-      <button type="button" class="btn-outline" (click)="toggleInlineContact()">
-        {{ showInlineContact ? 'Chiudi nuovo contatto' : 'Nuovo contatto rubrica' }}
-      </button>
-    </div>
-    <div class="span-2 inline-grid" *ngIf="showInlineContact">
-      <label>Tipo
-        <select [(ngModel)]="newContact.type">
-          <option value="band">Band</option>
-          <option value="school">Scuola</option>
-          <option value="student">Allievo</option>
-        </select>
-      </label>
-      <label>Nome
-        <input type="text" [(ngModel)]="newContact.displayName">
-      </label>
-      <label>Priorità
-        <input type="number" min="1" max="5" [(ngModel)]="newContact.priority">
-      </label>
-      <label>Compenso medio
-        <input type="number" min="0" [(ngModel)]="newContact.averageFee">
-      </label>
-      <label>Fatturazione
-        <select [(ngModel)]="newContact.billingMode">
-          <option value="in_fattura">In fattura</option>
-          <option value="fuori_fattura">Fuori fattura</option>
-        </select>
-      </label>
-      <label>Pagamento
-        <select [(ngModel)]="newContact.paymentCadence">
-          <option value="prestazione">A prestazione</option>
-          <option value="mensile">Mensile</option>
-        </select>
-      </label>
-      <label *ngIf="newContact.paymentCadence === 'mensile'">Regolazione mensile
-        <select [(ngModel)]="newContact.monthlySettlement">
-          <option value="acconto">Acconti</option>
-          <option value="bonifico">Bonifico</option>
-        </select>
-      </label>
-      <div class="inline-actions">
-        <button type="button" class="btn-primary" (click)="saveInlineContact()">Salva contatto</button>
-      </div>
-    </div>
+
     <label class="span-2">Note
-      <textarea formControlName="notes" rows="2"></textarea>
+      <textarea formControlName="notes" rows="2" placeholder="Note aggiuntive…"></textarea>
     </label>
   </div>
 
+  <!-- Partecipanti -->
   <div class="participants">
     <div class="box">
       <div class="box-head">
-        <h3>Band</h3>
-        <button type="button" class="btn-outline" (click)="addBand()">Aggiungi band</button>
+        <h3>Band / formazioni</h3>
+        <button type="button" class="btn-outline btn-sm" (click)="addBand()">+ Aggiungi</button>
       </div>
       <div formArrayName="bands" class="stack">
         <div *ngFor="let b of bandsArray.controls; index as i" class="row">
           <input type="text" [formControlName]="i" placeholder="Nome band">
-          <button type="button" class="btn-remove" (click)="removeBand(i)">✕</button>
+          <button type="button" class="btn-remove" (click)="removeBand(i)" title="Rimuovi">✕</button>
         </div>
+        <p class="empty-hint" *ngIf="!bandsArray.length">Nessuna band aggiunta</p>
       </div>
     </div>
     <div class="box">
       <div class="box-head">
         <h3>Musicisti</h3>
-        <button type="button" class="btn-outline" (click)="addMusician()">Aggiungi musicista</button>
+        <button type="button" class="btn-outline btn-sm" (click)="addMusician()">+ Aggiungi</button>
       </div>
       <div formArrayName="musicians" class="stack">
         <div *ngFor="let m of musiciansArray.controls; index as i" class="row">
           <input type="text" [formControlName]="i" placeholder="Nome musicista">
-          <button type="button" class="btn-remove" (click)="removeMusician(i)">✕</button>
+          <button type="button" class="btn-remove" (click)="removeMusician(i)" title="Rimuovi">✕</button>
         </div>
+        <p class="empty-hint" *ngIf="!musiciansArray.length">Nessun musicista aggiunto</p>
       </div>
     </div>
   </div>
 
-  <button type="button" class="btn-primary" (click)="saveConcert()">Salva concerto</button>
+  <!-- Nuovo contatto inline -->
+  <div class="span-2">
+    <button type="button" class="btn-ghost btn-sm" (click)="toggleInlineContact()">
+      {{ showInlineContact ? '▲ Chiudi nuovo contatto' : '＋ Nuovo contatto rubrica' }}
+    </button>
+  </div>
+  <div class="inline-grid" *ngIf="showInlineContact">
+    <label>Tipo
+      <select [(ngModel)]="newContact.type" [ngModelOptions]="{standalone: true}">
+        <option value="band">Band</option>
+        <option value="school">Scuola</option>
+        <option value="student">Allievo</option>
+      </select>
+    </label>
+    <label>Nome
+      <input type="text" [(ngModel)]="newContact.displayName" [ngModelOptions]="{standalone: true}">
+    </label>
+    <label>Priorità
+      <input type="number" min="1" max="5" [(ngModel)]="newContact.priority" [ngModelOptions]="{standalone: true}">
+    </label>
+    <label>Compenso medio (€)
+      <input type="number" min="0" [(ngModel)]="newContact.averageFee" [ngModelOptions]="{standalone: true}">
+    </label>
+    <label>Fatturazione
+      <select [(ngModel)]="newContact.billingMode" [ngModelOptions]="{standalone: true}">
+        <option value="in_fattura">In fattura</option>
+        <option value="fuori_fattura">Fuori fattura</option>
+      </select>
+    </label>
+    <label>Cadenza
+      <select [(ngModel)]="newContact.paymentCadence" [ngModelOptions]="{standalone: true}">
+        <option value="prestazione">A prestazione</option>
+        <option value="mensile">Mensile</option>
+      </select>
+    </label>
+    <label *ngIf="newContact.paymentCadence === 'mensile'">Regolazione mensile
+      <select [(ngModel)]="newContact.monthlySettlement" [ngModelOptions]="{standalone: true}">
+        <option value="acconto">Acconti</option>
+        <option value="bonifico">Bonifico</option>
+      </select>
+    </label>
+    <div class="inline-actions">
+      <button type="button" class="btn-primary" (click)="saveInlineContact()">Salva contatto</button>
+    </div>
+  </div>
+
+  <div class="form-footer">
+    <button type="button" class="btn-primary full-btn" (click)="saveConcert()">Salva concerto</button>
+  </div>
 </section>
 
-<section class="card">
-  <h3>Filtri concerti</h3>
-  <div class="grid">
-    <label>Band / Gruppo
-      <select [(ngModel)]="filterBand">
+<!-- ══════════════════════════════════════════ FILTRI -->
+<section class="card filter-card">
+  <div class="filter-header">
+    <div class="filter-left">
+      <span class="filter-label">Filtri</span>
+      <div class="filter-chips" *ngIf="activeFilterChips.length">
+        <span class="filter-chip" *ngFor="let c of activeFilterChips">{{ c }}</span>
+      </div>
+    </div>
+    <div class="filter-actions">
+      <button type="button" class="btn-ghost btn-sm" (click)="resetFilters()" [disabled]="!activeFilterChips.length">Reset</button>
+      <button type="button" class="btn-ghost btn-sm" (click)="showFilters = !showFilters">
+        {{ showFilters ? '▲ Nascondi' : '▼ Mostra' }}
+      </button>
+    </div>
+  </div>
+  <div class="filter-grid" *ngIf="showFilters">
+    <label><span>Band</span>
+      <select [ngModel]="filterBand" (ngModelChange)="filterBand = $event; applyFilters()">
         <option value="">Tutte</option>
         <option *ngFor="let b of availableBandFilters" [value]="b">{{ b }}</option>
       </select>
     </label>
-    <label>Da data
-      <input type="date" [(ngModel)]="filterDateFrom">
+    <label><span>Dal</span>
+      <input type="date" [ngModel]="filterDateFrom" (ngModelChange)="filterDateFrom = $event; applyFilters()">
     </label>
-    <label>A data
-      <input type="date" [(ngModel)]="filterDateTo">
+    <label><span>Al</span>
+      <input type="date" [ngModel]="filterDateTo" (ngModelChange)="filterDateTo = $event; applyFilters()">
     </label>
-    <label>Cadenza pagamento
-      <select [(ngModel)]="filterPaymentCadence">
+    <label><span>Cadenza</span>
+      <select [ngModel]="filterPaymentCadence" (ngModelChange)="filterPaymentCadence = $event; applyFilters()">
         <option value="all">Tutte</option>
         <option value="prestazione">A serata</option>
         <option value="mensile">Mensile</option>
       </select>
     </label>
-    <label>Stato pagamento
-      <select [(ngModel)]="filterPaymentState">
+    <label><span>Pagamento</span>
+      <select [ngModel]="filterPaymentState" (ngModelChange)="filterPaymentState = $event; applyFilters()">
         <option value="all">Tutti</option>
         <option value="da_pagare">Da pagare</option>
         <option value="parziale">Parziale</option>
         <option value="pagato">Pagato</option>
       </select>
     </label>
-    <label>Stato evento
-      <select [(ngModel)]="filterExecutionStatus">
+    <label><span>Stato evento</span>
+      <select [ngModel]="filterExecutionStatus" (ngModelChange)="filterExecutionStatus = $event; applyFilters()">
         <option value="all">Tutti</option>
         <option value="da_fare">Da fare</option>
         <option value="effettuato">Effettuato</option>
@@ -199,60 +332,210 @@
   </div>
 </section>
 
-<div class="list">
-  <div class="item" *ngFor="let c of filteredConcerts" [attr.id]="'concert-' + c.id" [class.item-focus]="focusedConcertId === c.id">
-    <div class="item-main">
-      <div class="item-compact">
-        <strong>{{ c.title }}</strong>
-        <div class="meta">{{ c.date }} • {{ c.timeStart }} • {{ concertBandLabel(c) }}</div>
-        <div class="meta">
-          Stato evento:
-          <span class="status-chip" [ngClass]="executionStatusClass(c.executionStatus)">{{ executionStatusLabel(c.executionStatus) }}</span>
-          <ng-container *ngIf="showPaymentForConcert(c)">
-            • Pagamento:
-            <span class="pay-chip" [ngClass]="concertPaymentStateClass(c)">{{ concertPaymentStateLabel(c) }}</span>
-          </ng-container>
+<!-- ══════════════════════════════════════════ VIEW TOGGLE -->
+<div class="view-toggle">
+  <button type="button" class="btn-toggle" [class.active]="concertSection === 'attivi'" (click)="setConcertSection('attivi')">
+    🕒 In programma ({{ activeConcertCount }})
+  </button>
+  <button type="button" class="btn-toggle" [class.active]="concertSection === 'svolti'" (click)="setConcertSection('svolti')">
+    ✅ Concerti svolti ({{ pastConcertCount }})
+  </button>
+</div>
+
+<div class="view-toggle">
+  <button type="button" class="btn-toggle" [class.active]="viewMode === 'band'" (click)="viewMode = 'band'">
+    🎸 Per band
+  </button>
+  <button type="button" class="btn-toggle" [class.active]="viewMode === 'list'" (click)="viewMode = 'list'">
+    ≡ Elenco
+  </button>
+</div>
+
+<!-- ══════════════════════════════════════════ VISTA PER BAND -->
+<div class="band-grid" *ngIf="viewMode === 'band'">
+  <div class="band-card" *ngFor="let g of bandGroups; trackBy: trackByBandGroup" [class.monthly-band]="g.paymentCadence === 'mensile'">
+    <!-- Header band -->
+    <button type="button" class="band-btn" (click)="toggleBandExpanded(g.key)">
+      <span class="band-left">
+        <span class="band-name">{{ g.name }}</span>
+        <span class="band-meta">
+          {{ g.paymentCadence === 'mensile' ? 'Mensile — ' + g.monthlySettlement : 'A prestazione' }}
+        </span>
+      </span>
+      <span class="band-right">
+        <span class="band-chip">{{ g.concerts.length }} eventi</span>
+        <span class="band-chip accent">
+          {{ g.paidExecuted | currency:'EUR':'symbol':'1.0-0' }} / {{ g.dueExecuted | currency:'EUR':'symbol':'1.0-0' }}
+        </span>
+        <span class="band-chip monthly" *ngIf="g.paymentCadence === 'mensile' && g.creditRemaining > 0">
+          Credito {{ g.creditRemaining | currency:'EUR':'symbol':'1.0-0' }}
+        </span>
+        <span class="band-chevron">{{ expandedBandKey === g.key ? '▲' : '▼' }}</span>
+      </span>
+    </button>
+
+    <!-- Concerti della band -->
+    <div class="band-body" *ngIf="expandedBandKey === g.key">
+      <div class="band-actions" *ngIf="g.paymentCadence === 'mensile'">
+        <button type="button" class="btn-outline btn-sm" (click)="addMonthlyPaymentForBand(g.name, 'acconto')">
+          + Acconto
+        </button>
+        <button type="button" class="btn-outline btn-sm" (click)="addMonthlyPaymentForBand(g.name, 'bonifico')">
+          + Bonifico
+        </button>
+      </div>
+
+      <div class="concerts-list">
+        <div class="concert-item" *ngFor="let c of g.concerts; trackBy: trackByConcert"
+             [attr.id]="'concert-' + c.id"
+             [class.focused]="focusedConcertId === c.id">
+          <ng-container *ngTemplateOutlet="concertCard; context: { $implicit: c }"></ng-container>
         </div>
+        <p class="empty-state" *ngIf="!g.concerts.length">Nessun concerto per questa band</p>
       </div>
-      <button type="button" class="btn-outline" (click)="toggleConcertExpanded(c.id)">
-        {{ expandedConcertId === c.id ? 'Chiudi' : 'Dettagli' }}
-      </button>
     </div>
-    <div class="item-details" *ngIf="expandedConcertId === c.id">
-      <div class="meta">Compenso: {{ c.agreedFee | currency:'EUR':'symbol':'1.0-0' }} + rimborso {{ c.reimbursement | currency:'EUR':'symbol':'1.0-0' }}</div>
-      <div class="meta" *ngIf="c.executionStatus === 'rimborsato'">Importo rimborsato: {{ c.reimbursedAmount | currency:'EUR':'symbol':'1.0-0' }}</div>
-      <div class="meta">Pagamento: {{ c.paymentCadence === 'prestazione' ? 'A prestazione (saldo immediato)' : ('Mensile - ' + c.monthlySettlement) }}</div>
-      <div class="meta">Spese extra: {{ c.extraExpensesOutsideInvoice ? 'Fuori fattura' : 'In fattura' }}</div>
-      <div class="meta" *ngIf="showPaymentForConcert(c)">
-        Stato contabile: {{ concertPaymentStateLabel(c) }} • Ricevuto {{ concertPaidAmount(c) | currency:'EUR':'symbol':'1.0-0' }} / {{ concertDueAmount(c) | currency:'EUR':'symbol':'1.0-0' }}
-        <span *ngIf="isConcertPending(c)"> • Residuo {{ (concertDueAmount(c) - concertPaidAmount(c)) | currency:'EUR':'symbol':'1.0-0' }}</span>
+  </div>
+  <p class="empty-state top-gap" *ngIf="!bandGroups.length">Nessuna band trovata con i filtri selezionati</p>
+</div>
+
+<!-- ══════════════════════════════════════════ VISTA ELENCO -->
+<div class="concerts-list top-gap" *ngIf="viewMode === 'list'">
+  <div class="concert-item" *ngFor="let c of filteredConcerts; trackBy: trackByConcert"
+       [attr.id]="'concert-' + c.id"
+       [class.focused]="focusedConcertId === c.id">
+    <ng-container *ngTemplateOutlet="concertCard; context: { $implicit: c }"></ng-container>
+  </div>
+  <p class="empty-state" *ngIf="!filteredConcerts.length">{{ concertsEmptyLabel }}</p>
+</div>
+
+<!-- ══════════════════════════════════════════ CONCERT CARD TEMPLATE -->
+<ng-template #concertCard let-c>
+  <!-- Riga sommario (sempre visibile) -->
+  <div class="cc-summary" (click)="toggleConcertExpanded(c.id)">
+    <div class="cc-date-badge">
+      <span class="cc-day">{{ c.date | date:'dd' }}</span>
+      <span class="cc-month">{{ c.date | date:'MMM' }}</span>
+    </div>
+    <div class="cc-info">
+      <div class="cc-title">{{ c.title || 'Concerto' }}</div>
+      <div class="cc-meta">
+        <span>{{ c.timeStart || 'Orario da definire' }}</span>
+        <span>· {{ concertPlacePreview(c) }}</span>
+        <span *ngIf="concertMetaBandLabel(c)">· {{ concertMetaBandLabel(c) }}</span>
       </div>
-      <div class="item-actions">
-        <label>
-          <select [ngModel]="c.executionStatus" (ngModelChange)="setExecutionStatus(c, $event)">
-            <option value="da_fare">Da fare</option>
-            <option value="effettuato">Effettuato</option>
-            <option value="rimborsato">Rimborsato</option>
-            <option value="annullato">Annullato</option>
-          </select>
-        </label>
-        <button type="button" class="btn-outline" (click)="copyConfirmationLink(c.id)">
-          {{ copiedId === c.id ? 'Link copiato' : 'Copia link conferma PDF' }}
+    </div>
+    <div class="cc-badges">
+      <span class="status-chip" [ngClass]="executionStatusClass(c.executionStatus)">
+        {{ executionStatusLabel(c.executionStatus) }}
+      </span>
+      <span class="pay-chip" [ngClass]="concertPaymentStateClass(c)" *ngIf="showPaymentForConcert(c)">
+        {{ concertPaymentStateLabel(c) }}
+      </span>
+      <span class="expense-chip" *ngIf="hasTravelExpenseCalculated(c)">
+        🚗 Spese calcolate
+      </span>
+    </div>
+    <div class="cc-fee">
+      {{ c.agreedFee | currency:'EUR':'symbol':'1.0-0' }}
+    </div>
+    <span class="cc-chevron">{{ expandedConcertId === c.id ? '▲' : '▼' }}</span>
+  </div>
+
+  <!-- Pannello dettagli (espanso) -->
+  <div class="cc-details" *ngIf="expandedConcertId === c.id">
+
+    <!-- Dati economici -->
+    <div class="detail-grid">
+      <div class="detail-item">
+        <span class="di-label">Compenso</span>
+        <span class="di-value">{{ c.agreedFee | currency:'EUR':'symbol':'1.2-2' }}</span>
+      </div>
+      <div class="detail-item">
+        <span class="di-label">Rimborso spese</span>
+        <span class="di-value">{{ c.reimbursement | currency:'EUR':'symbol':'1.2-2' }}</span>
+      </div>
+      <div class="detail-item">
+        <span class="di-label">Importo rimborsato</span>
+        <span class="di-value" *ngIf="c.executionStatus === 'rimborsato'">
+          {{ c.reimbursedAmount | currency:'EUR':'symbol':'1.2-2' }}
+        </span>
+        <span class="di-value di-na" *ngIf="c.executionStatus !== 'rimborsato'">—</span>
+      </div>
+      <div class="detail-item">
+        <span class="di-label">Cadenza pagamento</span>
+        <span class="di-value">{{ concertPaymentCadenceLabel(c) }}</span>
+      </div>
+      <div class="detail-item">
+        <span class="di-label">Fatturazione</span>
+        <span class="di-value">{{ c.billingMode === 'in_fattura' ? 'In fattura' : 'Fuori fattura' }}</span>
+      </div>
+      <div class="detail-item">
+        <span class="di-label">Spese extra</span>
+        <span class="di-value">{{ c.extraExpensesOutsideInvoice ? 'Fuori fattura' : 'In fattura' }}</span>
+      </div>
+    </div>
+
+    <!-- Stato contabile -->
+    <div class="payment-bar" *ngIf="showPaymentForConcert(c)">
+      <div class="pb-left">
+        <span class="pb-label">Ricevuto</span>
+        <span class="pb-amount received">{{ concertPaidAmount(c) | currency:'EUR':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="pb-sep">/</div>
+      <div class="pb-center">
+        <span class="pb-label">Dovuto</span>
+        <span class="pb-amount">{{ concertDueAmountForDisplay(c) | currency:'EUR':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="pb-right" *ngIf="isConcertPending(c)">
+        <span class="pb-label">Residuo</span>
+        <span class="pb-amount pending">{{ concertResidualAmountForDisplay(c) | currency:'EUR':'symbol':'1.0-0' }}</span>
+      </div>
+    </div>
+
+    <!-- Note -->
+    <div class="detail-notes" *ngIf="c.notes">
+      <span class="di-label">Note</span>
+      <p>{{ c.notes }}</p>
+    </div>
+
+    <!-- Azioni -->
+    <div class="cc-actions">
+      <div class="status-select-wrap">
+        <span class="di-label">Stato evento</span>
+        <select [ngModel]="c.executionStatus" (ngModelChange)="setExecutionStatus(c, $event)"
+                [ngModelOptions]="{standalone: true}" class="status-select">
+          <option value="da_fare">Da fare</option>
+          <option value="effettuato">Effettuato</option>
+          <option value="rimborsato">Rimborsato</option>
+          <option value="annullato">Annullato</option>
+        </select>
+      </div>
+      <div class="action-btns">
+        <button type="button" class="btn-outline btn-sm" (click)="copyConfirmationLink(c.id)">
+          {{ copiedId === c.id ? '✓ Copiato' : '🔗 Link PDF' }}
         </button>
-        <button type="button" class="btn-outline" *ngIf="inpsExemptProfile" (click)="openExemptionModule(c)">
-          Modulo esenzione
+        <button type="button" class="btn-outline btn-sm" (click)="launchExpenseCalculatorForConcert(c)">
+          🚗 Calcola spese
         </button>
-        <button type="button" class="btn-primary" *ngIf="isConcertPending(c) && c.paymentCadence === 'prestazione'" (click)="goToAccountingForConcert(c)">
-          Registra pagamento
+        <button type="button" class="btn-outline btn-sm" *ngIf="inpsExemptProfile" (click)="openExemptionModule(c)">
+          📄 Esenzione
         </button>
-        <button type="button" class="btn-outline" *ngIf="c.paymentCadence === 'mensile'" (click)="addMonthlyPayment(c, 'acconto')">
-          Aggiungi acconto
+        <button type="button" class="btn-primary btn-sm"
+                *ngIf="isConcertPending(c) && concertPaymentCadence(c) === 'prestazione'"
+                (click)="goToAccountingForConcert(c)">
+          💳 Registra pagamento
         </button>
-        <button type="button" class="btn-outline" *ngIf="c.paymentCadence === 'mensile'" (click)="addMonthlyPayment(c, 'bonifico')">
-          Aggiungi bonifico
+        <button type="button" class="btn-outline btn-sm"
+                *ngIf="concertPaymentCadence(c) === 'mensile'"
+                (click)="addMonthlyPayment(c, 'acconto')">
+          + Acconto
+        </button>
+        <button type="button" class="btn-outline btn-sm"
+                *ngIf="concertPaymentCadence(c) === 'mensile'"
+                (click)="addMonthlyPayment(c, 'bonifico')">
+          + Bonifico
         </button>
       </div>
     </div>
   </div>
-  <div class="meta" *ngIf="!filteredConcerts.length">Nessun concerto con i filtri selezionati</div>
-</div>
+</ng-template>

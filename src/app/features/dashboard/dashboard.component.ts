@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { EventDetail } from '../../models/event-detail';
 import { AppNotification } from '../../models/notification';
 import { SupabaseService } from '../../core/supabase.service';
+import { formatItalianAddressLabel, italianAddressTypeScore } from '../../core/italian-geo';
 
 type CalendarCell = {
   date: string;
@@ -51,6 +52,46 @@ type SignedContractSnapshot = {
   status: 'draft' | 'sent' | 'signed' | 'archived';
 };
 
+type BandCreditEntry = {
+  id: string;
+  bandKey: string;
+  bandName: string;
+  kind: 'acconto' | 'bonifico';
+  amount: number;
+  createdAt: string;
+};
+
+type ServicePayment = {
+  id: string;
+  createdAt: string;
+  category: 'lezione' | 'concerto' | 'dj_set' | 'prestazione' | 'spesa';
+  eventId: string;
+  receivedAmount: number;
+  paymentType: 'acconto' | 'saldo' | 'mensile';
+  paymentMethod: 'contanti' | 'bonifico' | 'pos' | 'assegno' | 'satispay' | 'altro';
+  paymentMode: 'pattuito_extra' | 'pattuito_fattura' | 'fattura_diretta' | 'cooperativa';
+  reimbursableExpenses: number;
+  taxableBase: number;
+  ivaPercent: number;
+  ivaAmount: number;
+  invoiceTotal: number;
+  cooperativeManaged: boolean;
+  cooperativeSettlementAt: string | null;
+  notes: string;
+};
+
+type OverduePrompt = {
+  eventId: string;
+  title: string;
+  date: string;
+  type: 'concert' | 'dj_set';
+  paymentCadence: 'prestazione' | 'mensile';
+  monthlySettlement: 'acconto' | 'bonifico';
+  bandName: string;
+  bandKey: string;
+  grossFee: number;
+};
+
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
@@ -86,7 +127,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
   isTeacherProfile = false;
   addressSuggestions: string[] = [];
   addressFocused = false;
+  overduePrompts: OverduePrompt[] = [];
+  overduePromptIndex = 0;
+  showOverduePrompt = false;
+  overdueStep: 'start' | 'immediate' | 'monthlyAsk' | 'monthlyPick' | 'done' = 'start';
+  overduePaymentAmount = 0;
+  overduePaymentMethod: ServicePayment['paymentMethod'] = 'contanti';
+  overdueMonthlyKind: 'acconto' | 'bonifico' = 'acconto';
   private refundedConcertIds = new Set<string>();
+  private overduePromptStateKey = 'mm_overdue_prompt_state_v3';
+  private overduePromptProcessedKey = 'mm_overdue_prompt_processed_v1';
   private addressTimer: ReturnType<typeof setTimeout> | null = null;
   private addressAborter: AbortController | null = null;
 
@@ -124,6 +174,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.buildCalendar();
     this.refreshRefundedConcertIds();
     this.contacts = this.readContacts();
+    this.initOverdueConcertPopup();
 
     const storedNotifications: AppNotification[] = JSON.parse(localStorage.getItem('mm_notifications') || '[]');
     this.notifications = storedNotifications.slice(0, 5);
@@ -399,7 +450,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private isEventCompleted(event: EventDetail): boolean {
     if (event.status === 'cancelled') return false;
     if (event.date >= this.today) return false;
-    if (!this.hasAnyPayment(event.id)) return false;
+    if (!this.hasAnyPaymentForEvent(event)) return false;
     return event.status === 'confirmed' || event.status === 'pending';
   }
 
@@ -715,20 +766,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private formatAddressLabel(row: any): string {
-    const address = row?.address || {};
-    const place = `${address.city || address.town || address.village || address.municipality || address.hamlet || row?.name || ''}`.trim();
-    const province = `${address.county || ''}`.replace(/^Città metropolitana di\s+/i, '').trim();
-    const region = `${address.state || ''}`.trim();
-    const country = `${address.country || 'Italia'}`.trim();
-    const road = `${address.road || ''}`.trim();
-    const number = `${address.house_number || ''}`.trim();
-    const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
-    if (['road', 'house', 'residential'].includes(addresstype) && road) {
-      const roadLabel = `${road}${number ? ` ${number}` : ''}`.trim();
-      return [roadLabel, place, province, region, country].filter(Boolean).join(', ');
-    }
-    const compact = [place, province, region, country].filter(Boolean).join(', ');
-    return compact || `${row?.display_name || ''}`.trim();
+    return formatItalianAddressLabel(row, value => this.normalizeAddress(value));
   }
 
   private normalizeAddress(value: string): string {
@@ -736,11 +774,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private addressTypeScore(addresstype: string): number {
-    if (['city', 'town', 'village', 'municipality', 'hamlet', 'locality'].includes(addresstype)) return 60;
-    if (['county', 'province', 'state_district', 'state'].includes(addresstype)) return 45;
-    if (['suburb', 'neighbourhood', 'quarter'].includes(addresstype)) return 35;
-    if (['road', 'house', 'residential'].includes(addresstype)) return 25;
-    return 20;
+    return italianAddressTypeScore(addresstype);
   }
 
   private toLocalIsoDate(date: Date): string {
@@ -753,6 +787,235 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private hasAnyPayment(eventId: string): boolean {
     const payments: { eventId?: string }[] = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
     return payments.some(payment => payment.eventId === eventId);
+  }
+
+  private hasAnyPaymentForEvent(event: EventDetail): boolean {
+    if (this.hasAnyPayment(event.id)) return true;
+    if (event.type !== 'concert' && event.type !== 'dj_set') return false;
+    const info = this.resolvePaymentInfoForEvent(event);
+    if (info.paymentCadence !== 'mensile') return false;
+    if (!info.bandKey) return false;
+    return this.hasAnyMonthlyCreditForBandSince(info.bandKey, event.date);
+  }
+
+  private initOverdueConcertPopup(): void {
+    const state = this.readOverduePromptState();
+    const dismissed = new Set(state.date === this.today ? state.dismissedEventIds : []);
+    const processed = this.readOverdueProcessedEventIds();
+    const candidates = this.allEvents
+      .filter(e => (e.type === 'concert' || e.type === 'dj_set'))
+      .filter(e => e.status !== 'cancelled')
+      .filter(e => e.date < this.today)
+      .filter(e => !dismissed.has(e.id))
+      .filter(e => !processed.has(e.id))
+      .filter(e => !this.refundedConcertIds.has(e.id));
+
+    const prompts: OverduePrompt[] = [];
+    for (const ev of candidates) {
+      const info = this.resolvePaymentInfoForEvent(ev);
+      if (info.paymentCadence === 'prestazione' && this.hasAnyPayment(ev.id)) {
+        this.markOverdueEventProcessed(ev.id);
+        continue;
+      }
+      prompts.push({
+        eventId: ev.id,
+        title: `${ev.title || 'Concerto'}`,
+        date: ev.date,
+        type: ev.type === 'dj_set' ? 'dj_set' : 'concert',
+        paymentCadence: info.paymentCadence,
+        monthlySettlement: info.monthlySettlement,
+        bandName: info.bandName,
+        bandKey: info.bandKey,
+        grossFee: Number(ev.grossFee || 0)
+      });
+    }
+
+    prompts.sort((a, b) => a.date.localeCompare(b.date));
+    if (!prompts.length) return;
+    this.overduePrompts = prompts;
+    this.overduePromptIndex = 0;
+    this.openCurrentOverduePrompt();
+  }
+
+  private openCurrentOverduePrompt(): void {
+    const p = this.currentOverduePrompt;
+    if (!p) return;
+    this.overduePaymentAmount = Math.max(0, Number(p.grossFee || 0));
+    this.overduePaymentMethod = 'contanti';
+    this.overdueMonthlyKind = p.monthlySettlement === 'bonifico' ? 'bonifico' : 'acconto';
+    this.overdueStep = p.paymentCadence === 'mensile' ? 'monthlyAsk' : 'immediate';
+    this.showOverduePrompt = true;
+  }
+
+  get currentOverduePrompt(): OverduePrompt | null {
+    return this.overduePrompts[this.overduePromptIndex] || null;
+  }
+
+  closeOverduePrompt(): void {
+    this.showOverduePrompt = false;
+    this.overdueStep = 'start';
+  }
+
+  skipOverduePrompt(): void {
+    const p = this.currentOverduePrompt;
+    if (!p) return;
+    this.markOverdueEventProcessed(p.eventId);
+    this.nextOverduePrompt();
+  }
+
+  monthlyOverdueReceived(answer: boolean): void {
+    if (!answer) {
+      this.closeOverduePrompt();
+      return;
+    }
+    this.overdueStep = 'monthlyPick';
+  }
+
+  saveOverdueImmediatePayment(): void {
+    const p = this.currentOverduePrompt;
+    if (!p) return;
+    const amount = Number(this.overduePaymentAmount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const all: ServicePayment[] = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
+    const mode = this.resolvePaymentModeForEvent(p.eventId);
+    const createdAt = new Date().toISOString();
+    const payment: ServicePayment = {
+      id: crypto.randomUUID(),
+      createdAt,
+      category: p.type === 'dj_set' ? 'dj_set' : 'concerto',
+      eventId: p.eventId,
+      receivedAmount: this.round2(amount),
+      paymentType: 'saldo',
+      paymentMethod: this.overduePaymentMethod,
+      paymentMode: mode,
+      reimbursableExpenses: 0,
+      taxableBase: this.round2(amount),
+      ivaPercent: 0,
+      ivaAmount: 0,
+      invoiceTotal: this.round2(amount),
+      cooperativeManaged: false,
+      cooperativeSettlementAt: null,
+      notes: 'Inserito da popup post-evento'
+    };
+    all.unshift(payment);
+    localStorage.setItem('mm_service_payments', JSON.stringify(all));
+    this.markOverdueEventProcessed(p.eventId);
+    this.dismissOverduePrompt(p.eventId);
+    this.nextOverduePrompt();
+  }
+
+  saveOverdueMonthlyPayment(): void {
+    const p = this.currentOverduePrompt;
+    if (!p) return;
+    const amount = Number(this.overduePaymentAmount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!p.bandKey || !p.bandName) {
+      this.skipOverduePrompt();
+      return;
+    }
+    const raw = JSON.parse(localStorage.getItem('mm_band_credits') || '[]');
+    const list = Array.isArray(raw) ? raw : [];
+    list.unshift({
+      id: crypto.randomUUID(),
+      bandKey: p.bandKey,
+      bandName: p.bandName,
+      kind: this.overdueMonthlyKind,
+      amount: this.round2(amount),
+      createdAt: new Date().toISOString()
+    } satisfies BandCreditEntry);
+    localStorage.setItem('mm_band_credits', JSON.stringify(list));
+    this.markOverdueEventProcessed(p.eventId);
+    this.dismissOverduePrompt(p.eventId);
+    this.nextOverduePrompt();
+  }
+
+  private nextOverduePrompt(): void {
+    this.closeOverduePrompt();
+    const next = this.overduePromptIndex + 1;
+    if (next >= this.overduePrompts.length) {
+      this.overduePrompts = [];
+      this.overduePromptIndex = 0;
+      return;
+    }
+    this.overduePromptIndex = next;
+    this.openCurrentOverduePrompt();
+  }
+
+  private dismissOverduePrompt(eventId: string): void {
+    const state = this.readOverduePromptState();
+    const dismissed = new Set(state.date === this.today ? state.dismissedEventIds : []);
+    dismissed.add(eventId);
+    localStorage.setItem(this.overduePromptStateKey, JSON.stringify({ date: this.today, dismissedEventIds: [...dismissed] }));
+  }
+
+  private readOverduePromptState(): { date: string; dismissedEventIds: string[] } {
+    const raw = JSON.parse(localStorage.getItem(this.overduePromptStateKey) || '{}');
+    const date = `${raw?.date || ''}`.trim();
+    const ids = Array.isArray(raw?.dismissedEventIds) ? raw.dismissedEventIds.map((x: any) => `${x || ''}`.trim()).filter(Boolean) : [];
+    return { date, dismissedEventIds: ids };
+  }
+
+  private readOverdueProcessedEventIds(): Set<string> {
+    const raw = JSON.parse(localStorage.getItem(this.overduePromptProcessedKey) || '[]');
+    const ids = Array.isArray(raw) ? raw.map((x: any) => `${x || ''}`.trim()).filter(Boolean) : [];
+    return new Set(ids);
+  }
+
+  private markOverdueEventProcessed(eventId: string): void {
+    const processed = this.readOverdueProcessedEventIds();
+    processed.add(`${eventId || ''}`.trim());
+    localStorage.setItem(this.overduePromptProcessedKey, JSON.stringify([...processed]));
+  }
+
+  private resolvePaymentInfoForEvent(event: EventDetail): { paymentCadence: 'prestazione' | 'mensile'; monthlySettlement: 'acconto' | 'bonifico'; bandName: string; bandKey: string } {
+    const notes = `${event.notes || ''}`;
+    const extracted = this.sanitizeBandName(this.extractRubricaName(notes));
+    const contact = extracted ? this.contacts.find(c => c.type === 'band' && this.normalizeBandKey(c.displayName) === this.normalizeBandKey(extracted)) : undefined;
+    const cadence = contact?.paymentCadence === 'mensile' ? 'mensile' : (notes.toLowerCase().includes('pagamento mensile') ? 'mensile' : 'prestazione');
+    const monthlySettlement = contact?.monthlySettlement === 'bonifico' ? 'bonifico' : (notes.toLowerCase().includes('bonifico') ? 'bonifico' : 'acconto');
+    const bandName = this.sanitizeBandName(`${contact?.displayName || extracted || ''}`.trim());
+    const bandKey = this.normalizeBandKey(bandName);
+    return { paymentCadence: cadence, monthlySettlement, bandName, bandKey };
+  }
+
+  private extractRubricaName(notes: string): string {
+    const match = `${notes || ''}`.match(/\[Rubrica:([^\]]+)\]/i);
+    return `${match?.[1] || ''}`.trim();
+  }
+
+  private normalizeBandKey(value: string): string {
+    return `${value || ''}`.toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  private sanitizeBandName(value: string): string {
+    return `${value || ''}`
+      .replace(/\|.*$/g, '')
+      .replace(/•\s*priorit[aà].*$/gi, '')
+      .replace(/-\s*priorit[aà].*$/gi, '')
+      .replace(/·\s*pri\s*\d+/gi, '')
+      .replace(/·\s*medio.*$/gi, '')
+      .replace(/·\s*mensile/gi, '')
+      .replace(/·\s*a\s*serata/gi, '')
+      .trim();
+  }
+
+  private hasAnyMonthlyCreditForBandSince(bandKey: string, sinceDate: string): boolean {
+    const raw = JSON.parse(localStorage.getItem('mm_band_credits') || '[]');
+    const list: BandCreditEntry[] = Array.isArray(raw) ? raw : [];
+    const key = this.normalizeBandKey(bandKey);
+    if (!key) return false;
+    const since = `${sinceDate || ''}`.trim();
+    return list.some(x => this.normalizeBandKey(x.bandKey) === key && `${x.createdAt || ''}`.slice(0, 10) >= since);
+  }
+
+  private resolvePaymentModeForEvent(eventId: string): ServicePayment['paymentMode'] {
+    const ev = this.allEvents.find(e => e.id === eventId);
+    if (!ev) return 'pattuito_extra';
+    return ev.compensoType === 'in_fattura' ? 'fattura_diretta' : 'pattuito_extra';
+  }
+
+  private round2(value: number): number {
+    return Math.round((Number(value) || 0) * 100) / 100;
   }
 
   private ensureSignedContractsInEvents(events: EventDetail[]): EventDetail[] {

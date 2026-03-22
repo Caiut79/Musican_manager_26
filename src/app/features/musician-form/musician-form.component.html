@@ -109,9 +109,9 @@
   </section>
 
   <!-- ── Step 1: Profilo musicale ── -->
-  <section *ngIf="currentStep === 1 && isMusician">
+  <section *ngIf="currentStep === 1 && hasLiveRole">
     <h2>Profilo musicale</h2>
-    <div class="row">
+    <div class="row" *ngIf="isMusician">
       <label>Strumento principale
         <select formControlName="instrument">
           <option value="">Seleziona strumento</option>
@@ -125,33 +125,70 @@
         </select>
       </label>
     </div>
-    <div class="row">
-      <div>
-        <span class="chips-label">Stili suonati</span>
-        <span class="field-hint">Clicca per selezionare/deselezionare</span>
-        <div class="chips-grid">
-          <button type="button" class="style-chip"
-            *ngFor="let st of styles"
-            [class.selected]="isStyleSelected(st, 'stylesPlayed')"
-            (click)="toggleStyle(st, 'stylesPlayed')">{{ st }}</button>
+    <div class="role-style-wrap">
+      <div class="role-style-card musician" *ngIf="isMusician">
+        <div class="role-style-head">
+          <div class="role-style-title">Musicista</div>
+          <div class="role-style-sub">Imposta gli stili suonati e quelli con cui vuoi essere trovato</div>
+        </div>
+        <div class="row role-style-grid">
+          <div>
+            <span class="chips-label">Stili suonati</span>
+            <span class="field-hint">Clicca per selezionare/deselezionare</span>
+            <div class="chips-grid">
+              <button type="button" class="style-chip"
+                *ngFor="let st of styles"
+                [class.selected]="isStyleSelected(st, 'stylesPlayed')"
+                (click)="toggleStyle(st, 'stylesPlayed')">{{ st }}</button>
+            </div>
+          </div>
+          <div>
+            <span class="chips-label">Stili per ricerca</span>
+            <span class="field-hint">Stili con cui vuoi essere trovato</span>
+            <div class="chips-grid">
+              <button type="button" class="style-chip"
+                *ngFor="let st of styles"
+                [class.selected]="isStyleSelected(st, 'searchableStyles')"
+                (click)="toggleStyle(st, 'searchableStyles')">{{ st }}</button>
+            </div>
+          </div>
         </div>
       </div>
-      <div>
-        <span class="chips-label">Stili per ricerca</span>
-        <span class="field-hint">Stili con cui vuoi essere trovato</span>
-        <div class="chips-grid">
-          <button type="button" class="style-chip"
-            *ngFor="let st of styles"
-            [class.selected]="isStyleSelected(st, 'searchableStyles')"
-            (click)="toggleStyle(st, 'searchableStyles')">{{ st }}</button>
+
+      <div class="role-style-card dj" *ngIf="isDj">
+        <div class="role-style-head">
+          <div class="role-style-title">DJ</div>
+          <div class="role-style-sub">Stili DJ separati dal profilo Musicista</div>
+        </div>
+        <div class="row role-style-grid">
+          <div>
+            <span class="chips-label">Stili suonati</span>
+            <span class="field-hint">Clicca per selezionare/deselezionare</span>
+            <div class="chips-grid">
+              <button type="button" class="style-chip"
+                *ngFor="let st of styles"
+                [class.selected]="isStyleSelected(st, 'djStylesPlayed')"
+                (click)="toggleStyle(st, 'djStylesPlayed')">{{ st }}</button>
+            </div>
+          </div>
+          <div>
+            <span class="chips-label">Stili per ricerca</span>
+            <span class="field-hint">Stili con cui vuoi essere trovato</span>
+            <div class="chips-grid">
+              <button type="button" class="style-chip"
+                *ngFor="let st of styles"
+                [class.selected]="isStyleSelected(st, 'djSearchableStyles')"
+                (click)="toggleStyle(st, 'djSearchableStyles')">{{ st }}</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section *ngIf="currentStep === 1 && !isMusician">
+  <section *ngIf="currentStep === 1 && !hasLiveRole">
     <h2>Profilo musicale</h2>
-    <p class="field-hint field-hint-spaced">Hai disattivato il ruolo musicista: questa sezione viene saltata.</p>
+    <p class="field-hint field-hint-spaced">Attiva almeno uno tra Musicista o DJ per compilare questa sezione.</p>
   </section>
 
   <!-- ── Step 2: Social ── -->

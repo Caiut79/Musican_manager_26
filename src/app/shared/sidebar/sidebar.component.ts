@@ -42,13 +42,15 @@ export class SidebarComponent {
     { label: 'Contratti',     icon: 'ti-file-text',        route: '/contracts' },
     { label: 'Storico',       icon: 'ti-clock',            route: '/history' },
     { label: 'Contabilità',   icon: 'ti-briefcase',        route: '/accounting' },
+    { label: 'Fatturazione',  icon: 'ti-receipt',          route: '/fatturazione' },
     { label: 'Profilo',       icon: 'ti-user-circle',      route: '/profile' },
   ];
 
   get navItems(): NavItem[] {
     const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
     const isTeacher = profile?.isTeacher === true;
-    if (isTeacher) return this.baseNavItems;
-    return this.baseNavItems.filter(item => item.route !== '/teaching');
+    let items = this.baseNavItems;
+    if (!isTeacher) items = items.filter(item => item.route !== '/teaching');
+    return items;
   }
 }

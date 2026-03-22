@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import * as L from 'leaflet';
 import { Expense, ExpenseExtra } from '../../models/expense';
 import { SupabaseService } from '../../core/supabase.service';
+import { formatItalianAddressLabel, italianAddressTypeScore, provinceCodeFromAddressLabel, provinceCodeFromText, normalizeGeoText } from '../../core/italian-geo';
 
 type ItineraryOption = {
   id: string;
@@ -102,8 +103,10 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   constructor(private fb: FormBuilder, private supabase: SupabaseService, private route: ActivatedRoute, private router: Router) {}
 
   ngOnInit() {
-    this.expenses = JSON.parse(localStorage.getItem('mm_expenses') || '[]');
-    const homeBase         = localStorage.getItem('mm_homeBase') || '';
+    this.expenses = this.normalizeStoredExpenses(JSON.parse(localStorage.getItem('mm_expenses') || '[]'));
+    const profileSnapshot = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const homeBaseRaw = `${localStorage.getItem('mm_homeBase') || profileSnapshot?.homeBase || profileSnapshot?.residence || ''}`.trim();
+    const homeBase = this.normalizeAddressTextForUi(homeBaseRaw);
     const savedPrice       = parseFloat(localStorage.getItem('mm_fuelPricePerLiter') || '1.85');
     const savedConsumption = parseFloat(localStorage.getItem('mm_vehicleConsumption') || '7.0');
     const savedVehicleType = localStorage.getItem('mm_toll_vehicle_type') || localStorage.getItem('mm_tollguru_vehicle_type') || '2AxlesAuto';
@@ -300,6 +303,8 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onAddressBlur(field: AddressField): void {
+    const current = `${this.form.get(field)?.value || ''}`.trim();
+    if (current) this.form.get(field)?.setValue(this.normalizeAddressTextForUi(current), { emitEvent: false });
     setTimeout(() => {
       if (this.activeAddressField === field) this.activeAddressField = null;
       this.clearAddressSuggestions(field);
@@ -307,7 +312,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   selectAddressSuggestion(field: AddressField, suggestion: string): void {
-    this.form.get(field)?.setValue(suggestion);
+    this.form.get(field)?.setValue(this.normalizeAddressTextForUi(suggestion));
     this.activeAddressField = null;
     this.clearAddressSuggestions(field);
   }
@@ -414,9 +419,9 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!contextRaw) return;
     const context = JSON.parse(contextRaw || '{}');
     const draft = context?.draft || {};
-    const destination = `${draft.address || draft.venue || ''}`.trim();
+    const destination = this.normalizeAddressTextForUi(`${draft.address || draft.venue || ''}`.trim());
     if (!destination) return;
-    const origin = `${this.form.get('origin')?.value || ''}`.trim();
+    const origin = this.normalizeAddressTextForUi(`${this.form.get('origin')?.value || ''}`.trim());
     this.form.patchValue({ origin, destination });
   }
 
@@ -440,33 +445,11 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private formatNominatimLabel(row: any): string {
-    const address = row?.address || {};
-    const place = `${address.city || address.town || address.village || address.municipality || address.hamlet || row?.name || ''}`.trim();
-    const province = this.normalizeProvinceName(`${address.county || ''}`);
-    const region = `${address.state || ''}`.trim();
-    const country = `${address.country || 'Italia'}`.trim();
-    const road = `${address.road || ''}`.trim();
-    const number = `${address.house_number || ''}`.trim();
-    const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
-    const roadLike = addresstype === 'road' || addresstype === 'house' || addresstype === 'residential';
-    if (roadLike && road) {
-      const roadLabel = `${road}${number ? ` ${number}` : ''}`.trim();
-      return [roadLabel, place, province, region, country].filter(Boolean).join(', ');
-    }
-    const compact = [place, province, region, country].filter(Boolean).join(', ');
-    return compact || `${row?.display_name || ''}`.trim();
-  }
-
-  private normalizeProvinceName(value: string): string {
-    return `${value || ''}`.replace(/^Città metropolitana di\s+/i, '').trim();
+    return formatItalianAddressLabel(row, value => this.normalizeAddressText(value));
   }
 
   private addressTypeScore(addresstype: string): number {
-    if (['city', 'town', 'village', 'municipality', 'hamlet', 'locality'].includes(addresstype)) return 60;
-    if (['county', 'province', 'state_district', 'state'].includes(addresstype)) return 45;
-    if (['suburb', 'neighbourhood', 'quarter'].includes(addresstype)) return 35;
-    if (['road', 'house', 'residential'].includes(addresstype)) return 25;
-    return 20;
+    return italianAddressTypeScore(addresstype);
   }
 
   toggleMapWaypointPick(): void {
@@ -495,7 +478,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
       const res = await fetch(url, { headers: { 'Accept-Language': 'it' } });
       if (!res.ok) return '';
       const data = await res.json();
-      return `${data?.display_name || ''}`.trim();
+      return this.normalizeAddressTextForUi(formatItalianAddressLabel(data, value => this.normalizeAddressText(value)));
     } catch {
       return '';
     }
@@ -935,8 +918,8 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     const expense: Expense = {
       id:           crypto.randomUUID(),
       date:         new Date().toISOString().split('T')[0],
-      origin:       v.origin,
-      destination:  v.destination,
+      origin:       this.normalizeAddressTextForUi(`${v.origin || ''}`),
+      destination:  this.normalizeAddressTextForUi(`${v.destination || ''}`),
       originLat:    this.originCoords?.[0],
       originLon:    this.originCoords?.[1],
       destLat:      this.destCoords[0],
@@ -960,6 +943,50 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     this.expenses.unshift(expense);
     localStorage.setItem('mm_expenses', JSON.stringify(this.expenses));
     void this.syncSupabaseExpenses();
+  }
+
+  formatExpenseAddress(value: string): string {
+    return this.normalizeAddressTextForUi(value);
+  }
+
+  private normalizeStoredExpenses(raw: any[]): Expense[] {
+    if (!Array.isArray(raw)) return [];
+    const normalized = raw.map((item: any) => ({
+      ...item,
+      origin: this.normalizeAddressTextForUi(`${item?.origin || ''}`),
+      destination: this.normalizeAddressTextForUi(`${item?.destination || ''}`)
+    }));
+    localStorage.setItem('mm_expenses', JSON.stringify(normalized));
+    return normalized;
+  }
+
+  private normalizeAddressTextForUi(value: string): string {
+    const raw = `${value || ''}`.trim();
+    if (!raw) return '';
+    const regionNames = new Set([
+      'abruzzo', 'basilicata', 'calabria', 'campania', 'emilia romagna', 'friuli venezia giulia',
+      'lazio', 'liguria', 'lombardia', 'marche', 'molise', 'piemonte', 'puglia', 'sardegna',
+      'sicilia', 'toscana', 'trentino alto adige', 'umbria', 'valle d aosta', 'veneto'
+    ]);
+    const parts = raw.split(',').map(x => `${x || ''}`.trim()).filter(Boolean);
+    const provinceCode = provinceCodeFromAddressLabel(raw);
+    const compact: string[] = [];
+    for (const p of parts) {
+      const norm = normalizeGeoText(p);
+      if (!norm) continue;
+      if (norm === 'italia' || norm === 'italy') continue;
+      if (regionNames.has(norm)) continue;
+      if (provinceCodeFromText(p)) {
+        if (provinceCode && !compact.includes(provinceCode)) compact.push(provinceCode);
+        continue;
+      }
+      compact.push(p);
+    }
+    if (provinceCode && !compact.some(x => `${x}`.toUpperCase() === provinceCode)) {
+      const insertAt = Math.max(1, compact.length - 1);
+      compact.splice(insertAt, 0, provinceCode);
+    }
+    return compact.join(', ');
   }
 
   // ─── Navigation ────────────────────────────────────────────────────────────

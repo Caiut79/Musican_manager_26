@@ -611,3 +611,327 @@
   span { font-size: 28px; opacity: 0.5; }
   p { margin: 0; font-size: 13px; }
 }
+
+.overdue-backdrop {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(800px 420px at 50% 20%, rgba(124, 58, 237, 0.22), rgba(15, 23, 42, 0.55));
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+
+.overdue-modal {
+  width: min(560px, calc(100vw - 36px));
+  background: linear-gradient(180deg, #ffffff, #fbfbff);
+  border: 1px solid rgba(216, 180, 254, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+  position: relative;
+}
+
+.overdue-modal::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, #7c3aed, #3b82f6, #22c55e);
+}
+
+.overdue-modal.is-monthly::before {
+  background: linear-gradient(90deg, #5b21b6, #7c3aed, #a78bfa);
+}
+
+.om-head {
+  padding: 14px 14px 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(196, 181, 253, 0.35);
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.10), rgba(255, 255, 255, 0.0));
+}
+
+.om-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.om-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(191, 219, 254, 0.7);
+  flex-shrink: 0;
+  i { font-size: 18px; line-height: 1; }
+}
+
+.om-icon.monthly {
+  color: #5b21b6;
+  background: rgba(124, 58, 237, 0.12);
+  border-color: rgba(196, 181, 253, 0.8);
+}
+
+.om-head-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.om-title {
+  font-size: 13px;
+  font-weight: 900;
+  color: #111827;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.om-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.om-close {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all var(--transition);
+  &:hover { border-color: #c4b5fd; background: #f5f3ff; color: #5b21b6; }
+}
+
+.om-body {
+  padding: 12px 14px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.om-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(224, 231, 255, 0.95);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #fafaff);
+}
+
+.om-k {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.om-v {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  text-align: right;
+}
+
+.om-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.8);
+  background: rgba(59, 130, 246, 0.10);
+  color: #1d4ed8;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.om-pill.monthly {
+  border-color: rgba(196, 181, 253, 0.9);
+  background: rgba(124, 58, 237, 0.12);
+  color: #5b21b6;
+}
+
+.om-block {
+  border: 1px solid rgba(196, 181, 253, 0.5);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.06), rgba(255, 255, 255, 0.0));
+  padding: 12px;
+}
+
+.om-block-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 10px;
+}
+
+.om-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: end;
+  @media (max-width: 520px) { grid-template-columns: 1fr; }
+
+  label {
+    display: grid;
+    gap: 6px;
+  }
+
+  span {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }
+
+  input, select {
+    border: 1px solid #ddd6fe;
+    border-radius: 10px;
+    padding: 9px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    background: #fff;
+    transition: border-color var(--transition), box-shadow var(--transition);
+    &:focus {
+      outline: none;
+      border-color: #8b5cf6;
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.16);
+    }
+  }
+}
+
+.om-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  .btn-primary {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    border-color: #6d28d9;
+    color: #fff;
+  }
+
+  .btn-outline {
+    border-color: #c4b5fd;
+    color: #6d28d9;
+    background: #f5f3ff;
+  }
+}
+
+@media (max-width: 430px) {
+  .overdue-backdrop {
+    z-index: 9999;
+    align-items: center;
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    background: radial-gradient(760px 380px at 50% 35%, rgba(124, 58, 237, 0.26), rgba(15, 23, 42, 0.62));
+  }
+
+  .overdue-modal {
+    width: 100%;
+    max-height: 90vh;
+    border-radius: 16px;
+    border: 1px solid rgba(196, 181, 253, 0.55);
+    box-shadow: 0 18px 52px rgba(15, 23, 42, 0.4);
+    overflow: auto;
+  }
+
+  .cal-header {
+    padding: 12px 12px 10px;
+    gap: 10px;
+  }
+
+  .month-label {
+    min-width: 0;
+    font-size: 14px;
+  }
+
+  .btn-oggi {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .om-head {
+    padding: 12px 12px 9px;
+  }
+
+  .om-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    i { font-size: 16px; }
+  }
+
+  .om-title {
+    font-size: 12px;
+  }
+
+  .om-sub {
+    font-size: 11px;
+  }
+
+  .om-body {
+    padding: 10px 12px 12px;
+    gap: 8px;
+  }
+
+  .om-row {
+    padding: 7px 9px;
+    border-radius: 10px;
+  }
+
+  .om-k {
+    font-size: 10px;
+  }
+
+  .om-v {
+    font-size: 12px;
+  }
+
+  .om-block {
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  .om-grid input,
+  .om-grid select {
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 12px;
+  }
+
+  .om-actions {
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .om-actions .btn-primary,
+  .om-actions .btn-outline {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}

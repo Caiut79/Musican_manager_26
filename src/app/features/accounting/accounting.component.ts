@@ -5,6 +5,16 @@ import { ActivatedRoute } from '@angular/router';
 
 type Period = { value: string; label: string };
 
+type ConcertBandGroup = {
+  key: string;
+  name: string;
+  paymentCadence: 'prestazione' | 'mensile';
+  monthlySettlement: 'acconto' | 'bonifico';
+  events: EventDetail[];
+  agreed: number;
+  received: number;
+};
+
 // ─── Payment types ──────────────────────────────────────────────────────────
 export type PaymentMode   = 'pattuito_extra' | 'pattuito_fattura' | 'fattura_diretta';
 export type PaymentMethod = 'contanti' | 'bonifico' | 'assegno' | 'pos';
@@ -118,6 +128,13 @@ export class AccountingComponent implements OnInit {
   private concertMonthlySettlementByEventId = new Map<string, 'acconto' | 'bonifico'>();
   private contactCadenceByBandName = new Map<string, 'mensile' | 'prestazione'>();
   private contactMonthlySettlementByBandName = new Map<string, 'acconto' | 'bonifico'>();
+  showBandMonthlyPaymentForm = false;
+  bandMonthlyBandName = '';
+  bandMonthlyKind: 'acconto' | 'bonifico' = 'acconto';
+  bandMonthlyAmount = 0;
+  bandMonthlySaved = false;
+  concertViewMode: 'band' | 'list' = 'band';
+  expandedConcertBandKey: string | null = null;
   miniTaxEventId = '';
   miniTaxDraft: MiniTaxDraft = this.emptyMiniTaxDraft();
   serataTaxInput: SerataTaxInput = {
@@ -192,6 +209,37 @@ export class AccountingComponent implements OnInit {
       .filter(e => e.type === 'concert' || e.type === 'dj_set')
       .filter(e => !this.selectedBandFilter || this.eventBandLabel(e).toLowerCase().includes(this.selectedBandFilter.toLowerCase()))
       .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  get concertBandGroups(): ConcertBandGroup[] {
+    const byKey = new Map<string, EventDetail[]>();
+    for (const ev of this.concertEvents) {
+      const key = this.normalizeBandKey(this.eventBandLabel(ev)) || 'band-non-definita';
+      const list = byKey.get(key) || [];
+      list.push(ev);
+      byKey.set(key, list);
+    }
+    const groups: ConcertBandGroup[] = [];
+    for (const [key, events] of byKey.entries()) {
+      const sorted = [...events].sort((a, b) => b.date.localeCompare(a.date));
+      const name = this.eventBandLabel(sorted[0]) || key;
+      const paymentCadence = sorted.some(e => this.isMonthlyConcert(e)) ? 'mensile' : 'prestazione';
+      const monthlySettlement = paymentCadence === 'mensile'
+        ? this.monthlySettlementForEvent((sorted.find(e => this.isMonthlyConcert(e)) || sorted[0]).id)
+        : 'acconto';
+      const agreed = sorted.reduce((sum, e) => sum + Number(e.grossFee || 0), 0);
+      const received = sorted.reduce((sum, e) => sum + this.totalReceivedForEvent(e.id), 0);
+      groups.push({
+        key,
+        name,
+        paymentCadence,
+        monthlySettlement,
+        events: sorted,
+        agreed: this.round2(agreed),
+        received: this.round2(received)
+      });
+    }
+    return groups.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   get lessonEvents(): EventDetail[] {
@@ -337,6 +385,19 @@ export class AccountingComponent implements OnInit {
     this.draft.paymentType = 'mensile';
     this.draft.paymentMethod = 'bonifico';
     this.draft.paymentMode = 'pattuito_fattura';
+  }
+
+  toggleConcertBandExpanded(key: string): void {
+    this.expandedConcertBandKey = this.expandedConcertBandKey === key ? null : key;
+  }
+
+  openBandMonthlyCreditForm(bandName: string, kind: 'acconto' | 'bonifico'): void {
+    this.paymentTab = 'concerti';
+    this.showBandMonthlyPaymentForm = true;
+    this.bandMonthlyBandName = bandName;
+    this.bandMonthlyKind = kind;
+    this.bandMonthlyAmount = 0;
+    this.bandMonthlySaved = false;
   }
 
   isMonthlyConcert(event: EventDetail): boolean {
@@ -730,6 +791,16 @@ export class AccountingComponent implements OnInit {
     const monthlyAction = `${qp.get('monthlyAction') || ''}`.trim();
     const extraExpensesOutsideInvoice = `${qp.get('extraExpensesOutsideInvoice') || ''}`.trim();
     if (band) this.selectedBandFilter = band;
+    if (!eventId && band && paymentCadence === 'mensile') {
+      this.paymentTab = 'concerti';
+      this.showBandMonthlyPaymentForm = true;
+      this.bandMonthlyBandName = band;
+      this.bandMonthlyKind = monthlyAction === 'bonifico' ? 'bonifico' : 'acconto';
+      this.bandMonthlyAmount = 0;
+      this.bandMonthlySaved = false;
+      return;
+    }
+    this.showBandMonthlyPaymentForm = false;
     if (!eventId) return;
     this.paymentTab = 'concerti';
     const target = this.events.find(e => e.id === eventId && (e.type === 'concert' || e.type === 'dj_set'));
@@ -743,6 +814,26 @@ export class AccountingComponent implements OnInit {
       if (extraExpensesOutsideInvoice === '1') this.draft.includeExpensesInInvoice = false;
       if (extraExpensesOutsideInvoice === '0') this.draft.includeExpensesInInvoice = true;
     }
+  }
+
+  saveBandMonthlyCredit(): void {
+    const bandName = `${this.bandMonthlyBandName || ''}`.trim();
+    const amount = Number(this.bandMonthlyAmount || 0);
+    if (!bandName) return;
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const raw = JSON.parse(localStorage.getItem('mm_band_credits') || '[]');
+    const list = Array.isArray(raw) ? raw : [];
+    list.unshift({
+      id: crypto.randomUUID(),
+      bandKey: this.normalizeBandKey(bandName),
+      bandName,
+      kind: this.bandMonthlyKind,
+      amount: this.round2(amount),
+      createdAt: new Date().toISOString()
+    });
+    localStorage.setItem('mm_band_credits', JSON.stringify(list));
+    this.bandMonthlySaved = true;
+    this.bandMonthlyAmount = 0;
   }
 
   private computeAnnualInvoicedConcertIncome(): number {

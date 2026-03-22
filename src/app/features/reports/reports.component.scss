@@ -281,6 +281,11 @@
   @media (max-width: 900px) { grid-template-columns: 1fr; }
 }
 
+.split.split-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+  @media (max-width: 1100px) { grid-template-columns: 1fr; }
+}
+
 .split-col {
   min-width: 0;
   overflow: hidden;
@@ -290,9 +295,19 @@
   padding-right: 6px;
 }
 
-.split-col:last-child {
+.split:not(.split-3) .split-col:last-child {
   padding-left: 12px;
   border-left: 1px solid #f3f4f6;
+}
+
+.split.split-3 .split-col {
+  padding-left: 10px;
+  border-left: 1px solid #f3f4f6;
+}
+
+.split.split-3 .split-col:first-child {
+  padding-left: 0;
+  border-left: none;
 }
 
 .split-col .mini-table {
@@ -316,6 +331,10 @@
   font-weight: 800;
   color: #374151;
   margin-bottom: 8px;
+}
+
+.top-gap-sm {
+  margin-top: 12px;
 }
 
 .teacher-card { margin-top: 12px; }

@@ -140,6 +140,53 @@
   transition: justify-content 0.22s ease;
 }
 
+.sidebar:not(.collapsed) .sidebar-header {
+  justify-content: center;
+}
+
+.sidebar:not(.collapsed) .brand-name {
+  flex: 0 0 auto;
+  align-items: center;
+  text-align: center;
+}
+
+.sidebar:not(.collapsed) .brand-stack {
+  justify-content: center;
+}
+
+.sidebar-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  i { font-size: 18px; line-height: 1; }
+  &:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.28);
+    color: #fff;
+  }
+}
+
+@media (min-width: 1025px) {
+  .sidebar-toggle {
+    display: none;
+  }
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+
 .brand-stack {
   display: flex;
   flex-direction: row;

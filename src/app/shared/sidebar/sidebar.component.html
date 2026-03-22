@@ -14,6 +14,9 @@
       <strong>Musican Manager</strong>
       <small>Gestione professionale</small>
     </span>
+    <button *ngIf="!mobileOpen" type="button" class="sidebar-toggle" (click)="sidebarToggle.emit()" aria-label="Apri/chiudi menu">
+      <i class="ti ti-menu-2"></i>
+    </button>
   </div>
 
   <!-- Nav -->

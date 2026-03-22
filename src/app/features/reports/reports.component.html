@@ -137,7 +137,7 @@
 
   <section class="card">
     <h2>Serate per tipo e location</h2>
-    <div class="split">
+    <div class="split split-3">
       <div class="split-col">
         <div class="subhead">Tipo</div>
         <div class="mini-table cols-4" *ngIf="typeRows.length; else noTypes">
@@ -167,6 +167,33 @@
           </ng-container>
         </div>
         <ng-template #noVenues><div class="empty">Nessuna location disponibile</div></ng-template>
+      </div>
+      <div class="split-col">
+        <div class="subhead">Territorio</div>
+        <div class="mini-table cols-3" *ngIf="eventByProvince.length; else noProvinceRows">
+          <div class="mt-head">Provincia</div>
+          <div class="mt-head right">Eventi</div>
+          <div class="mt-head right">Totale</div>
+          <ng-container *ngFor="let row of eventByProvince | slice:0:12">
+            <div>{{ row.label }}</div>
+            <div class="right">{{ row.count }}</div>
+            <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+          </ng-container>
+        </div>
+        <ng-template #noProvinceRows><div class="empty">Nessuna provincia disponibile</div></ng-template>
+
+        <div class="subhead top-gap-sm">Regione</div>
+        <div class="mini-table cols-3" *ngIf="eventByRegion.length; else noRegionRows">
+          <div class="mt-head">Regione</div>
+          <div class="mt-head right">Eventi</div>
+          <div class="mt-head right">Totale</div>
+          <ng-container *ngFor="let row of eventByRegion | slice:0:12">
+            <div>{{ row.label }}</div>
+            <div class="right">{{ row.count }}</div>
+            <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+          </ng-container>
+        </div>
+        <ng-template #noRegionRows><div class="empty">Nessuna regione disponibile</div></ng-template>
       </div>
     </div>
   </section>

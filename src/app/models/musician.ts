@@ -62,6 +62,8 @@ export type Musician = {
   level?: string;
   stylesPlayed?: string[];
   searchableStyles?: string[];
+  djStylesPlayed?: string[];
+  djSearchableStyles?: string[];
   social?: SocialProfiles;
   inpsExempt?: boolean;
   inpsData?: InpsExemption | null;

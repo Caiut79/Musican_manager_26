@@ -59,6 +59,12 @@ export class ConcertConfirmationComponent implements OnInit {
   }
 
   get exemptionEnabled(): boolean {
+    const roleSettings = (this.profile as any)?.roleSettings || {};
+    if (typeof roleSettings?.musician?.inpsExempt === 'boolean') {
+      return roleSettings.musician.inpsExempt === true;
+    }
+    const musicianRoleFlag = (this.profile as any)?.musicianInpsExemptRole;
+    if (typeof musicianRoleFlag === 'boolean') return musicianRoleFlag === true;
     return this.profile.inpsExempt === true;
   }
 
@@ -87,11 +93,23 @@ export class ConcertConfirmationComponent implements OnInit {
   }
 
   get eventBandLabel(): string {
-    if (this.concert?.bands?.length) return this.concert.bands.join(', ');
+    if (this.concert?.bands?.length) return this.sanitizeBandLabel(this.concert.bands.join(', '));
     if (this.concert?.musicians?.length) return this.concert.musicians.join(', ');
-    const fromNotes = this.extractBandFromNotes(this.concert?.notes || '');
+    const fromNotes = this.sanitizeBandLabel(this.extractBandFromNotes(this.concert?.notes || ''));
     if (fromNotes) return fromNotes;
     return 'N/D';
+  }
+
+  get travelOrigin(): string {
+    const raw = `${this.concert?.notes || ''}`;
+    const match = raw.match(/\[Spese viaggio:[^\]]*•\s*([^→\]]+)\s*→\s*([^\]]+)\]/i);
+    return `${match?.[1] || ''}`.trim() || 'N/D';
+  }
+
+  get travelDestination(): string {
+    const raw = `${this.concert?.notes || ''}`;
+    const match = raw.match(/\[Spese viaggio:[^\]]*•\s*([^→\]]+)\s*→\s*([^\]]+)\]/i);
+    return `${match?.[2] || ''}`.trim() || 'N/D';
   }
 
   formatItalianDate(raw: string | undefined | null): string {
@@ -113,6 +131,14 @@ export class ConcertConfirmationComponent implements OnInit {
     const raw = `${match?.[1] || ''}`.trim();
     if (!raw) return '';
     return raw.split('|')[0].trim();
+  }
+
+  private sanitizeBandLabel(value: string): string {
+    return `${value || ''}`
+      .replace(/\|.*$/g, '')
+      .replace(/•\s*priorit[aà].*$/gi, '')
+      .replace(/-\s*priorit[aà].*$/gi, '')
+      .trim();
   }
 
   private normalizeLabel(value: string): string {

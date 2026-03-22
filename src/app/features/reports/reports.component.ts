@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { provinceCodeFromAddressLabel, regionNameFromProvinceCode } from '../../core/italian-geo';
 
 type ConcertRecord = {
   id: string;
@@ -104,6 +105,8 @@ export class ReportsComponent implements OnInit {
   cadenceRows: { label: string; count: number; due: number; received: number; pending: number }[] = [];
   typeRows: { label: string; count: number; due: number; received: number }[] = [];
   topVenues: AggregateRow[] = [];
+  eventByProvince: AggregateRow[] = [];
+  eventByRegion: AggregateRow[] = [];
   trend: TrendPoint[] = [];
 
   ngOnInit(): void {
@@ -160,6 +163,14 @@ export class ReportsComponent implements OnInit {
     add(['Top gruppi/band']);
     add(['Gruppo', 'Serate', 'Totale', 'Media']);
     for (const r of this.concertCompByGroup.slice(0, 20)) add([r.label, r.count, this.round2(r.total), this.round2(r.average)]);
+    add([]);
+    add(['Eventi per provincia']);
+    add(['Provincia', 'Eventi', 'Totale', 'Media']);
+    for (const r of this.eventByProvince.slice(0, 30)) add([r.label, r.count, this.round2(r.total), this.round2(r.average)]);
+    add([]);
+    add(['Eventi per regione']);
+    add(['Regione', 'Eventi', 'Totale', 'Media']);
+    for (const r of this.eventByRegion.slice(0, 30)) add([r.label, r.count, this.round2(r.total), this.round2(r.average)]);
     if (this.isTeacherProfile) {
       add([]);
       add(['Top allievi']);
@@ -287,6 +298,9 @@ export class ReportsComponent implements OnInit {
 
     this.concertCompByGroup = this.buildConcertAggregates(concerts, contacts);
     this.topVenues = this.buildVenueAggregates(concerts, contacts);
+    const territory = this.buildTerritoryAggregates(concerts, contacts);
+    this.eventByProvince = territory.provinceRows;
+    this.eventByRegion = territory.regionRows;
     this.lessonCompByStudent = this.buildLessonByStudentAggregates(teaching, students);
     this.lessonCompBySchool = this.buildLessonBySchoolAggregates(teaching, schools);
     this.totalConcertSessions = concerts.length;
@@ -364,6 +378,31 @@ export class ReportsComponent implements OnInit {
       aggregates.set(label, current);
     }
     return this.toAggregateRows(aggregates);
+  }
+
+  private buildTerritoryAggregates(concerts: ConcertRecord[], contacts: ContactRecord[]): { provinceRows: AggregateRow[]; regionRows: AggregateRow[] } {
+    const provinceMap = new Map<string, { count: number; total: number }>();
+    const regionMap = new Map<string, { count: number; total: number }>();
+    for (const c of concerts) {
+      const fee = Number(c.agreedFee || 0) + Number(c.reimbursement || 0);
+      const location = this.resolveConcertLocation(c, contacts);
+      const province = provinceCodeFromAddressLabel(location) || 'N/D';
+      const region = province !== 'N/D' ? (regionNameFromProvinceCode(province) || 'Regione non definita') : 'Regione non definita';
+
+      const p = provinceMap.get(province) || { count: 0, total: 0 };
+      p.count += 1;
+      p.total += fee;
+      provinceMap.set(province, p);
+
+      const r = regionMap.get(region) || { count: 0, total: 0 };
+      r.count += 1;
+      r.total += fee;
+      regionMap.set(region, r);
+    }
+    return {
+      provinceRows: this.toAggregateRows(provinceMap),
+      regionRows: this.toAggregateRows(regionMap)
+    };
   }
 
   private buildPeriods(): Period[] {

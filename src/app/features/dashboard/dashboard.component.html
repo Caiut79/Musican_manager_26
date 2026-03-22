@@ -4,6 +4,105 @@
   <h1 *ngIf="!musicianName">Benvenuto in Musicista Manager</h1>
 </div>
 
+<div class="overdue-backdrop" *ngIf="showOverduePrompt">
+  <div class="overdue-modal" *ngIf="currentOverduePrompt as p" [class.is-monthly]="p.paymentCadence === 'mensile'">
+    <div class="om-head">
+      <div class="om-head-left">
+        <div class="om-icon" [class.monthly]="p.paymentCadence === 'mensile'">
+          <i class="ti" [ngClass]="p.paymentCadence === 'mensile' ? 'ti-calendar-dollar' : 'ti-cash'"></i>
+        </div>
+        <div class="om-head-text">
+          <div class="om-title">Evento scaduto</div>
+          <div class="om-sub">{{ formatDate(p.date) }} • {{ p.title }}</div>
+        </div>
+      </div>
+      <button type="button" class="om-close" (click)="closeOverduePrompt()">✕</button>
+    </div>
+
+    <div class="om-body">
+      <div class="om-row" *ngIf="p.bandName">
+        <span class="om-k">Band</span>
+        <span class="om-v">{{ p.bandName }}</span>
+      </div>
+      <div class="om-row">
+        <span class="om-k">Data concerto</span>
+        <span class="om-v">{{ formatDate(p.date) }}</span>
+      </div>
+      <div class="om-row">
+        <span class="om-k">Evento</span>
+        <span class="om-v">{{ p.title }}</span>
+      </div>
+      <div class="om-row">
+        <span class="om-k">Compenso</span>
+        <span class="om-v">{{ p.grossFee | currency:'EUR':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="om-row">
+        <span class="om-k">Cadenza</span>
+        <span class="om-v">
+          <span class="om-pill" [class.monthly]="p.paymentCadence === 'mensile'">
+            {{ p.paymentCadence === 'mensile' ? ('Mensile • ' + p.monthlySettlement) : 'Saldo immediato' }}
+          </span>
+        </span>
+      </div>
+
+      <div class="om-block" *ngIf="overdueStep === 'immediate'">
+        <div class="om-block-title">Inserisci il saldo</div>
+        <div class="om-grid">
+          <label>
+            <span>Importo</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="overduePaymentAmount">
+          </label>
+          <label>
+            <span>Metodo</span>
+            <select [(ngModel)]="overduePaymentMethod">
+              <option value="contanti">Contanti</option>
+              <option value="bonifico">Bonifico</option>
+              <option value="pos">POS</option>
+              <option value="satispay">Satispay</option>
+              <option value="assegno">Assegno</option>
+              <option value="altro">Altro</option>
+            </select>
+          </label>
+        </div>
+        <div class="om-actions">
+          <button type="button" class="btn-outline" (click)="skipOverduePrompt()">Salta</button>
+          <button type="button" class="btn-primary" (click)="saveOverdueImmediatePayment()">Salva</button>
+        </div>
+      </div>
+
+      <div class="om-block" *ngIf="overdueStep === 'monthlyAsk'">
+        <div class="om-block-title">Hai ricevuto un pagamento mensile?</div>
+        <div class="om-actions">
+          <button type="button" class="btn-outline" (click)="monthlyOverdueReceived(false)">No</button>
+          <button type="button" class="btn-primary" (click)="monthlyOverdueReceived(true)">Sì</button>
+          <button type="button" class="btn-outline" (click)="skipOverduePrompt()">Salta</button>
+        </div>
+      </div>
+
+      <div class="om-block" *ngIf="overdueStep === 'monthlyPick'">
+        <div class="om-block-title">Aggiungi pagamento</div>
+        <div class="om-grid">
+          <label>
+            <span>Tipo</span>
+            <select [(ngModel)]="overdueMonthlyKind">
+              <option value="acconto">Acconto (contanti)</option>
+              <option value="bonifico">Bonifico</option>
+            </select>
+          </label>
+          <label>
+            <span>Importo</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="overduePaymentAmount">
+          </label>
+        </div>
+        <div class="om-actions">
+          <button type="button" class="btn-outline" (click)="skipOverduePrompt()">Salta</button>
+          <button type="button" class="btn-primary" (click)="saveOverdueMonthlyPayment()">Salva</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="dashboard-layout">
 
   <!-- ── Colonna sinistra ── -->
@@ -64,7 +163,7 @@
             <select [(ngModel)]="draft.contactId" (ngModelChange)="onContactChange()">
               <option value="">Nessun contatto</option>
               <option *ngFor="let c of contactsByPriority" [value]="c.id">
-                {{ c.displayName }} • priorità {{ c.priority }} • medio {{ c.averageFee | currency:'EUR':'symbol':'1.0-0' }} • {{ c.paymentCadence === 'mensile' ? 'mensile' : 'prestazione' }}
+                {{ c.displayName }} • medio {{ c.averageFee | currency:'EUR':'symbol':'1.0-0' }} • {{ c.paymentCadence === 'mensile' ? 'mensile' : 'prestazione' }}
               </option>
             </select>
           </label>

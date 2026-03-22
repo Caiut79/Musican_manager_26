@@ -183,6 +183,128 @@ textarea {
   ::-webkit-scrollbar-thumb { background: var(--border); }
 }
 
+/* ════════════════════════════════════════
+   GLOBAL DARK/AMOLED: component-level overrides
+   Fixes components that use hardcoded hex colors
+════════════════════════════════════════ */
+[data-theme="dark"],
+[data-theme="amoled"] {
+
+  /* Expenses component */
+  .toll-card,
+  .itinerary-btn    { background: var(--surface) !important; border-color: var(--border) !important; }
+  .itinerary-btn.active { background: var(--clr-primary-light) !important; border-color: var(--border-focus) !important; }
+  .toll-body,
+  .toll-totals      { background: var(--surface-2) !important; }
+  .toll-seg-row     { background: var(--surface-2) !important; border-color: var(--border) !important; }
+  .result-item      { background: var(--surface-2) !important; }
+
+  /* Accounting component */
+  .pay-event-card,
+  .pay-row,
+  .tot-row          { background: var(--surface) !important; border-color: var(--border) !important; }
+  .enpals-box       { background: var(--surface-2) !important; border-color: var(--border) !important; }
+
+  /* Dashboard */
+  .notif-card,
+  .quick-card       { background: var(--surface) !important; border-color: var(--border) !important; }
+
+  /* Contacts & contacts cards */
+  .contact-card     { background: var(--surface) !important; border-color: var(--border) !important; }
+
+  /* Generic item rows used in multiple components */
+  .item, .expense-row, .expense-details {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text) !important;
+  }
+
+  /* Buttons — ensure ghost/outline readable on dark */
+  .btn-ghost {
+    border-color: var(--border) !important;
+    color: var(--text-muted) !important;
+    &:hover { background: var(--surface-2) !important; color: var(--text) !important; }
+  }
+
+  /* Filter chips (generic) */
+  .filter-chip-global {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-muted) !important;
+  }
+
+  /* Inline forms */
+  .inline-grid {
+    background: rgba(124,58,237,0.08) !important;
+    border-color: var(--border-focus) !important;
+  }
+}
+
+/* ════════════════════════════════════════
+   GLOBAL UTILITY CLASSES
+   Reusable across all components
+════════════════════════════════════════ */
+
+/* Page header pattern */
+.g-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 12px;
+
+  h1 { font-size: 22px; font-weight: 700; margin: 0; }
+  .g-subtitle { margin: 3px 0 0; font-size: 13px; color: var(--text-muted); }
+}
+
+/* Card pattern */
+.g-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+
+  &.g-card-sm { padding: 14px; }
+}
+
+/* Card section title with left accent bar */
+.g-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &::before {
+    content: '';
+    width: 3px; height: 15px;
+    background: var(--clr-primary);
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+}
+
+/* Muted helper text */
+.g-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Standard label+field block */
+.g-field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
 /* Badge classes (used by agenda) */
 .agenda-badge-lesson {
   background: var(--color-lesson);
@@ -200,4 +322,57 @@ textarea {
   border-radius: 4px;
   font-size: 12px;
   font-weight: 500;
+}
+
+@media (max-width: 767px) {
+  body { font-size: 13px; }
+
+  .g-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+    h1 { font-size: 18px; }
+    .g-subtitle { font-size: 12px; }
+  }
+
+  .page-header {
+    margin-bottom: 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    h1 { font-size: 18px !important; }
+    .subtitle { font-size: 12px !important; }
+  }
+
+  .g-card { padding: 14px; }
+  .g-card.g-card-sm { padding: 12px; }
+
+  .btn-primary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-toggle {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  .btn-sm {
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  input:not([type='checkbox']):not([type='color']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .g-page-header {
+    h1 { font-size: 20px; }
+  }
+  .page-header h1 { font-size: 20px !important; }
 }

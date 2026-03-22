@@ -3,6 +3,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { SupabaseService } from '../../core/supabase.service';
 import { Musician } from '../../models/musician';
 import { Router } from '@angular/router';
+import { formatItalianAddressLabel, italianAddressTypeScore } from '../../core/italian-geo';
 
 const INSTRUMENTS = ['Chitarra', 'Basso', 'Batteria', 'Pianoforte', 'Voce', 'Sax', 'Violino', 'Tromba'];
 const LEVELS = ['Principiante', 'Intermedio', 'Avanzato', 'Professionista'];
@@ -93,6 +94,8 @@ export class MusicianFormComponent {
     level:           [''],
     stylesPlayed:    [[] as string[]],
     searchableStyles:[[] as string[]],
+    djStylesPlayed:    [[] as string[]],
+    djSearchableStyles:[[] as string[]],
     // Step 2 – Social
     instagram: [''],
     facebook:  [''],
@@ -305,24 +308,7 @@ export class MusicianFormComponent {
   }
 
   private formatNominatimLabel(row: any): string {
-    const address = row?.address || {};
-    const place = `${address.city || address.town || address.village || address.municipality || address.hamlet || row?.name || ''}`.trim();
-    const province = this.normalizeProvince(`${address.county || ''}`);
-    const region = `${address.state || ''}`.trim();
-    const country = `${address.country || 'Italia'}`.trim();
-    const road = `${address.road || ''}`.trim();
-    const number = `${address.house_number || ''}`.trim();
-    const addresstype = `${row?.addresstype || row?.type || ''}`.toLowerCase();
-    if (['road', 'house', 'residential'].includes(addresstype) && road) {
-      const roadLabel = `${road}${number ? ` ${number}` : ''}`.trim();
-      return [roadLabel, place, province, region, country].filter(Boolean).join(', ');
-    }
-    const compact = [place, province, region, country].filter(Boolean).join(', ');
-    return compact || `${row?.display_name || ''}`.trim();
-  }
-
-  private normalizeProvince(value: string): string {
-    return `${value || ''}`.replace(/^Città metropolitana di\s+/i, '').trim();
+    return formatItalianAddressLabel(row, value => this.normalizeAddressText(value));
   }
 
   private normalizeIrpefBracketsPatch(source: any): any {
@@ -338,11 +324,7 @@ export class MusicianFormComponent {
   }
 
   private addressTypeScore(addresstype: string): number {
-    if (['city', 'town', 'village', 'municipality', 'hamlet', 'locality'].includes(addresstype)) return 60;
-    if (['county', 'province', 'state_district', 'state'].includes(addresstype)) return 45;
-    if (['suburb', 'neighbourhood', 'quarter'].includes(addresstype)) return 35;
-    if (['road', 'house', 'residential'].includes(addresstype)) return 25;
-    return 20;
+    return italianAddressTypeScore(addresstype);
   }
 
   get progressPercent(): number {
@@ -480,6 +462,7 @@ export class MusicianFormComponent {
     } else {
       this.form.patchValue({ djRoleCode: '' });
       localStorage.removeItem('mm_dj_code');
+      this.form.patchValue({ djStylesPlayed: [], djSearchableStyles: [] });
     }
     if (this.isDj && this.form.get('musicianInpsExemptRole')?.value) {
       this.form.patchValue({ musicianInpsExemptRole: false });
@@ -510,12 +493,12 @@ export class MusicianFormComponent {
   }
 
   // ── Styles chip helpers ─────────────────────────────────────
-  isStyleSelected(style: string, field: 'stylesPlayed' | 'searchableStyles'): boolean {
+  isStyleSelected(style: string, field: 'stylesPlayed' | 'searchableStyles' | 'djStylesPlayed' | 'djSearchableStyles'): boolean {
     const val: string[] = this.form.get(field)?.value || [];
     return val.includes(style);
   }
 
-  toggleStyle(style: string, field: 'stylesPlayed' | 'searchableStyles'): void {
+  toggleStyle(style: string, field: 'stylesPlayed' | 'searchableStyles' | 'djStylesPlayed' | 'djSearchableStyles'): void {
     const ctrl = this.form.get(field);
     if (!ctrl) return;
     const current: string[] = ctrl.value || [];
@@ -526,7 +509,7 @@ export class MusicianFormComponent {
 
   goToStep(i: number): void {
     if (i < 0 || i >= this.steps.length) return;
-    if (i === 1 && !this.isMusician) {
+    if (i === 1 && !this.hasLiveRole) {
       this.currentStep = 2;
       return;
     }
@@ -544,7 +527,7 @@ export class MusicianFormComponent {
       if (this.form.get('firstName')?.invalid || this.form.get('lastName')?.invalid) return;
     }
     let next = Math.min(this.currentStep + 1, this.steps.length - 1);
-    if (next === 1 && !this.isMusician) next = 2;
+    if (next === 1 && !this.hasLiveRole) next = 2;
     this.currentStep = next;
   }
 
@@ -731,6 +714,8 @@ export class MusicianFormComponent {
         level:          v.isMusician ? (v.level || undefined) : undefined,
         stylesPlayed:   v.isMusician ? (v.stylesPlayed || []) : [],
         searchableStyles: v.isMusician ? (v.searchableStyles || []) : [],
+        djStylesPlayed: v.isDj ? (v.djStylesPlayed || []) : [],
+        djSearchableStyles: v.isDj ? (v.djSearchableStyles || []) : [],
         social: {
           instagram: v.instagram || undefined,
           facebook:  v.facebook  || undefined,

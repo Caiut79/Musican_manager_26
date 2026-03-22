@@ -1,0 +1,351 @@
+<!-- ─── Header ─────────────────────────────────────────────────────────────── -->
+<div class="inv-page-header">
+  <div>
+    <h1>Fatturazione</h1>
+    <p class="subtitle">Emetti fatture B2B e ricevute per privati</p>
+  </div>
+  <div class="header-actions" *ngIf="canUseInvoicing">
+    <button type="button" class="btn-settings" (click)="showSettings = !showSettings" [class.active]="showSettings">
+      ⚙️ Impostazioni
+    </button>
+    <button type="button" class="btn-new" (click)="startNewInvoice()">
+      + Nuova fattura
+    </button>
+  </div>
+</div>
+
+<!-- ─── Not enabled ────────────────────────────────────────────────────────── -->
+<div class="card info-card" *ngIf="!canUseInvoicing">
+  <span class="info-icon">📋</span>
+  <div>
+    <h3>Funzione non attiva</h3>
+    <p>La sezione Fatturazione è disponibile solo se imposti la modalità fiscale su <strong>Partita IVA</strong> per il ruolo Musicista e/o Insegnante.</p>
+    <a class="btn-outline" routerLink="/profile">Apri impostazioni profilo</a>
+  </div>
+</div>
+
+<ng-container *ngIf="canUseInvoicing">
+
+  <!-- ─── Role selector ──────────────────────────────────────────────────── -->
+  <div class="role-toggle" *ngIf="enabledRoles.length > 1">
+    <button type="button" class="role-btn" [class.active]="activeRole === 'musician'" (click)="setActiveRole('musician')">
+      🎵 Musicista
+    </button>
+    <button type="button" class="role-btn" [class.active]="activeRole === 'teacher'" (click)="setActiveRole('teacher')">
+      🎓 Insegnante
+    </button>
+  </div>
+
+  <!-- ─── Stats row ──────────────────────────────────────────────────────── -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Fatture {{ currentYear }}</div>
+      <div class="stat-value">{{ yearlyCount }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Imponibile {{ currentYear }}</div>
+      <div class="stat-value">{{ yearlyTaxable | currency:'EUR':'symbol':'1.0-2' }}</div>
+    </div>
+    <div class="stat-card accent">
+      <div class="stat-label">Totale fatturato {{ currentYear }}</div>
+      <div class="stat-value">{{ yearlyTotal | currency:'EUR':'symbol':'1.0-2' }}</div>
+    </div>
+  </div>
+
+  <!-- ─── Settings panel ────────────────────────────────────────────────── -->
+  <div class="settings-panel card" *ngIf="showSettings">
+    <div class="settings-head">
+      <div class="sh-title">⚙️ Dati emittente — {{ activeRole === 'teacher' ? 'Insegnante' : 'Musicista' }}</div>
+      <div class="sh-actions">
+        <span class="ok-badge" *ngIf="settingsSavedOk">✓ Salvato</span>
+        <button type="button" class="btn-primary" (click)="saveIssuer()">Salva</button>
+      </div>
+    </div>
+    <div class="settings-grid">
+      <label>Intestatario / Ragione sociale
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].displayName" placeholder="Nome Cognome o Ragione sociale">
+      </label>
+      <label>Partita IVA
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].vatNumber" placeholder="IT01234567890">
+      </label>
+      <label>Codice fiscale
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].fiscalCode" placeholder="Codice fiscale">
+      </label>
+      <label>Indirizzo
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].address" placeholder="Via e numero">
+      </label>
+      <label>Città
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].city" placeholder="Comune">
+      </label>
+      <label>CAP
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].zip" placeholder="00000">
+      </label>
+      <label>Nazione
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].country" placeholder="Italia">
+      </label>
+      <label>Codice SDI
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].sdi" placeholder="7 caratteri SDI">
+      </label>
+      <label>PEC
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].pec" placeholder="pec@dominio.it">
+      </label>
+      <label class="span-2">IBAN
+        <input type="text" [(ngModel)]="issuerByRole[activeRole].iban" placeholder="IT60X0542811101000000123456">
+      </label>
+    </div>
+  </div>
+
+  <!-- ─── New invoice form ───────────────────────────────────────────────── -->
+  <div class="new-invoice-panel card" *ngIf="showNew">
+
+    <!-- Panel header -->
+    <div class="nip-header">
+      <div class="nip-title">
+        <span class="nip-icon">🧾</span>
+        <span>Nuova fattura — {{ activeRole === 'teacher' ? 'Insegnante' : 'Musicista' }}</span>
+      </div>
+      <button type="button" class="btn-close-panel" (click)="closeNewInvoice()">✕ Chiudi</button>
+    </div>
+
+    <!-- Step 1: Numero, data, tipo documento -->
+    <div class="nip-section">
+      <div class="nip-section-title">📋 Documento</div>
+      <div class="nip-doc-row">
+        <label>Numero fattura
+          <input type="text" [(ngModel)]="draft.number" placeholder="0001/2026">
+        </label>
+        <label>Data emissione
+          <input type="date" [(ngModel)]="draft.issueDate">
+        </label>
+      </div>
+    </div>
+
+    <!-- Step 2: Tipo cliente -->
+    <div class="nip-section">
+      <div class="nip-section-title">👤 Tipo cliente</div>
+      <div class="ctype-toggle">
+        <label class="ctype-opt" [class.active]="draftCustomerType === 'b2b'">
+          <input type="radio" name="ctype" value="b2b" [(ngModel)]="draftCustomerType" (ngModelChange)="onCustomerTypeChange()">
+          <span class="ctype-badge b2b">🏢</span>
+          <span class="ctype-text">
+            <span class="ctype-label">B2B — Azienda / P.IVA</span>
+            <span class="ctype-hint">Fattura con SDI obbligatorio</span>
+          </span>
+        </label>
+        <label class="ctype-opt" [class.active]="draftCustomerType === 'privato'">
+          <input type="radio" name="ctype" value="privato" [(ngModel)]="draftCustomerType" (ngModelChange)="onCustomerTypeChange()">
+          <span class="ctype-badge privato">👤</span>
+          <span class="ctype-text">
+            <span class="ctype-label">Privato — Persona fisica</span>
+            <span class="ctype-hint">Ricevuta / fattura semplificata</span>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Step 3: Dati cliente -->
+    <div class="nip-section">
+      <div class="nip-section-title">
+        {{ draftCustomerType === 'b2b' ? '🏢 Dati azienda / cliente B2B' : '👤 Dati cliente privato' }}
+      </div>
+
+      <!-- Quick select from contacts -->
+      <label class="contact-select-label">Seleziona da rubrica
+        <select [(ngModel)]="selectedCustomerContactId" (ngModelChange)="onCustomerSelected()">
+          <option value="">— seleziona contatto (opzionale) —</option>
+          <option *ngFor="let c of customers" [value]="c.id">{{ c.displayName }}</option>
+        </select>
+      </label>
+
+      <div class="client-grid" [class.b2b-grid]="draftCustomerType === 'b2b'">
+        <!-- Common -->
+        <label [class.span-2]="draftCustomerType !== 'b2b'">Intestatario *
+          <input type="text" [(ngModel)]="draft.customer.displayName" placeholder="{{ draftCustomerType === 'b2b' ? 'Ragione sociale' : 'Nome e Cognome' }}">
+        </label>
+
+        <!-- B2B only -->
+        <ng-container *ngIf="draftCustomerType === 'b2b'">
+          <label>Partita IVA *
+            <input type="text" [(ngModel)]="draft.customer.vatNumber" placeholder="IT01234567890">
+          </label>
+          <label>Codice fiscale
+            <input type="text" [(ngModel)]="draft.customer.fiscalCode" placeholder="Opzionale">
+          </label>
+        </ng-container>
+
+        <!-- Privato only -->
+        <ng-container *ngIf="draftCustomerType === 'privato'">
+          <label>Codice fiscale
+            <input type="text" [(ngModel)]="draft.customer.fiscalCode" placeholder="Codice fiscale">
+          </label>
+        </ng-container>
+
+        <label>Indirizzo
+          <input type="text" [(ngModel)]="draft.customer.address" placeholder="Via e numero">
+        </label>
+        <label>Città
+          <input type="text" [(ngModel)]="draft.customer.city" placeholder="Comune">
+        </label>
+        <label>CAP
+          <input type="text" [(ngModel)]="draft.customer.zip" placeholder="CAP">
+        </label>
+        <label>Nazione
+          <input type="text" [(ngModel)]="draft.customer.country" placeholder="Italia">
+        </label>
+
+        <!-- B2B SDI/PEC -->
+        <ng-container *ngIf="draftCustomerType === 'b2b'">
+          <label>Codice SDI
+            <input type="text" [(ngModel)]="draft.customer.sdi" placeholder="7 caratteri">
+          </label>
+          <label>PEC cliente
+            <input type="text" [(ngModel)]="draft.customer.pec" placeholder="pec@cliente.it">
+          </label>
+        </ng-container>
+
+        <!-- Privato: SDI locked at 0000000 -->
+        <ng-container *ngIf="draftCustomerType === 'privato'">
+          <label>SDI (privati)
+            <input type="text" [value]="'0000000'" readonly class="input-readonly">
+            <span class="field-hint">Codice fisso per privati — fattura cartacea</span>
+          </label>
+          <label>Email / PEC (opzionale)
+            <input type="text" [(ngModel)]="draft.customer.pec" placeholder="email@cliente.it">
+          </label>
+        </ng-container>
+      </div>
+    </div>
+
+    <!-- Step 4: Righe fattura -->
+    <div class="nip-section">
+      <div class="nip-section-title">
+        📝 Righe
+        <button type="button" class="btn-add-line" (click)="addLine()">+ Aggiungi riga</button>
+      </div>
+
+      <div class="lines-table">
+        <div class="lines-thead">
+          <span class="col-desc">Descrizione</span>
+          <span class="col-qty">Q.tà</span>
+          <span class="col-price">Prezzo unit.</span>
+          <span class="col-iva">IVA %</span>
+          <span class="col-taxable">Imponibile</span>
+          <span class="col-total">Totale riga</span>
+          <span class="col-del"></span>
+        </div>
+        <div class="line-row" *ngFor="let l of draft.lines; index as i">
+          <input type="text" class="col-desc" [(ngModel)]="l.description"
+            (ngModelChange)="onLineChange()" placeholder="Descrizione prestazione">
+          <input type="number" class="col-qty" min="0" step="1" [(ngModel)]="l.quantity"
+            (ngModelChange)="onLineChange()">
+          <input type="number" class="col-price" min="0" step="0.01" [(ngModel)]="l.unitPrice"
+            (ngModelChange)="onLineChange()">
+          <select class="col-iva" [(ngModel)]="l.vatPercent" (ngModelChange)="onLineChange()">
+            <option *ngFor="let v of ivaOptions" [value]="v">{{ v }}%</option>
+          </select>
+          <span class="col-taxable calc-cell">{{ lineTaxableDisplay(l) | currency:'EUR':'symbol':'1.2-2' }}</span>
+          <span class="col-total calc-cell">{{ lineTotalDisplay(l) | currency:'EUR':'symbol':'1.2-2' }}</span>
+          <button type="button" class="col-del btn-del-line" (click)="removeLine(i)" title="Rimuovi">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: Totali + note -->
+    <div class="nip-section">
+      <div class="nip-totals-row">
+        <div class="nip-notes">
+          <label>Note (opzionali)
+            <textarea [(ngModel)]="draft.notes" rows="3" placeholder="Pagamento concordato entro…"></textarea>
+          </label>
+          <!-- Bollo di 2€ su ricevuta privato esente IVA > 77.47€ -->
+          <div class="stamp-duty-box" *ngIf="showStampDutyOption">
+            <label class="stamp-check">
+              <input type="checkbox" [(ngModel)]="draft.stampDuty">
+              <span>Imposta di bollo €2,00 <span class="hint">(obbligatoria su importi &gt; €77,47 esenti IVA)</span></span>
+            </label>
+          </div>
+        </div>
+        <div class="nip-totals">
+          <div class="tot-line">
+            <span>Imponibile</span>
+            <strong>{{ taxableTotal | currency:'EUR':'symbol':'1.2-2' }}</strong>
+          </div>
+          <div class="tot-line">
+            <span>IVA</span>
+            <strong>{{ vatTotal | currency:'EUR':'symbol':'1.2-2' }}</strong>
+          </div>
+          <div class="tot-line" *ngIf="draft.stampDuty">
+            <span>Bollo</span>
+            <strong>€ 2,00</strong>
+          </div>
+          <div class="tot-line grand">
+            <span>Totale</span>
+            <strong>{{ grandTotal | currency:'EUR':'symbol':'1.2-2' }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="nip-actions">
+      <div class="error-msg" *ngIf="error">⚠️ {{ error }}</div>
+      <div class="nip-btns">
+        <button type="button" class="btn-outline" (click)="closeNewInvoice()">Annulla</button>
+        <button type="button" class="btn-primary" (click)="saveInvoice()">
+          📄 Emetti e stampa
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Invoice list ───────────────────────────────────────────────────── -->
+  <div class="inv-list-section card">
+    <div class="inv-list-head">
+      <div class="inv-list-title">Fatture emesse</div>
+      <div class="inv-filters">
+        <select [(ngModel)]="filterRole" *ngIf="enabledRoles.length > 1">
+          <option value="all">Tutti i ruoli</option>
+          <option value="musician">Musicista</option>
+          <option value="teacher">Insegnante</option>
+        </select>
+        <select [(ngModel)]="filterType">
+          <option value="all">B2B + Privati</option>
+          <option value="b2b">Solo B2B</option>
+          <option value="privato">Solo Privati</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="inv-empty" *ngIf="filteredInvoices.length === 0">
+      <span>📭</span>
+      <p>Nessuna fattura emessa</p>
+    </div>
+
+    <div class="inv-items" *ngIf="filteredInvoices.length > 0">
+      <div class="inv-item" *ngFor="let inv of filteredInvoices">
+        <div class="inv-badges">
+          <span class="type-badge" [class.b2b]="inv.customerType === 'b2b'" [class.privato]="inv.customerType === 'privato'">
+            {{ inv.customerType === 'b2b' ? '🏢 B2B' : '👤 Privato' }}
+          </span>
+          <span class="role-badge" *ngIf="enabledRoles.length > 1">
+            {{ inv.role === 'teacher' ? '🎓' : '🎵' }}
+          </span>
+        </div>
+        <div class="inv-info">
+          <div class="inv-number">Fattura {{ inv.number }}</div>
+          <div class="inv-client">{{ inv.customer.displayName }}</div>
+          <div class="inv-date">{{ inv.issueDate }}</div>
+        </div>
+        <div class="inv-amount">
+          <div class="inv-taxable">{{ invoiceTaxable(inv) | currency:'EUR':'symbol':'1.0-2' }} + IVA</div>
+          <div class="inv-grand">{{ invoiceGrandTotal(inv) | currency:'EUR':'symbol':'1.0-2' }}</div>
+        </div>
+        <div class="inv-actions">
+          <button type="button" class="btn-print" (click)="openPrintPreview(inv)" title="Stampa / PDF">🖨️</button>
+          <button type="button" class="btn-del-inv" (click)="deleteInvoice(inv.id)" title="Elimina">🗑️</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</ng-container>

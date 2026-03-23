@@ -130,9 +130,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   overduePrompts: OverduePrompt[] = [];
   overduePromptIndex = 0;
   showOverduePrompt = false;
-  overdueStep: 'start' | 'immediate' | 'monthlyAsk' | 'monthlyPick' | 'done' = 'start';
+  overdueStep: 'start' | 'statusAsk' | 'paymentAsk' | 'paymentAmount' | 'done' = 'start';
+  overdueEventOutcome: 'effettuato' | 'annullato' | 'rimborsato' | 'da_fare' = 'effettuato';
   overduePaymentAmount = 0;
-  overduePaymentMethod: ServicePayment['paymentMethod'] = 'contanti';
   overdueMonthlyKind: 'acconto' | 'bonifico' = 'acconto';
   private refundedConcertIds = new Set<string>();
   private overduePromptStateKey = 'mm_overdue_prompt_state_v3';
@@ -841,9 +841,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const p = this.currentOverduePrompt;
     if (!p) return;
     this.overduePaymentAmount = Math.max(0, Number(p.grossFee || 0));
-    this.overduePaymentMethod = 'contanti';
     this.overdueMonthlyKind = p.monthlySettlement === 'bonifico' ? 'bonifico' : 'acconto';
-    this.overdueStep = p.paymentCadence === 'mensile' ? 'monthlyAsk' : 'immediate';
+    this.overdueEventOutcome = 'effettuato';
+    this.overdueStep = 'statusAsk';
     this.showOverduePrompt = true;
   }
 
@@ -863,30 +863,49 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.nextOverduePrompt();
   }
 
-  monthlyOverdueReceived(answer: boolean): void {
-    if (!answer) {
-      this.closeOverduePrompt();
-      return;
-    }
-    this.overdueStep = 'monthlyPick';
+  selectOverdueOutcome(outcome: 'effettuato' | 'annullato' | 'rimborsato' | 'da_fare'): void {
+    const p = this.currentOverduePrompt;
+    if (!p) return;
+    this.overdueEventOutcome = outcome;
+    this.applyOverdueOutcome(p.eventId, outcome);
+    this.overdueStep = 'paymentAsk';
   }
 
-  saveOverdueImmediatePayment(): void {
+  overduePaymentAnswered(choice: 'no' | 'acconto' | 'bonifico'): void {
+    const p = this.currentOverduePrompt;
+    if (!p) return;
+    if (choice === 'no') {
+      this.markOverdueEventProcessed(p.eventId);
+      this.dismissOverduePrompt(p.eventId);
+      this.nextOverduePrompt();
+      return;
+    }
+    this.overdueMonthlyKind = choice === 'bonifico' ? 'bonifico' : 'acconto';
+    this.overdueStep = 'paymentAmount';
+  }
+
+  saveOverduePayment(): void {
     const p = this.currentOverduePrompt;
     if (!p) return;
     const amount = Number(this.overduePaymentAmount || 0);
     if (!Number.isFinite(amount) || amount <= 0) return;
+    if (p.paymentCadence === 'mensile') {
+      this.saveOverdueMonthlyPayment();
+      return;
+    }
     const all: ServicePayment[] = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
     const mode = this.resolvePaymentModeForEvent(p.eventId);
     const createdAt = new Date().toISOString();
+    const method: ServicePayment['paymentMethod'] = this.overdueMonthlyKind === 'bonifico' ? 'bonifico' : 'contanti';
+    const paymentType: ServicePayment['paymentType'] = this.overdueMonthlyKind === 'acconto' ? 'acconto' : 'saldo';
     const payment: ServicePayment = {
       id: crypto.randomUUID(),
       createdAt,
       category: p.type === 'dj_set' ? 'dj_set' : 'concerto',
       eventId: p.eventId,
       receivedAmount: this.round2(amount),
-      paymentType: 'saldo',
-      paymentMethod: this.overduePaymentMethod,
+      paymentType,
+      paymentMethod: method,
       paymentMode: mode,
       reimbursableExpenses: 0,
       taxableBase: this.round2(amount),
@@ -927,6 +946,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.markOverdueEventProcessed(p.eventId);
     this.dismissOverduePrompt(p.eventId);
     this.nextOverduePrompt();
+  }
+
+  private applyOverdueOutcome(eventId: string, outcome: 'effettuato' | 'annullato' | 'rimborsato' | 'da_fare'): void {
+    const events = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    if (Array.isArray(events)) {
+      const mappedStatus = outcome === 'annullato'
+        ? 'cancelled'
+        : (outcome === 'da_fare' ? 'pending' : 'confirmed');
+      const nextEvents = events.map((event: any) =>
+        `${event?.id || ''}` === `${eventId || ''}`
+          ? { ...event, status: mappedStatus }
+          : event
+      );
+      localStorage.setItem('mm_events', JSON.stringify(nextEvents));
+      this.allEvents = [...nextEvents].sort((a, b) => `${a?.date || ''}`.localeCompare(`${b?.date || ''}`));
+      const now = this.today;
+      this.todayEvents = this.allEvents.filter(e => e.date === now);
+      this.upcomingEvents = this.allEvents.filter(e => e.date > now).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
+      this.buildCalendar();
+    }
+
+    const concerts = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
+    if (!Array.isArray(concerts)) return;
+    const executionStatus =
+      outcome === 'annullato' ? 'annullato'
+      : (outcome === 'rimborsato' ? 'rimborsato'
+      : (outcome === 'effettuato' ? 'effettuato' : 'da_fare'));
+    const nextConcerts = concerts.map((concert: any) =>
+      `${concert?.id || ''}` === `${eventId || ''}`
+        ? { ...concert, executionStatus }
+        : concert
+    );
+    localStorage.setItem('mm_concerts', JSON.stringify(nextConcerts));
   }
 
   private nextOverduePrompt(): void {

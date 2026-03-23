@@ -839,6 +839,82 @@
   }
 }
 
+.om-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  @media (max-width: 520px) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.om-choice {
+  border: 1px solid rgba(196, 181, 253, 0.75);
+  background: rgba(245, 243, 255, 0.9);
+  color: #5b21b6;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform var(--transition), box-shadow var(--transition), background var(--transition), border-color var(--transition), color var(--transition);
+  text-align: center;
+  white-space: nowrap;
+  &:hover {
+    transform: translateY(-1px);
+    border-color: rgba(124, 58, 237, 0.75);
+    box-shadow: 0 10px 24px rgba(124, 58, 237, 0.12);
+  }
+  &:active { transform: translateY(0); }
+}
+
+.choice-done {
+  border-color: rgba(134, 239, 172, 0.9);
+  background: rgba(22, 163, 74, 0.10);
+  color: #166534;
+  &:hover { border-color: rgba(34, 197, 94, 0.95); box-shadow: 0 10px 24px rgba(34, 197, 94, 0.14); }
+}
+
+.choice-cancel {
+  border-color: rgba(252, 165, 165, 0.95);
+  background: rgba(239, 68, 68, 0.10);
+  color: #b91c1c;
+  &:hover { border-color: rgba(239, 68, 68, 0.95); box-shadow: 0 10px 24px rgba(239, 68, 68, 0.14); }
+}
+
+.choice-refund {
+  border-color: rgba(253, 224, 71, 0.9);
+  background: rgba(234, 179, 8, 0.12);
+  color: #92400e;
+  &:hover { border-color: rgba(234, 179, 8, 0.95); box-shadow: 0 10px 24px rgba(234, 179, 8, 0.14); }
+}
+
+.choice-pending {
+  border-color: rgba(147, 197, 253, 0.9);
+  background: rgba(59, 130, 246, 0.10);
+  color: #1d4ed8;
+  &:hover { border-color: rgba(59, 130, 246, 0.95); box-shadow: 0 10px 24px rgba(59, 130, 246, 0.14); }
+}
+
+.choice-neutral {
+  border-color: rgba(203, 213, 225, 0.95);
+  background: rgba(241, 245, 249, 0.9);
+  color: #334155;
+  &:hover { border-color: rgba(148, 163, 184, 0.95); box-shadow: 0 10px 24px rgba(148, 163, 184, 0.16); }
+}
+
+.choice-acconto {
+  border-color: rgba(196, 181, 253, 0.95);
+  background: rgba(124, 58, 237, 0.10);
+  color: #5b21b6;
+  &:hover { border-color: rgba(124, 58, 237, 0.95); box-shadow: 0 10px 24px rgba(124, 58, 237, 0.14); }
+}
+
+.choice-bonifico {
+  border-color: rgba(34, 211, 238, 0.9);
+  background: rgba(14, 116, 144, 0.10);
+  color: #0e7490;
+  &:hover { border-color: rgba(34, 211, 238, 0.95); box-shadow: 0 10px 24px rgba(34, 211, 238, 0.14); }
+}
+
 @media (max-width: 430px) {
   .overdue-backdrop {
     z-index: 9999;
@@ -931,6 +1007,16 @@
     flex: 1 1 0;
     min-width: 0;
     text-align: center;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .om-choice-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .om-choice {
     padding: 8px 10px;
     font-size: 12px;
   }

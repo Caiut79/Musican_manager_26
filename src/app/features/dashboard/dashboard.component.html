@@ -45,46 +45,31 @@
         </span>
       </div>
 
-      <div class="om-block" *ngIf="overdueStep === 'immediate'">
-        <div class="om-block-title">Inserisci il saldo</div>
-        <div class="om-grid">
-          <label>
-            <span>Importo</span>
-            <input type="number" min="0" step="0.01" [(ngModel)]="overduePaymentAmount">
-          </label>
-          <label>
-            <span>Metodo</span>
-            <select [(ngModel)]="overduePaymentMethod">
-              <option value="contanti">Contanti</option>
-              <option value="bonifico">Bonifico</option>
-              <option value="pos">POS</option>
-              <option value="satispay">Satispay</option>
-              <option value="assegno">Assegno</option>
-              <option value="altro">Altro</option>
-            </select>
-          </label>
-        </div>
-        <div class="om-actions">
-          <button type="button" class="btn-outline" (click)="skipOverduePrompt()">Salta</button>
-          <button type="button" class="btn-primary" (click)="saveOverdueImmediatePayment()">Salva</button>
+      <div class="om-block" *ngIf="overdueStep === 'statusAsk'">
+        <div class="om-block-title">Com'è andato l'evento?</div>
+        <div class="om-choice-grid">
+          <button type="button" class="om-choice choice-done" (click)="selectOverdueOutcome('effettuato')">Effettuato</button>
+          <button type="button" class="om-choice choice-cancel" (click)="selectOverdueOutcome('annullato')">Annullato</button>
+          <button type="button" class="om-choice choice-refund" (click)="selectOverdueOutcome('rimborsato')">Rimborsato</button>
+          <button type="button" class="om-choice choice-pending" (click)="selectOverdueOutcome('da_fare')">Da fare</button>
         </div>
       </div>
 
-      <div class="om-block" *ngIf="overdueStep === 'monthlyAsk'">
-        <div class="om-block-title">Hai ricevuto un pagamento mensile?</div>
-        <div class="om-actions">
-          <button type="button" class="btn-outline" (click)="monthlyOverdueReceived(false)">No</button>
-          <button type="button" class="btn-primary" (click)="monthlyOverdueReceived(true)">Sì</button>
-          <button type="button" class="btn-outline" (click)="skipOverduePrompt()">Salta</button>
+      <div class="om-block" *ngIf="overdueStep === 'paymentAsk'">
+        <div class="om-block-title">In quel giorno hai ricevuto un acconto o un bonifico?</div>
+        <div class="om-choice-grid">
+          <button type="button" class="om-choice choice-neutral" (click)="overduePaymentAnswered('no')">No</button>
+          <button type="button" class="om-choice choice-acconto" (click)="overduePaymentAnswered('acconto')">Acconto</button>
+          <button type="button" class="om-choice choice-bonifico" (click)="overduePaymentAnswered('bonifico')">Bonifico</button>
         </div>
       </div>
 
-      <div class="om-block" *ngIf="overdueStep === 'monthlyPick'">
+      <div class="om-block" *ngIf="overdueStep === 'paymentAmount'">
         <div class="om-block-title">Aggiungi pagamento</div>
         <div class="om-grid">
           <label>
             <span>Tipo</span>
-            <select [(ngModel)]="overdueMonthlyKind">
+            <select [(ngModel)]="overdueMonthlyKind" [disabled]="true">
               <option value="acconto">Acconto (contanti)</option>
               <option value="bonifico">Bonifico</option>
             </select>
@@ -96,7 +81,7 @@
         </div>
         <div class="om-actions">
           <button type="button" class="btn-outline" (click)="skipOverduePrompt()">Salta</button>
-          <button type="button" class="btn-primary" (click)="saveOverdueMonthlyPayment()">Salva</button>
+          <button type="button" class="btn-primary" (click)="saveOverduePayment()">Salva</button>
         </div>
       </div>
     </div>

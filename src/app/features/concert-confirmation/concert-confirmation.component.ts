@@ -1,5 +1,6 @@
-import { Component, OnInit } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, ViewChild, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { provinceCodeFromAddressLabel } from '../../core/italian-geo';
 
 type ConcertRecord = {
   id: string;
@@ -27,6 +28,12 @@ type ProfileSnapshot = {
   inpsExempt?: boolean;
   exemptEmployer?: string;
   exemptEmployerType?: 'dipendente' | 'pensionato' | 'altro';
+  signatureData?: string;
+  roleSettings?: any;
+  exemptReasonUnder18?: boolean;
+  exemptReasonStudentUnder25?: boolean;
+  exemptReasonPensionerOver65?: boolean;
+  exemptReasonEmployee?: boolean;
 };
 
 @Component({
@@ -34,11 +41,19 @@ type ProfileSnapshot = {
   templateUrl: './concert-confirmation.component.html',
   styleUrls: ['./concert-confirmation.component.scss']
 })
-export class ConcertConfirmationComponent implements OnInit {
+export class ConcertConfirmationComponent implements OnInit, AfterViewInit {
   concert: ConcertRecord | null = null;
   profile: ProfileSnapshot = {};
   todayIso = new Date().toISOString().slice(0, 10);
   signatureDataUrl = '';
+  editingSignature = false;
+  signatureSaved = false;
+  autoPdf = false;
+  private drawing = false;
+  private lastPoint: { x: number; y: number } | null = null;
+  private ctx: CanvasRenderingContext2D | null = null;
+
+  @ViewChild('sigCanvas') sigCanvas?: ElementRef<HTMLCanvasElement>;
 
   constructor(private route: ActivatedRoute) {}
 
@@ -47,7 +62,17 @@ export class ConcertConfirmationComponent implements OnInit {
     const list: ConcertRecord[] = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
     this.concert = list.find(x => x.id === id) || null;
     this.profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
-    this.signatureDataUrl = `${localStorage.getItem('mm_signature') || ''}`.trim();
+    const storedSig = `${localStorage.getItem('mm_signature') || ''}`.trim();
+    this.signatureDataUrl = storedSig || `${this.profile.signatureData || ''}`.trim();
+    this.editingSignature = !this.signatureDataUrl;
+    this.autoPdf = this.route.snapshot.queryParamMap.get('pdf') === '1';
+  }
+
+  ngAfterViewInit(): void {
+    if (this.editingSignature) this.initSignatureCanvas();
+    if (this.autoPdf) {
+      setTimeout(() => this.printPdf(), 280);
+    }
   }
 
   printPdf(): void {
@@ -71,13 +96,22 @@ export class ConcertConfirmationComponent implements OnInit {
   get exemptionChecks(): { label: string; selected: boolean }[] {
     const employerType = `${this.profile.exemptEmployerType || ''}`;
     const employerText = `${this.profile.exemptEmployer || ''}`.toLowerCase();
+    const reasons = (this.profile as any)?.roleSettings?.musician?.inpsExemptReasons || {};
+    const under18 = typeof reasons.under18 === 'boolean' ? reasons.under18 : this.profile.exemptReasonUnder18 === true;
+    const student = typeof reasons.studentUnder25 === 'boolean' ? reasons.studentUnder25 : this.profile.exemptReasonStudentUnder25 === true;
+    const pensioner = typeof reasons.pensionerOver65 === 'boolean'
+      ? reasons.pensionerOver65
+      : (this.profile.exemptReasonPensionerOver65 === true || employerType === 'pensionato');
+    const otherCoverage = typeof reasons.otherCoverage === 'boolean'
+      ? reasons.otherCoverage
+      : (this.profile.exemptReasonEmployee === true || employerType === 'dipendente' || employerType === 'altro' || !!employerText);
     return [
-      { label: 'Soggetto giovane fino a 18 anni', selected: false },
-      { label: 'Studente fino a 25 anni', selected: false },
-      { label: 'Titolare di pensione oltre 65 anni', selected: employerType === 'pensionato' },
+      { label: 'Soggetto giovane fino a 18 anni', selected: under18 },
+      { label: 'Studente fino a 25 anni', selected: student },
+      { label: 'Titolare di pensione oltre 65 anni', selected: pensioner },
       {
         label: 'Svolge attività lavorativa dipendente e/o autonoma con versamenti in altre gestioni',
-        selected: employerType === 'dipendente' || employerType === 'altro' || !!employerText
+        selected: otherCoverage
       }
     ];
   }
@@ -90,6 +124,15 @@ export class ConcertConfirmationComponent implements OnInit {
     const band = this.eventBandLabel;
     if (band !== 'N/D' && this.normalizeLabel(venue) === this.normalizeLabel(band)) return 'N/D';
     return venue;
+  }
+
+  get eventProvinceCode(): string {
+    const code = provinceCodeFromAddressLabel(this.eventPlace);
+    return code || '';
+  }
+
+  get musicianCode(): string {
+    return `${localStorage.getItem('musicianCode') || localStorage.getItem('mm_affiliation_code') || ''}`.trim();
   }
 
   get eventBandLabel(): string {
@@ -123,7 +166,127 @@ export class ConcertConfirmationComponent implements OnInit {
   get eventProvinceHint(): string {
     const place = this.eventPlace;
     if (place === 'N/D') return 'Inserire luogo e provincia';
+    if (!this.eventProvinceCode) return 'Manca la provincia (sigla). Es: Udine (UD)';
     return '';
+  }
+
+  startEditSignature(): void {
+    this.editingSignature = true;
+    this.signatureSaved = false;
+    setTimeout(() => this.initSignatureCanvas(), 0);
+  }
+
+  clearSignature(): void {
+    const canvas = this.sigCanvas?.nativeElement;
+    if (!canvas || !this.ctx) return;
+    this.ctx.clearRect(0, 0, canvas.width, canvas.height);
+    this.drawSignatureLine(canvas);
+    this.signatureSaved = false;
+  }
+
+  saveSignature(): void {
+    const canvas = this.sigCanvas?.nativeElement;
+    if (!canvas) return;
+    const dataUrl = canvas.toDataURL('image/png');
+    if (!dataUrl) return;
+    localStorage.setItem('mm_signature', dataUrl);
+    const snapshot = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    localStorage.setItem('mm_profile_snapshot', JSON.stringify({ ...snapshot, signatureData: dataUrl }));
+    this.signatureDataUrl = dataUrl;
+    this.signatureSaved = true;
+    this.editingSignature = false;
+  }
+
+  onSigMouseDown(event: MouseEvent): void {
+    if (!this.ctx) return;
+    this.drawing = true;
+    this.lastPoint = this.pos(event.clientX, event.clientY);
+  }
+
+  onSigMouseMove(event: MouseEvent): void {
+    if (!this.drawing || !this.ctx) return;
+    const next = this.pos(event.clientX, event.clientY);
+    if (!this.lastPoint) { this.lastPoint = next; return; }
+    this.stroke(this.lastPoint, next);
+    this.lastPoint = next;
+  }
+
+  onSigMouseUp(): void {
+    this.drawing = false;
+    this.lastPoint = null;
+  }
+
+  onSigTouchStart(event: TouchEvent): void {
+    if (!this.ctx) return;
+    event.preventDefault();
+    const t = event.touches[0];
+    if (!t) return;
+    this.drawing = true;
+    this.lastPoint = this.pos(t.clientX, t.clientY);
+  }
+
+  onSigTouchMove(event: TouchEvent): void {
+    if (!this.drawing || !this.ctx) return;
+    event.preventDefault();
+    const t = event.touches[0];
+    if (!t) return;
+    const next = this.pos(t.clientX, t.clientY);
+    if (!this.lastPoint) { this.lastPoint = next; return; }
+    this.stroke(this.lastPoint, next);
+    this.lastPoint = next;
+  }
+
+  onSigTouchEnd(): void {
+    this.onSigMouseUp();
+  }
+
+  private initSignatureCanvas(): void {
+    const canvas = this.sigCanvas?.nativeElement;
+    if (!canvas) return;
+    this.ctx = canvas.getContext('2d');
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#111827';
+    this.drawSignatureLine(canvas);
+    const saved = `${localStorage.getItem('mm_signature') || ''}`.trim() || `${this.profile.signatureData || ''}`.trim();
+    if (saved) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      img.src = saved;
+    }
+  }
+
+  private drawSignatureLine(canvas: HTMLCanvasElement): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(24, canvas.height - 22);
+    ctx.lineTo(canvas.width - 24, canvas.height - 22);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private pos(cX: number, cY: number): { x: number; y: number } {
+    const canvas = this.sigCanvas?.nativeElement;
+    const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: 1, height: 1 };
+    const scaleX = canvas ? canvas.width / rect.width : 1;
+    const scaleY = canvas ? canvas.height / rect.height : 1;
+    return { x: (cX - rect.left) * scaleX, y: (cY - rect.top) * scaleY };
+  }
+
+  private stroke(a: { x: number; y: number }, b: { x: number; y: number }): void {
+    if (!this.ctx) return;
+    this.signatureSaved = false;
+    this.ctx.beginPath();
+    this.ctx.moveTo(a.x, a.y);
+    this.ctx.lineTo(b.x, b.y);
+    this.ctx.stroke();
   }
 
   private extractBandFromNotes(notes: string): string {

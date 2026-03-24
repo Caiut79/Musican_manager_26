@@ -469,6 +469,9 @@
             <span>Importo ricevuto (€)</span>
             <input type="number" [(ngModel)]="draft.receivedAmount" min="0" step="0.01">
           </label>
+          <div class="pf-inline-info" *ngIf="draftOutsideInvoiceDifference > 0">
+            Differenza fuori fattura: <strong>{{ draftOutsideInvoiceDifference | currency:'EUR':'symbol':'1.2-2' }}</strong>
+          </div>
 
           <label *ngIf="isDraftMonthlyConcert()">
             <span>Tipo pagamento mensile</span>
@@ -661,6 +664,9 @@
             <span>Importo ricevuto (€)</span>
             <input type="number" [(ngModel)]="draft.receivedAmount" min="0" step="0.01">
           </label>
+          <div class="pf-inline-info" *ngIf="draftOutsideInvoiceDifference > 0">
+            Differenza fuori fattura: <strong>{{ draftOutsideInvoiceDifference | currency:'EUR':'symbol':'1.2-2' }}</strong>
+          </div>
 
           <label>
             <span>Tipo pagamento</span>

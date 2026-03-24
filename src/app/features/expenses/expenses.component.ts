@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, Validators, FormArray, FormControl } from '@ang
 import { ActivatedRoute, Router } from '@angular/router';
 import * as L from 'leaflet';
 import { Expense, ExpenseExtra } from '../../models/expense';
+import { EventDetail } from '../../models/event-detail';
 import { SupabaseService } from '../../core/supabase.service';
 import { formatItalianAddressLabel, italianAddressTypeScore, provinceCodeFromAddressLabel, provinceCodeFromText, normalizeGeoText } from '../../core/italian-geo';
 
@@ -35,6 +36,9 @@ type ExpenseCalculationResult = {
 };
 
 type AddressField = 'origin' | 'destination';
+type MapThemeId = 'light' | 'street' | 'dark' | 'satellite' | 'topo';
+type RouteColorId = 'violet' | 'blue' | 'emerald' | 'red' | 'amber';
+type ConsumptionMode = 'l_100km' | 'km_l' | 'l_km';
 
 // ─── Toll segment for manual toll calculator ─────────────────────────────────
 type TollSegment = {
@@ -88,8 +92,30 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   activeWaypointIndex: number | null = null;
   fromConcertFlow = false;
   fromDashboardFlow = false;
+  showAssignEventModal = false;
+  assignTargetExpenseId = '';
+  assignSelectedEventId = '';
+  assignSuggestedEventId = '';
+  assignEvents: EventDetail[] = [];
+  selectedMapTheme: MapThemeId = 'light';
+  selectedRouteColor: RouteColorId = 'violet';
+  readonly mapThemeOptions: { id: MapThemeId; label: string }[] = [
+    { id: 'light', label: 'Chiara moderna' },
+    { id: 'street', label: 'Stradale classica' },
+    { id: 'dark', label: 'Scura notte' },
+    { id: 'satellite', label: 'Satellite' },
+    { id: 'topo', label: 'Topografica' }
+  ];
+  readonly routeColorOptions: { id: RouteColorId; label: string; hex: string }[] = [
+    { id: 'violet', label: 'Viola', hex: '#7c3aed' },
+    { id: 'blue', label: 'Blu', hex: '#2563eb' },
+    { id: 'emerald', label: 'Verde', hex: '#059669' },
+    { id: 'red', label: 'Rosso', hex: '#e11d48' },
+    { id: 'amber', label: 'Ambra', hex: '#d97706' }
+  ];
 
   private map!: L.Map;
+  private mapTileLayer?: L.TileLayer;
   private markerOrigin?: L.Marker;
   private markerDest?: L.Marker;
   private routeLine?: L.Polyline;
@@ -107,15 +133,36 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     const profileSnapshot = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
     const homeBaseRaw = `${localStorage.getItem('mm_homeBase') || profileSnapshot?.homeBase || profileSnapshot?.residence || ''}`.trim();
     const homeBase = this.normalizeAddressTextForUi(homeBaseRaw);
-    const savedPrice       = parseFloat(localStorage.getItem('mm_fuelPricePerLiter') || '1.85');
-    const savedConsumption = parseFloat(localStorage.getItem('mm_vehicleConsumption') || '7.0');
+    const profileFuelType = `${profileSnapshot?.vehicleFuelType || localStorage.getItem('mm_vehicle_fuel_type') || 'benzina'}`.trim().toLowerCase();
+    const profileVehicleModel = `${profileSnapshot?.vehicleModel || localStorage.getItem('mm_vehicle_model') || ''}`.trim();
+    const priceFallbackByFuel: Record<string, number> = {
+      benzina: 1.86, diesel: 1.76, gpl: 0.76, metano: 1.52, ibrido: 1.84, elettrico: 0.62, altro: 1.85
+    };
+    const defaultPriceByFuel = priceFallbackByFuel[profileFuelType] ?? 1.85;
+    const savedPrice       = parseFloat(localStorage.getItem('mm_fuelPricePerLiter') || `${defaultPriceByFuel}`);
+    let savedConsumption = this.parseDecimalInput(localStorage.getItem('mm_vehicleConsumption') || profileSnapshot?.vehicleConsumption || 7.0);
+    let savedConsumptionMode = `${localStorage.getItem('mm_vehicle_consumption_mode') || profileSnapshot?.vehicleConsumptionMode || 'l_100km'}` as ConsumptionMode;
+    if (savedConsumptionMode === 'l_km') {
+      savedConsumption = Number.isFinite(savedConsumption) ? +(savedConsumption * 100).toFixed(1) : 0;
+      savedConsumptionMode = 'l_100km';
+      localStorage.setItem('mm_vehicle_consumption_mode', 'l_100km');
+      localStorage.setItem('mm_vehicleConsumption', String(savedConsumption));
+    }
     const savedVehicleType = localStorage.getItem('mm_toll_vehicle_type') || localStorage.getItem('mm_tollguru_vehicle_type') || '2AxlesAuto';
     this.tollVehicleType   = savedVehicleType;
+    const storedTheme = `${localStorage.getItem('mm_expenses_map_theme') || ''}` as MapThemeId;
+    const rawStoredRouteColor = `${localStorage.getItem('mm_expenses_route_color') || ''}`;
+    const storedRouteColor = (rawStoredRouteColor === 'rose' ? 'red' : rawStoredRouteColor) as RouteColorId;
+    if (this.mapThemeOptions.some(x => x.id === storedTheme)) this.selectedMapTheme = storedTheme;
+    if (this.routeColorOptions.some(x => x.id === storedRouteColor)) this.selectedRouteColor = storedRouteColor;
 
     this.form = this.fb.group({
       origin:             [homeBase, Validators.required],
       waypoints:          this.fb.array([]),
       destination:        ['', Validators.required],
+      vehicleModel:       [profileVehicleModel],
+      vehicleFuelType:    [profileFuelType || 'benzina'],
+      vehicleConsumptionMode: [savedConsumptionMode === 'km_l' ? 'km_l' : 'l_100km'],
       fuelPricePerLiter:  [savedPrice,       [Validators.required, Validators.min(0)]],
       vehicleConsumption: [savedConsumption, [Validators.required, Validators.min(0)]],
       extras: this.fb.array([]),
@@ -150,14 +197,27 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
       worldCopyJump: true,
       minZoom: 2
     }).setView([46.5, 8.5], 5);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap contributors © CARTO',
-      maxZoom: 19,
-    }).addTo(this.map);
+    this.applyMapTheme();
     this.map.on('click', (event: L.LeafletMouseEvent) => {
       if (!this.mapWaypointPickMode) return;
       void this.addWaypointFromMap(event.latlng.lat, event.latlng.lng);
     });
+  }
+
+  onMapThemeChange(theme: MapThemeId): void {
+    this.selectedMapTheme = theme;
+    localStorage.setItem('mm_expenses_map_theme', theme);
+    this.applyMapTheme();
+  }
+
+  onRouteColorChange(colorId: RouteColorId): void {
+    this.selectedRouteColor = colorId;
+    localStorage.setItem('mm_expenses_route_color', colorId);
+    this.routeLine?.setStyle({ color: this.routeColorHex, opacity: 0.92 });
+  }
+
+  get routeColorHex(): string {
+    return this.routeColorOptions.find(x => x.id === this.selectedRouteColor)?.hex || '#7c3aed';
   }
 
   // ─── Form arrays ───────────────────────────────────────────────────────────
@@ -255,7 +315,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
       this.destCoords   = dCoords;
       this.validWaypointCoords = (wpResults as ([number, number] | null)[]).filter((c): c is [number, number] => c !== null);
 
-      const fuelCostPerKm = +((Number(v.vehicleConsumption || 0) / 100) * Number(v.fuelPricePerLiter || 0)).toFixed(3);
+      const fuelCostPerKm = this.computeFuelCostPerKm(this.parseDecimalInput(v.vehicleConsumption), this.parseDecimalInput(v.fuelPricePerLiter), `${v.vehicleConsumptionMode || 'l_100km'}` as ConsumptionMode);
       const totalExtras   = (v.extras as ExpenseExtra[]).reduce((s, e) => s + (+e.amount || 0), 0);
       const routeOptions  = await this.fetchRouteAlternatives(oCoords, dCoords, this.validWaypointCoords);
       this.itineraryOptions = routeOptions.length ? routeOptions : [this.createFallbackItinerary(oCoords, dCoords)];
@@ -264,6 +324,9 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
 
       localStorage.setItem('mm_fuelPricePerLiter',  String(v.fuelPricePerLiter));
       localStorage.setItem('mm_vehicleConsumption', String(v.vehicleConsumption));
+      localStorage.setItem('mm_vehicle_consumption_mode', String(v.vehicleConsumptionMode || 'l_100km'));
+      localStorage.setItem('mm_vehicle_fuel_type', String(v.vehicleFuelType || 'benzina'));
+      localStorage.setItem('mm_vehicle_model', String(v.vehicleModel || ''));
       localStorage.setItem('mm_toll_vehicle_type', String(this.tollVehicleType || '2AxlesAuto'));
 
     } catch (e: unknown) {
@@ -276,9 +339,56 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   selectItinerary(itineraryId: string): void {
     if (!this.itineraryOptions.length) return;
     const v = this.form.value;
-    const fuelCostPerKm = +((Number(v.vehicleConsumption || 0) / 100) * Number(v.fuelPricePerLiter || 0)).toFixed(3);
+    const fuelCostPerKm = this.computeFuelCostPerKm(this.parseDecimalInput(v.vehicleConsumption), this.parseDecimalInput(v.fuelPricePerLiter), `${v.vehicleConsumptionMode || 'l_100km'}` as ConsumptionMode);
     const totalExtras   = (v.extras as ExpenseExtra[]).reduce((s, e) => s + (+e.amount || 0), 0);
     this.applyItinerary(itineraryId, fuelCostPerKm, totalExtras);
+  }
+
+  get consumptionLabel(): string {
+    return this.isKmPerLiterMode ? 'Consumo medio (km/l)' : 'Consumo medio (l/100 km)';
+  }
+
+  get consumptionStep(): string {
+    return this.isKmPerLiterMode ? '0.5' : '0.1';
+  }
+
+  get consumptionPlaceholder(): string {
+    return this.isKmPerLiterMode ? 'es. 16.5' : 'es. 6.2';
+  }
+
+  get isKmPerLiterMode(): boolean {
+    return `${this.form?.value?.vehicleConsumptionMode || 'l_100km'}` === 'km_l';
+  }
+
+  onConsumptionModeChange(nextMode: ConsumptionMode): void {
+    const currentMode = `${this.form.value.vehicleConsumptionMode || 'l_100km'}` as ConsumptionMode;
+    const raw = this.parseDecimalInput(this.form.value.vehicleConsumption);
+    this.form.patchValue({ vehicleConsumptionMode: nextMode }, { emitEvent: false });
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    const normalizedCurrent: 'l_100km' | 'km_l' = currentMode === 'km_l' ? 'km_l' : 'l_100km';
+    const normalizedNext: 'l_100km' | 'km_l' = nextMode === 'km_l' ? 'km_l' : 'l_100km';
+    if (normalizedCurrent === normalizedNext) return;
+    const converted = 100 / raw;
+    if (!Number.isFinite(converted) || converted <= 0) return;
+    this.form.patchValue({ vehicleConsumption: +converted.toFixed(normalizedNext === 'km_l' ? 2 : 1) }, { emitEvent: false });
+  }
+
+  private computeFuelCostPerKm(consumptionValue: number, fuelPricePerLiter: number, mode: ConsumptionMode): number {
+    const c = this.parseDecimalInput(consumptionValue);
+    const p = this.parseDecimalInput(fuelPricePerLiter);
+    if (!Number.isFinite(c) || !Number.isFinite(p) || c <= 0 || p <= 0) return 0;
+    if (mode === 'km_l') {
+      return +(p / c).toFixed(3);
+    }
+    if (mode === 'l_km') return +(c * p).toFixed(3);
+    return +((c / 100) * p).toFixed(3);
+  }
+
+  private parseDecimalInput(value: unknown): number {
+    if (typeof value === 'number') return value;
+    const normalized = `${value || ''}`.trim().replace(',', '.');
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : 0;
   }
 
   private async geocode(query: string): Promise<[number, number] | null> {
@@ -904,11 +1014,58 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     const path = geometry.length > 1 ? geometry : [origin, dest];
-    this.routeLine = L.polyline(path, { color: '#7c3aed', weight: 4 }).addTo(this.map);
+    this.routeLine = L.polyline(path, { color: this.routeColorHex, weight: 5, opacity: 0.92 }).addTo(this.map);
 
     const allPoints: [number, number][] = [origin, ...waypoints, dest];
     const bounds = L.latLngBounds(allPoints);
     this.map.fitBounds(bounds, { padding: [40, 40] });
+  }
+
+  private applyMapTheme(): void {
+    if (!this.map) return;
+    if (this.mapTileLayer) this.map.removeLayer(this.mapTileLayer);
+    const config = this.resolveMapThemeConfig(this.selectedMapTheme);
+    this.mapTileLayer = L.tileLayer(config.url, {
+      attribution: config.attribution,
+      maxZoom: config.maxZoom
+    });
+    this.mapTileLayer.addTo(this.map);
+  }
+
+  private resolveMapThemeConfig(theme: MapThemeId): { url: string; attribution: string; maxZoom: number } {
+    if (theme === 'street') {
+      return {
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      };
+    }
+    if (theme === 'dark') {
+      return {
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attribution: '© OpenStreetMap contributors © CARTO',
+        maxZoom: 19
+      };
+    }
+    if (theme === 'satellite') {
+      return {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attribution: 'Tiles © Esri',
+        maxZoom: 18
+      };
+    }
+    if (theme === 'topo') {
+      return {
+        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        attribution: 'Map data: © OpenStreetMap contributors, SRTM | Style: © OpenTopoMap',
+        maxZoom: 17
+      };
+    }
+    return {
+      url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      attribution: '© OpenStreetMap contributors © CARTO',
+      maxZoom: 19
+    };
   }
 
   // ─── Save expense ──────────────────────────────────────────────────────────
@@ -928,6 +1085,9 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
       fuelCostPerKm:      this.result?.fuelCostPerKm ?? 0,
       fuelPricePerLiter:  v.fuelPricePerLiter,
       vehicleConsumption: v.vehicleConsumption,
+      vehicleConsumptionMode: (v.vehicleConsumptionMode as ConsumptionMode) || 'l_100km',
+      vehicleModel: `${v.vehicleModel || ''}`.trim() || undefined,
+      vehicleFuelType: `${v.vehicleFuelType || ''}`.trim() as Expense['vehicleFuelType'],
       extras:       v.extras,
       totalFuel:    this.result.totalFuel,
       totalExtras:  this.result.totalExtras,
@@ -945,17 +1105,147 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     void this.syncSupabaseExpenses();
   }
 
+  async reviewExpenseOnMap(expense: Expense): Promise<void> {
+    const fuelPrice = Number(expense.fuelPricePerLiter || this.form.value.fuelPricePerLiter || 1.85);
+    const vehicleConsumption = Number(expense.vehicleConsumption || this.form.value.vehicleConsumption || 7);
+    this.form.patchValue({
+      origin: this.normalizeAddressTextForUi(`${expense.origin || ''}`),
+      destination: this.normalizeAddressTextForUi(`${expense.destination || ''}`),
+      vehicleModel: `${expense.vehicleModel || this.form.value.vehicleModel || ''}`.trim(),
+      vehicleFuelType: `${expense.vehicleFuelType || this.form.value.vehicleFuelType || 'benzina'}`,
+      vehicleConsumptionMode: `${expense.vehicleConsumptionMode || this.form.value.vehicleConsumptionMode || 'l_100km'}`,
+      fuelPricePerLiter: Number.isFinite(fuelPrice) ? fuelPrice : 1.85,
+      vehicleConsumption: Number.isFinite(vehicleConsumption) ? vehicleConsumption : 7
+    });
+    this.extrasArray.clear();
+    for (const ex of (expense.extras || [])) {
+      this.extrasArray.push(this.fb.group({
+        label: `${ex?.label || ''}`,
+        amount: Number(ex?.amount || 0)
+      }));
+    }
+    this.validWaypointCoords = [];
+    this.waypointsArray.clear();
+    this.result = null;
+
+    const origin = await this.resolveExpensePoint(expense.originLat, expense.originLon, expense.origin);
+    const dest = await this.resolveExpensePoint(expense.destLat, expense.destLon, expense.destination);
+    if (!origin || !dest) {
+      this.calcError = 'Impossibile ripristinare la mappa: mancano coordinate valide per questa spesa.';
+      return;
+    }
+
+    this.originCoords = origin;
+    this.destCoords = dest;
+    let geometry: [number, number][] = [origin, dest];
+    let motorwaySegments: TollSegment[] = [];
+    try {
+      const alternatives = await this.fetchRouteAlternatives(origin, dest, []);
+      if (alternatives.length) {
+        geometry = alternatives[0].geometry?.length ? alternatives[0].geometry : geometry;
+        motorwaySegments = alternatives[0].motorwaySegments || [];
+      }
+    } catch {}
+
+    this.itineraryOptions = [{
+      id: `saved-${expense.id}`,
+      label: `${expense.routeLabel || 'Percorso salvato'}`,
+      distanceKm: Number(expense.distanceKm || 0),
+      durationMin: Math.max(1, Number(expense.durationMin || 1)),
+      motorwayKm: +motorwaySegments.reduce((sum, seg) => sum + Number(seg.kmMotorway || 0), 0).toFixed(1),
+      tollOneWay: expense.tollEstimatedOneWay ?? 0,
+      tollRoundTrip: expense.tollEstimatedRoundTrip ?? 0,
+      tollProvider: 'stima',
+      tollBoothsCount: expense.tollBoothsCount ?? this.countEstimatedBooths(motorwaySegments),
+      motorwaySegments,
+      geometry
+    }];
+    this.selectedItineraryId = this.itineraryOptions[0].id;
+    this.tollSegments = motorwaySegments.map(seg => ({ ...seg }));
+    this.result = {
+      distanceKm: Number(expense.distanceKm || 0),
+      durationMin: Math.max(1, Number(expense.durationMin || 1)),
+      routeLabel: expense.routeLabel || 'Percorso salvato',
+      fuelCostPerKm: Number(expense.fuelCostPerKm || 0),
+      totalFuel: Number(expense.totalFuel || 0),
+      totalExtras: Number(expense.totalExtras || 0),
+      tollOneWay: expense.tollEstimatedOneWay ?? 0,
+      tollRoundTrip: expense.tollEstimatedRoundTrip ?? 0,
+      tollProvider: 'stima',
+      tollBoothsCount: expense.tollBoothsCount ?? this.countEstimatedBooths(motorwaySegments),
+      total: Number(expense.totalExpense || 0)
+    };
+    this.updateMap(origin, dest, geometry, []);
+    this.calcError = '';
+    setTimeout(() => this.map?.invalidateSize(), 80);
+  }
+
+  openAssignEventModal(expense: Expense): void {
+    this.assignTargetExpenseId = expense.id;
+    const allEvents: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const activeEvents = allEvents
+      .filter(e => `${e?.date || ''}`.trim())
+      .sort((a, b) => `${b.date || ''}`.localeCompare(`${a.date || ''}`));
+    this.assignEvents = activeEvents;
+    this.assignSuggestedEventId = this.suggestEventForExpense(expense, activeEvents);
+    this.assignSelectedEventId = expense.eventId || this.assignSuggestedEventId || '';
+    this.showAssignEventModal = true;
+  }
+
+  closeAssignEventModal(): void {
+    this.showAssignEventModal = false;
+    this.assignTargetExpenseId = '';
+    this.assignSelectedEventId = '';
+    this.assignSuggestedEventId = '';
+  }
+
+  saveExpenseEventAssignment(): void {
+    if (!this.assignTargetExpenseId || !this.assignSelectedEventId) return;
+    this.expenses = this.expenses.map(ex =>
+      ex.id === this.assignTargetExpenseId
+        ? { ...ex, eventId: this.assignSelectedEventId }
+        : ex
+    );
+    localStorage.setItem('mm_expenses', JSON.stringify(this.expenses));
+    void this.syncSupabaseExpenses();
+    this.closeAssignEventModal();
+  }
+
+  eventLabelById(eventId: string): string {
+    const source = this.assignEvents.length ? this.assignEvents : (JSON.parse(localStorage.getItem('mm_events') || '[]') as EventDetail[]);
+    const event = source.find(e => `${e.id}` === `${eventId}`);
+    if (!event) return '';
+    return `${event.title || 'Evento'} • ${event.date || ''}`;
+  }
+
+  isSuggestedEvent(eventId: string): boolean {
+    return !!eventId && eventId === this.assignSuggestedEventId;
+  }
+
   formatExpenseAddress(value: string): string {
     return this.normalizeAddressTextForUi(value);
   }
 
   private normalizeStoredExpenses(raw: any[]): Expense[] {
     if (!Array.isArray(raw)) return [];
-    const normalized = raw.map((item: any) => ({
-      ...item,
-      origin: this.normalizeAddressTextForUi(`${item?.origin || ''}`),
-      destination: this.normalizeAddressTextForUi(`${item?.destination || ''}`)
-    }));
+    const normalized = raw.map((item: any) => {
+      const mode = `${item?.vehicleConsumptionMode || ''}` as ConsumptionMode;
+      const consumption = Number(item?.vehicleConsumption || 0);
+      if (mode === 'l_km' && Number.isFinite(consumption) && consumption > 0) {
+        return {
+          ...item,
+          vehicleConsumptionMode: 'l_100km',
+          vehicleConsumption: +(consumption * 100).toFixed(1),
+          origin: this.normalizeAddressTextForUi(`${item?.origin || ''}`),
+          destination: this.normalizeAddressTextForUi(`${item?.destination || ''}`)
+        };
+      }
+      return {
+        ...item,
+        origin: this.normalizeAddressTextForUi(`${item?.origin || ''}`),
+        destination: this.normalizeAddressTextForUi(`${item?.destination || ''}`)
+      };
+    });
     localStorage.setItem('mm_expenses', JSON.stringify(normalized));
     return normalized;
   }
@@ -1112,5 +1402,39 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     try {
       await this.supabase.syncExpensesFromLocalStorage(musicianId);
     } catch {}
+  }
+
+  private async resolveExpensePoint(lat?: number, lon?: number, fallbackAddress = ''): Promise<[number, number] | null> {
+    if (Number.isFinite(lat) && Number.isFinite(lon)) return [Number(lat), Number(lon)];
+    const parsed = this.parseCoordinatesFromText(`${fallbackAddress || ''}`);
+    if (parsed) return parsed;
+    const geocoded = await this.geocode(`${fallbackAddress || ''}`.trim());
+    return geocoded || null;
+  }
+
+  private suggestEventForExpense(expense: Expense, events: EventDetail[]): string {
+    const destination = this.normalizeAddressText(`${expense.destination || ''}`);
+    const expenseDate = `${expense.date || ''}`.trim();
+    let bestId = '';
+    let bestScore = -1;
+    for (const event of events) {
+      let score = 0;
+      const eventAddress = this.normalizeAddressText(`${event.address || ''}`);
+      const eventVenue = this.normalizeAddressText(`${event.venue || ''}`);
+      if (destination && eventAddress && (destination.includes(eventAddress) || eventAddress.includes(destination))) score += 45;
+      if (destination && eventVenue && (destination.includes(eventVenue) || eventVenue.includes(destination))) score += 35;
+      if (expenseDate && event.date === expenseDate) score += 30;
+      if (expenseDate && event.date) {
+        const dayDelta = Math.abs(Math.round((new Date(expenseDate).getTime() - new Date(event.date).getTime()) / 86400000));
+        if (dayDelta <= 1) score += 14;
+        else if (dayDelta <= 3) score += 8;
+      }
+      if (event.type === 'concert' || event.type === 'dj_set') score += 4;
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = event.id;
+      }
+    }
+    return bestScore >= 24 ? bestId : '';
   }
 }

@@ -122,6 +122,10 @@ export class MusicianFormComponent {
     exemptReasonProfessionalFund: [false],
     exemptEmployer:     [''],
     exemptEmployerType: ['dipendente'],
+    vehicleModel: [''],
+    vehicleFuelType: ['benzina'],
+    vehicleConsumption: [7.0],
+    vehicleConsumptionMode: ['l_100km'],
     inpsNumber:         [''],
     inpsStartDate:      [''],
     inpsEndDate:        [''],
@@ -174,6 +178,7 @@ export class MusicianFormComponent {
 
   constructor(private fb: FormBuilder, private supabase: SupabaseService, private router: Router) {
     this.loadSavedProfile();
+    this.migrateVehicleConsumptionModeIfNeeded();
     void this.restoreProfileFromDemo();
     void this.ensureLicenseEmailAuto();
     this.annualInvoicedMusicIncome = this.computeAnnualInvoicedMusicIncome();
@@ -195,6 +200,10 @@ export class MusicianFormComponent {
       ['mm_firstName', 'firstName'], ['mm_lastName', 'lastName'],
       ['mm_homeBase',  'homeBase'],  ['mm_phone',    'phone'],
       ['mm_fiscalCode','fiscalCode'],
+      ['mm_vehicle_model', 'vehicleModel'],
+      ['mm_vehicle_fuel_type', 'vehicleFuelType'],
+      ['mm_vehicle_consumption_mode', 'vehicleConsumptionMode'],
+      ['mm_vehicleConsumption', 'vehicleConsumption'],
     ];
     const patch: Record<string, string> = {};
     pairs.forEach(([lk, fk]) => { const v = localStorage.getItem(lk); if (v) patch[fk] = v; });
@@ -203,6 +212,40 @@ export class MusicianFormComponent {
     if (savedLicenseEmail) this.form.patchValue({ licenseEmail: savedLicenseEmail });
     this.onRolesChanged();
     this.refreshIncompleteSteps();
+  }
+
+  onVehicleConsumptionModeChange(nextMode: 'l_100km' | 'km_l'): void {
+    const currentMode = `${this.form.get('vehicleConsumptionMode')?.value || 'l_100km'}` as 'l_km' | 'km_l' | 'l_100km';
+    const raw = this.parseDecimalInput(this.form.get('vehicleConsumption')?.value);
+    this.form.patchValue({ vehicleConsumptionMode: nextMode }, { emitEvent: false });
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    const normalizedCurrent: 'l_100km' | 'km_l' = currentMode === 'km_l' ? 'km_l' : 'l_100km';
+    if (normalizedCurrent === nextMode) return;
+    const converted = 100 / raw;
+    if (!Number.isFinite(converted) || converted <= 0) return;
+    this.form.patchValue({ vehicleConsumption: +converted.toFixed(nextMode === 'km_l' ? 2 : 1) }, { emitEvent: false });
+  }
+
+  private migrateVehicleConsumptionModeIfNeeded(): void {
+    const mode = `${this.form.get('vehicleConsumptionMode')?.value || ''}` as 'l_100km' | 'l_km' | 'km_l' | '';
+    const raw = this.parseDecimalInput(this.form.get('vehicleConsumption')?.value);
+    if (mode === 'l_km') {
+      if (Number.isFinite(raw) && raw > 0) {
+        this.form.patchValue({
+          vehicleConsumptionMode: 'l_100km',
+          vehicleConsumption: +(raw * 100).toFixed(1)
+        }, { emitEvent: false });
+      } else {
+        this.form.patchValue({ vehicleConsumptionMode: 'l_100km' }, { emitEvent: false });
+      }
+    }
+  }
+
+  private parseDecimalInput(value: unknown): number {
+    if (typeof value === 'number') return value;
+    const normalized = `${value || ''}`.trim().replace(',', '.');
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : 0;
   }
 
   private async restoreProfileFromDemo(): Promise<void> {
@@ -633,7 +676,7 @@ export class MusicianFormComponent {
   private isStepIncomplete(stepIndex: number): boolean {
     if (stepIndex === 1 && !this.isMusician) return false;
     const fieldsByStep: Record<number, string[]> = {
-      0: ['firstName', 'lastName', 'phone', 'licenseEmail', 'birthDate', 'birthPlace', 'fiscalCode', 'residence', 'homeBase'],
+      0: ['firstName', 'lastName', 'phone', 'licenseEmail', 'birthDate', 'birthPlace', 'fiscalCode', 'residence', 'homeBase', 'vehicleModel', 'vehicleFuelType', 'vehicleConsumption'],
       1: ['instrument', 'level', 'stylesPlayed', 'searchableStyles'],
       2: ['instagram', 'facebook', 'youtube', 'tiktok', 'website'],
       3: ['empalsPosition', 'workerType', 'taxRegime', 'vatMode', 'irpefBracket', 'substituteTaxPercent', 'estimatedAnnualRevenue', 'estimatedAnnualCosts', 'exemptEmployer', 'inpsNumber', 'inpsStartDate', 'inpsEndDate'],
@@ -683,8 +726,12 @@ export class MusicianFormComponent {
         ['mm_firstName',  v.firstName],    ['mm_lastName',   v.lastName],
         ['mm_homeBase',   v.homeBase],     ['mm_phone',      v.phone],
         ['mm_fiscalCode', v.fiscalCode],
+        ['mm_vehicle_model', v.vehicleModel],
+        ['mm_vehicle_fuel_type', v.vehicleFuelType],
+        ['mm_vehicle_consumption_mode', v.vehicleConsumptionMode],
       ];
       persist.forEach(([k, val]) => { if (val) localStorage.setItem(k, val); });
+      if (Number.isFinite(Number(v.vehicleConsumption))) localStorage.setItem('mm_vehicleConsumption', String(v.vehicleConsumption));
       if (v.licenseEmail) localStorage.setItem('mm_user_email', v.licenseEmail);
       localStorage.setItem('mm_profile_snapshot', JSON.stringify(this.form.value));
 
@@ -710,6 +757,10 @@ export class MusicianFormComponent {
         exemptEmployer: v.exemptEmployer || undefined,
         exemptEmployerType: (v.exemptEmployerType as Musician['exemptEmployerType']) || undefined,
         homeBase:       v.homeBase || undefined,
+        vehicleModel:   v.vehicleModel || undefined,
+        vehicleFuelType: (v.vehicleFuelType as Musician['vehicleFuelType']) || undefined,
+        vehicleConsumption: Number(v.vehicleConsumption || 0) || undefined,
+        vehicleConsumptionMode: (v.vehicleConsumptionMode as Musician['vehicleConsumptionMode']) || undefined,
         instrument:     v.isMusician ? (v.instrument || undefined) : undefined,
         level:          v.isMusician ? (v.level || undefined) : undefined,
         stylesPlayed:   v.isMusician ? (v.stylesPlayed || []) : [],
@@ -752,7 +803,13 @@ export class MusicianFormComponent {
             cooperativeFeePercent: Number(v.musicianCoopFeePercent || 0),
             cooperativeTaxPercent: Number(v.musicianCoopTaxPercent || 0),
             eventGrossEstimate: Number(v.musicianEventGrossEstimate || 0),
-            inpsExempt: !!v.musicianInpsExemptRole
+            inpsExempt: !!v.musicianInpsExemptRole,
+            inpsExemptReasons: {
+              under18: !!v.exemptReasonUnder18,
+              studentUnder25: !!v.exemptReasonStudentUnder25,
+              pensionerOver65: !!v.exemptReasonPensionerOver65,
+              otherCoverage: !!v.exemptReasonEmployee
+            }
           } : undefined,
           dj: v.isDj ? {
             code: djCodeDraft || undefined,

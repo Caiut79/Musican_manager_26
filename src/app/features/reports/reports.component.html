@@ -25,214 +25,599 @@
   </div>
 </div>
 
-<div class="kpi-grid">
-  <section class="kpi-card">
-    <div class="kpi-top">
-      <span class="kpi-label">Pattuito (totale)</span>
-      <span class="kpi-chip">Serate + lezioni</span>
-    </div>
-    <div class="kpi-value">{{ grossTotal | currency:'EUR':'symbol':'1.0-0' }}</div>
-    <div class="kpi-sub">
-      <span>Serate: <strong>{{ concertDue | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
-      <span *ngIf="isTeacherProfile">Lezioni: <strong>{{ teachingDue | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
-    </div>
-  </section>
-  <section class="kpi-card">
-    <div class="kpi-top">
-      <span class="kpi-label">Incassato (stimato)</span>
-      <span class="kpi-chip">Pagamenti registrati</span>
-    </div>
-    <div class="kpi-value">{{ (concertReceived + teachingReceived) | currency:'EUR':'symbol':'1.0-0' }}</div>
-    <div class="kpi-sub">
-      <span>Serate: <strong>{{ concertReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
-      <span *ngIf="isTeacherProfile">Lezioni: <strong>{{ teachingReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
-    </div>
-  </section>
-  <section class="kpi-card">
-    <div class="kpi-top">
-      <span class="kpi-label">Spese</span>
-      <span class="kpi-chip danger">Uscite</span>
-    </div>
-    <div class="kpi-value danger">{{ expenseTotal | currency:'EUR':'symbol':'1.0-0' }}</div>
-    <div class="kpi-sub">
-      <span>Saldo cassa: <strong [class.danger]="cashNet < 0">{{ cashNet | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
-    </div>
-  </section>
-  <section class="kpi-card">
-    <div class="kpi-top">
-      <span class="kpi-label">Da incassare</span>
-      <span class="kpi-chip warn">Crediti</span>
-    </div>
-    <div class="kpi-value" [class.warn]="pendingReceivables > 0">{{ pendingReceivables | currency:'EUR':'symbol':'1.0-0' }}</div>
-    <div class="kpi-sub">
-      <span>Serate: <strong>{{ totalConcertSessions }}</strong></span>
-      <span *ngIf="isTeacherProfile">Lezioni: <strong>{{ totalLessonSessions }}</strong></span>
-    </div>
-  </section>
+<!-- ═══ TAB NAVIGATION ══════════════════════════════════════════════════════ -->
+<div class="tabs">
+  <button type="button" class="tab" [class.active]="activeTab === 'overview'"  (click)="setTab('overview')">Panoramica</button>
+  <button type="button" class="tab" [class.active]="activeTab === 'payments'"  (click)="setTab('payments')">Pagamenti</button>
+  <button type="button" class="tab" [class.active]="activeTab === 'territory'" (click)="setTab('territory')">Territorio</button>
+  <button type="button" class="tab" [class.active]="activeTab === 'search'"    (click)="setTab('search')">Ricerca</button>
 </div>
 
-<div class="report-grid">
-  <section class="card">
-    <h2>Trend (ultimi 6 mesi)</h2>
-    <div class="trend">
-      <div class="trend-row" *ngFor="let t of trend">
-        <div class="trend-label">{{ t.label }}</div>
-        <div class="trend-bars">
-          <div class="bar income" [style.width.%]="(t.received / trendMax()) * 100"></div>
-          <div class="bar expense" [style.width.%]="(t.expenses / trendMax()) * 100"></div>
-        </div>
-        <div class="trend-values">
-          <span class="v income">{{ t.received | currency:'EUR':'symbol':'1.0-0' }}</span>
-          <span class="v expense">{{ t.expenses | currency:'EUR':'symbol':'1.0-0' }}</span>
-          <span class="v net" [class.danger]="t.net < 0">{{ t.net | currency:'EUR':'symbol':'1.0-0' }}</span>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PANORAMICA
+     ═══════════════════════════════════════════════════════════════════════ -->
+<ng-container *ngIf="activeTab === 'overview'">
+
+  <div class="kpi-grid">
+    <section class="kpi-card kpi-primary">
+      <div class="kpi-top">
+        <span class="kpi-label">Pattuito (totale)</span>
+        <span class="kpi-chip">Eventi + lezioni</span>
+      </div>
+      <div class="kpi-value gradient-text">{{ grossTotal | currency:'EUR':'symbol':'1.0-0' }}</div>
+      <div class="kpi-sub">
+        <span>Eventi: <strong>{{ concertDue | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+        <span *ngIf="isTeacherProfile">Lezioni: <strong>{{ teachingDue | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+      </div>
+    </section>
+    <section class="kpi-card kpi-success">
+      <div class="kpi-top">
+        <span class="kpi-label">Incassato</span>
+        <span class="kpi-chip">Pagamenti registrati</span>
+      </div>
+      <div class="kpi-value">{{ totalReceived | currency:'EUR':'symbol':'1.0-0' }}</div>
+      <div class="kpi-sub">
+        <span>Eventi: <strong>{{ concertReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+        <span *ngIf="isTeacherProfile">Lezioni: <strong>{{ teachingReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+      </div>
+    </section>
+    <section class="kpi-card kpi-danger">
+      <div class="kpi-top">
+        <span class="kpi-label">Spese</span>
+        <span class="kpi-chip danger">Uscite</span>
+      </div>
+      <div class="kpi-value danger">{{ expenseTotal | currency:'EUR':'symbol':'1.0-0' }}</div>
+      <div class="kpi-sub">
+        <span>Saldo cassa: <strong [class.danger]="cashNet < 0">{{ cashNet | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+      </div>
+    </section>
+    <section class="kpi-card kpi-warn">
+      <div class="kpi-top">
+        <span class="kpi-label">Da incassare</span>
+        <span class="kpi-chip warn">Crediti</span>
+      </div>
+      <div class="kpi-value" [class.warn]="pendingReceivables > 0">{{ pendingReceivables | currency:'EUR':'symbol':'1.0-0' }}</div>
+      <div class="kpi-sub">
+        <span>Eventi: <strong>{{ totalConcertSessions }}</strong></span>
+        <span *ngIf="isTeacherProfile">Lezioni: <strong>{{ totalLessonSessions }}</strong></span>
+      </div>
+    </section>
+  </div>
+
+  <div class="insight-grid">
+    <section class="card insight-card">
+      <div class="insight-top">
+        <span class="insight-label">Incassato / Pattuito</span>
+        <span class="insight-value">{{ collectionRatePct | number:'1.0-0' }}%</span>
+      </div>
+      <div class="meter"><div class="meter-fill ok" [style.width.%]="collectionRatePct"></div></div>
+      <div class="insight-sub">
+        <span>Incassato: <strong>{{ totalReceived | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+        <span>Pattuito: <strong>{{ grossTotal | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+      </div>
+    </section>
+    <section class="card insight-card">
+      <div class="insight-top">
+        <span class="insight-label">Spese / Pattuito</span>
+        <span class="insight-value">{{ expenseRatePct | number:'1.0-0' }}%</span>
+      </div>
+      <div class="meter"><div class="meter-fill warn" [style.width.%]="expenseRatePct"></div></div>
+      <div class="insight-sub">
+        <span>Spese: <strong>{{ expenseTotal | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+        <span>Netto: <strong>{{ netTotal | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+      </div>
+    </section>
+    <section class="card insight-card">
+      <div class="insight-top">
+        <span class="insight-label">Netto / Pattuito</span>
+        <span class="insight-value">{{ netRatePct | number:'1.0-0' }}%</span>
+      </div>
+      <div class="meter"><div class="meter-fill ok" [style.width.%]="netRatePct"></div></div>
+      <div class="insight-sub">
+        <span>Tot. eventi: <strong>{{ totalEventsCount }}</strong></span>
+        <span>Da incassare: <strong>{{ pendingReceivables | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+      </div>
+    </section>
+    <section class="card insight-card">
+      <div class="insight-top">
+        <span class="insight-label">Media per evento</span>
+        <span class="insight-value">{{ averageDuePerEvent | currency:'EUR':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="insight-sub">
+        <span>Pattuito medio: <strong>{{ averageDuePerEvent | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+        <span>Netto medio: <strong>{{ averageNetPerEvent | currency:'EUR':'symbol':'1.0-0' }}</strong></span>
+      </div>
+    </section>
+  </div>
+
+  <div class="report-grid">
+    <section class="card">
+      <h2>Trend (ultimi 6 mesi)</h2>
+      <div class="trend">
+        <div class="trend-row" *ngFor="let t of trend">
+          <div class="trend-label">{{ t.label }}</div>
+          <div class="trend-bars">
+            <div class="bar income"  [style.width.%]="(t.received / trendMax()) * 100"></div>
+            <div class="bar expense" [style.width.%]="(t.expenses / trendMax()) * 100"></div>
+          </div>
+          <div class="trend-values">
+            <span class="v income">{{ t.received | currency:'EUR':'symbol':'1.0-0' }}</span>
+            <span class="v expense">{{ t.expenses | currency:'EUR':'symbol':'1.0-0' }}</span>
+            <span class="v net" [class.danger]="t.net < 0">{{ t.net | currency:'EUR':'symbol':'1.0-0' }}</span>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="legend">
-      <span class="lg income">Incassi</span>
-      <span class="lg expense">Spese</span>
-      <span class="lg net">Netto</span>
-    </div>
-  </section>
-
-  <section class="card">
-    <h2>Pagamenti e cadenze</h2>
-    <div class="mini-table cols-5" *ngIf="cadenceRows.length; else noCadence">
-      <div class="mt-head">Cadenza</div>
-      <div class="mt-head right">Eventi</div>
-      <div class="mt-head right">Pattuito</div>
-      <div class="mt-head right">Incassato</div>
-      <div class="mt-head right">Da incassare</div>
-      <ng-container *ngFor="let r of cadenceRows">
-        <div>{{ r.label }}</div>
-        <div class="right">{{ r.count }}</div>
-        <div class="right">{{ r.due | currency:'EUR':'symbol':'1.0-0' }}</div>
-        <div class="right">{{ r.received | currency:'EUR':'symbol':'1.0-0' }}</div>
-        <div class="right" [class.warn]="r.pending > 0">{{ r.pending | currency:'EUR':'symbol':'1.0-0' }}</div>
-      </ng-container>
-    </div>
-    <ng-template #noCadence>
-      <div class="empty">Nessun dato pagamenti disponibile</div>
-    </ng-template>
-  </section>
-
-  <section class="card">
-    <h2>Serate per gruppo/band</h2>
-    <div class="mini-table cols-4" *ngIf="concertCompByGroup.length; else noConcertData">
-      <div class="mt-head">Gruppo</div>
-      <div class="mt-head right">Serate</div>
-      <div class="mt-head right">Media</div>
-      <div class="mt-head right">Totale</div>
-      <ng-container *ngFor="let row of concertCompByGroup | slice:0:12">
-        <div>{{ row.label }}</div>
-        <div class="right">{{ row.count }}</div>
-        <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
-        <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
-      </ng-container>
-    </div>
-    <ng-template #noConcertData>
-      <div class="empty">Nessuna serata disponibile</div>
-    </ng-template>
-  </section>
-
-  <section class="card">
-    <h2>Serate per tipo e location</h2>
-    <div class="split split-3">
-      <div class="split-col">
-        <div class="subhead">Tipo</div>
-        <div class="mini-table cols-4" *ngIf="typeRows.length; else noTypes">
-          <div class="mt-head">Tipo</div>
-          <div class="mt-head right">Eventi</div>
-          <div class="mt-head right">Pattuito</div>
-          <div class="mt-head right">Incassato</div>
-          <ng-container *ngFor="let r of typeRows">
-            <div>{{ r.label }}</div>
-            <div class="right">{{ r.count }}</div>
-            <div class="right">{{ r.due | currency:'EUR':'symbol':'1.0-0' }}</div>
-            <div class="right">{{ r.received | currency:'EUR':'symbol':'1.0-0' }}</div>
-          </ng-container>
-        </div>
-        <ng-template #noTypes><div class="empty">Nessun dato tipo</div></ng-template>
+      <div class="legend">
+        <span class="lg income">Incassi</span>
+        <span class="lg expense">Spese</span>
+        <span class="lg net">Netto</span>
       </div>
-      <div class="split-col">
-        <div class="subhead">Location</div>
-        <div class="mini-table cols-3" *ngIf="topVenues.length; else noVenues">
-          <div class="mt-head">Location</div>
-          <div class="mt-head right">Serate</div>
-          <div class="mt-head right">Totale</div>
-          <ng-container *ngFor="let row of topVenues | slice:0:10">
-            <div>{{ row.label }}</div>
-            <div class="right">{{ row.count }}</div>
-            <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
-          </ng-container>
-        </div>
-        <ng-template #noVenues><div class="empty">Nessuna location disponibile</div></ng-template>
-      </div>
-      <div class="split-col">
-        <div class="subhead">Territorio</div>
-        <div class="mini-table cols-3" *ngIf="eventByProvince.length; else noProvinceRows">
-          <div class="mt-head">Provincia</div>
-          <div class="mt-head right">Eventi</div>
-          <div class="mt-head right">Totale</div>
-          <ng-container *ngFor="let row of eventByProvince | slice:0:12">
-            <div>{{ row.label }}</div>
-            <div class="right">{{ row.count }}</div>
-            <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
-          </ng-container>
-        </div>
-        <ng-template #noProvinceRows><div class="empty">Nessuna provincia disponibile</div></ng-template>
+    </section>
 
-        <div class="subhead top-gap-sm">Regione</div>
-        <div class="mini-table cols-3" *ngIf="eventByRegion.length; else noRegionRows">
-          <div class="mt-head">Regione</div>
-          <div class="mt-head right">Eventi</div>
-          <div class="mt-head right">Totale</div>
-          <ng-container *ngFor="let row of eventByRegion | slice:0:12">
-            <div>{{ row.label }}</div>
-            <div class="right">{{ row.count }}</div>
-            <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
-          </ng-container>
-        </div>
-        <ng-template #noRegionRows><div class="empty">Nessuna regione disponibile</div></ng-template>
+    <section class="card">
+      <h2>Pagamenti e cadenze</h2>
+      <div class="mini-table cols-5" *ngIf="cadenceRows.length; else noCadence">
+        <div class="mt-head">Cadenza</div>
+        <div class="mt-head right">N</div>
+        <div class="mt-head right">Pattuito</div>
+        <div class="mt-head right">Incassato</div>
+        <div class="mt-head right">Da incass.</div>
+        <ng-container *ngFor="let r of cadenceRows">
+          <div>{{ r.label }}</div>
+          <div class="right">{{ r.count }}</div>
+          <div class="right">{{ r.due | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right">{{ r.received | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right" [class.warn]="r.pending > 0">{{ r.pending | currency:'EUR':'symbol':'1.0-0' }}</div>
+        </ng-container>
       </div>
-    </div>
-  </section>
-</div>
+      <ng-template #noCadence><div class="empty">Nessun dato pagamenti disponibile</div></ng-template>
+    </section>
 
-<section class="card teacher-card" *ngIf="isTeacherProfile">
-  <h2>Insegnamento</h2>
-  <div class="teacher-grid">
-    <div class="teacher-col">
-      <div class="subhead">Per allievo</div>
-      <div class="mini-table cols-4" *ngIf="lessonCompByStudent.length; else noStudentData">
-        <div class="mt-head">Allievo</div>
-        <div class="mt-head right">Lezioni</div>
+    <section class="card">
+      <div class="card-head-row">
+        <h2>Top eventi per gruppo/band</h2>
+        <button type="button" class="see-all-btn" (click)="setTab('territory')" *ngIf="concertCompByGroup.length > 6">
+          Vedi tutti ({{ concertCompByGroup.length }}) →
+        </button>
+      </div>
+      <div class="mini-table cols-4" *ngIf="concertCompByGroup.length; else noGroupData">
+        <div class="mt-head">Gruppo</div>
+        <div class="mt-head right">N</div>
         <div class="mt-head right">Media</div>
         <div class="mt-head right">Totale</div>
-        <ng-container *ngFor="let row of lessonCompByStudent | slice:0:12">
-          <div>{{ row.label }}</div>
+        <ng-container *ngFor="let row of concertCompByGroup | slice:0:6">
+          <div class="row-label">
+            <span class="row-title">{{ row.label }}</span>
+            <div class="row-meter"><div class="row-meter-fill" [style.width.%]="barWidth(row.total, maxGroupTotal)"></div></div>
+          </div>
           <div class="right">{{ row.count }}</div>
           <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
           <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
         </ng-container>
       </div>
-      <ng-template #noStudentData><div class="empty">Nessuna lezione disponibile</div></ng-template>
-    </div>
-    <div class="teacher-col">
-      <div class="subhead">Per scuola</div>
-      <div class="mini-table cols-4" *ngIf="lessonCompBySchool.length; else noSchoolData">
-        <div class="mt-head">Scuola</div>
-        <div class="mt-head right">Lezioni</div>
-        <div class="mt-head right">Media</div>
+      <ng-template #noGroupData><div class="empty">Nessun evento disponibile</div></ng-template>
+    </section>
+
+    <section class="card">
+      <h2>Tipo e top location</h2>
+
+      <!-- Tipo chips -->
+      <div class="type-chips" *ngIf="typeRows.length">
+        <div class="type-chip" *ngFor="let r of typeRows">
+          <span class="tc-label">{{ r.label }}</span>
+          <span class="tc-count">{{ r.count }}</span>
+          <span class="tc-total">{{ r.due | currency:'EUR':'symbol':'1.0-0' }}</span>
+        </div>
+      </div>
+
+      <div class="section-divider"></div>
+
+      <!-- Top location compact -->
+      <div class="card-head-row">
+        <div class="subhead">Top location</div>
+        <button type="button" class="see-all-btn" (click)="setTab('territory')" *ngIf="topVenues.length > 5">
+          Vedi tutte →
+        </button>
+      </div>
+      <div class="mini-table cols-3" *ngIf="topVenues.length; else noVenues">
+        <div class="mt-head">Location</div>
+        <div class="mt-head right">N</div>
         <div class="mt-head right">Totale</div>
-        <ng-container *ngFor="let row of lessonCompBySchool | slice:0:12">
-          <div>{{ row.label }}</div>
+        <ng-container *ngFor="let row of topVenues | slice:0:5">
+          <div class="row-label">
+            <span class="row-title">{{ row.label }}</span>
+            <div class="row-meter"><div class="row-meter-fill" [style.width.%]="barWidth(row.total, maxVenueTotal)"></div></div>
+          </div>
           <div class="right">{{ row.count }}</div>
-          <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
           <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
         </ng-container>
       </div>
-      <ng-template #noSchoolData><div class="empty">Nessuna scuola disponibile</div></ng-template>
+      <ng-template #noVenues><div class="empty">Nessuna location disponibile</div></ng-template>
+    </section>
+  </div>
+
+  <!-- Booking link stats -->
+  <section class="card booking-card" *ngIf="totalBookingViews > 0">
+    <h2>Andamento prenotazioni tramite link</h2>
+    <div class="booking-stats-row">
+      <div class="booking-kpi">
+        <span class="bk-label">Visualizzazioni totali</span>
+        <span class="bk-value">{{ totalBookingViews }}</span>
+      </div>
+    </div>
+    <div class="booking-trend">
+      <div class="bt-row" *ngFor="let s of bookingStats">
+        <div class="bt-label">{{ s.label }}</div>
+        <div class="bt-bar-wrap">
+          <div class="bt-bar" [style.width.%]="barWidth(s.views, maxBookingViews)"></div>
+        </div>
+        <div class="bt-count">{{ s.views }}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Teacher section -->
+  <section class="card teacher-card" *ngIf="isTeacherProfile">
+    <h2>Insegnamento</h2>
+    <div class="teacher-grid">
+      <div class="teacher-col">
+        <div class="subhead">Per allievo</div>
+        <div class="mini-table cols-4" *ngIf="lessonCompByStudent.length; else noStudentData">
+          <div class="mt-head">Allievo</div><div class="mt-head right">Lez.</div>
+          <div class="mt-head right">Media</div><div class="mt-head right">Totale</div>
+          <ng-container *ngFor="let row of lessonCompByStudent | slice:0:8">
+            <div class="row-label">
+              <span class="row-title">{{ row.label }}</span>
+              <div class="row-meter"><div class="row-meter-fill" [style.width.%]="barWidth(row.total, maxStudentTotal)"></div></div>
+            </div>
+            <div class="right">{{ row.count }}</div>
+            <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
+            <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+          </ng-container>
+        </div>
+        <ng-template #noStudentData><div class="empty">Nessuna lezione disponibile</div></ng-template>
+      </div>
+      <div class="teacher-col">
+        <div class="subhead">Per scuola</div>
+        <div class="mini-table cols-4" *ngIf="lessonCompBySchool.length; else noSchoolData">
+          <div class="mt-head">Scuola</div><div class="mt-head right">Lez.</div>
+          <div class="mt-head right">Media</div><div class="mt-head right">Totale</div>
+          <ng-container *ngFor="let row of lessonCompBySchool | slice:0:8">
+            <div class="row-label">
+              <span class="row-title">{{ row.label }}</span>
+              <div class="row-meter"><div class="row-meter-fill" [style.width.%]="barWidth(row.total, maxSchoolTotal)"></div></div>
+            </div>
+            <div class="right">{{ row.count }}</div>
+            <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
+            <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+          </ng-container>
+        </div>
+        <ng-template #noSchoolData><div class="empty">Nessuna scuola disponibile</div></ng-template>
+      </div>
+    </div>
+  </section>
+
+</ng-container>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PAGAMENTI
+     ═══════════════════════════════════════════════════════════════════════ -->
+<ng-container *ngIf="activeTab === 'payments'">
+
+  <div class="pay-stats-grid">
+    <div class="pay-stat-card">
+      <span class="ps-label">Pagamenti nel periodo</span>
+      <span class="ps-value">{{ totalPaymentCount }}</span>
+    </div>
+    <div class="pay-stat-card">
+      <span class="ps-label">Importo medio / pagamento</span>
+      <span class="ps-value">{{ avgPaymentAmount | currency:'EUR':'symbol':'1.0-0' }}</span>
+    </div>
+    <div class="pay-stat-card">
+      <span class="ps-label">Tempo medio 1° pagamento</span>
+      <span class="ps-value" [class.ps-ok]="avgDaysToFirstPayment !== null && avgDaysToFirstPayment <= 7">
+        {{ avgDaysToFirstPayment !== null ? formatDays(avgDaysToFirstPayment) : '—' }}
+      </span>
+    </div>
+    <div class="pay-stat-card">
+      <span class="ps-label">Eventi completamente pagati</span>
+      <span class="ps-value" [class.ps-ok]="paidConcertsPct >= 80">{{ paidConcertsPct }}%</span>
     </div>
   </div>
-</section>
+
+  <div class="breakdown-grid">
+    <section class="card">
+      <h2>Come hai incassato</h2>
+      <div *ngIf="paymentMethodRows.length; else noMethodData">
+        <div class="breakdown-row" *ngFor="let r of paymentMethodRows">
+          <div class="br-label">{{ r.label }}</div>
+          <div class="br-bar-wrap">
+            <div class="br-bar" [style.width.%]="r.pct"></div>
+          </div>
+          <div class="br-values">
+            <span class="br-pct">{{ r.pct | number:'1.0-0' }}%</span>
+            <span class="br-count">{{ r.count }} pag.</span>
+            <span class="br-total">{{ r.total | currency:'EUR':'symbol':'1.0-0' }}</span>
+          </div>
+        </div>
+      </div>
+      <ng-template #noMethodData><div class="empty">Nessun metodo registrato</div></ng-template>
+    </section>
+
+    <section class="card">
+      <h2>Tipo di pagamento</h2>
+      <div *ngIf="paymentTypeRows.length; else noTypeData">
+        <div class="breakdown-row" *ngFor="let r of paymentTypeRows">
+          <div class="br-label">{{ r.label }}</div>
+          <div class="br-bar-wrap">
+            <div class="br-bar br-bar-type" [style.width.%]="r.pct"></div>
+          </div>
+          <div class="br-values">
+            <span class="br-pct">{{ r.pct | number:'1.0-0' }}%</span>
+            <span class="br-count">{{ r.count }} pag.</span>
+            <span class="br-total">{{ r.total | currency:'EUR':'symbol':'1.0-0' }}</span>
+          </div>
+        </div>
+      </div>
+      <ng-template #noTypeData><div class="empty">Nessun tipo registrato</div></ng-template>
+    </section>
+  </div>
+
+  <section class="card timing-section">
+    <div class="timing-head">
+      <h2>Tempistica incasso per evento</h2>
+      <div class="timing-filters">
+        <button type="button" class="tf-btn" [class.active]="timingFilterStatus === 'all'"     (click)="setTimingFilter('all')">
+          Tutte <span class="tf-count">{{ paymentTimingRows.length }}</span>
+        </button>
+        <button type="button" class="tf-btn tf-paid"    [class.active]="timingFilterStatus === 'paid'"    (click)="setTimingFilter('paid')">
+          Pagate <span class="tf-count">{{ paidTimingCount }}</span>
+        </button>
+        <button type="button" class="tf-btn tf-partial" [class.active]="timingFilterStatus === 'partial'" (click)="setTimingFilter('partial')">
+          Parziali <span class="tf-count">{{ partialTimingCount }}</span>
+        </button>
+        <button type="button" class="tf-btn tf-unpaid"  [class.active]="timingFilterStatus === 'unpaid'"  (click)="setTimingFilter('unpaid')">
+          Non pagate <span class="tf-count">{{ unpaidTimingCount }}</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="timing-table-wrap" *ngIf="filteredTimingRows.length; else noTimingData">
+      <div class="timing-table">
+        <div class="tt-head">Data</div>
+        <div class="tt-head">Evento</div>
+        <div class="tt-head right">Pattuito</div>
+        <div class="tt-head right">Incassato</div>
+        <div class="tt-head right">1° Pag.</div>
+        <div class="tt-head">Metodo</div>
+        <div class="tt-head right">Stato</div>
+        <ng-container *ngFor="let r of filteredTimingRows">
+          <div class="tt-date">{{ formatDate(r.concertDate) }}</div>
+          <div class="tt-title" [title]="r.concertTitle">{{ r.concertTitle }}</div>
+          <div class="right">{{ r.fee | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right">{{ r.received | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right">
+            <span class="days-chip"
+                  [class.days-before]="r.daysToFirstPayment !== null && r.daysToFirstPayment < 0"
+                  [class.days-ok]="r.daysToFirstPayment !== null && r.daysToFirstPayment >= 0 && r.daysToFirstPayment <= 14"
+                  [class.days-late]="r.daysToFirstPayment !== null && r.daysToFirstPayment > 14">
+              {{ formatDays(r.daysToFirstPayment) }}
+            </span>
+          </div>
+          <div class="tt-method">{{ r.methods }}</div>
+          <div class="right">
+            <span class="status-badge"
+                  [class.sb-paid]="r.isPaid"
+                  [class.sb-partial]="r.isPartial"
+                  [class.sb-unpaid]="!r.isPaid && !r.isPartial">
+              {{ r.isPaid ? 'Pagato' : r.isPartial ? 'Parziale' : 'Non pagato' }}
+            </span>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+    <ng-template #noTimingData>
+      <div class="empty">Nessun evento con questo filtro</div>
+    </ng-template>
+  </section>
+
+</ng-container>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     TERRITORIO
+     ═══════════════════════════════════════════════════════════════════════ -->
+<ng-container *ngIf="activeTab === 'territory'">
+
+  <div class="territory-grid">
+    <section class="card">
+      <h2>Per provincia <span class="count-badge">{{ eventByProvince.length }}</span></h2>
+      <div class="territory-table" *ngIf="eventByProvince.length; else noProvince">
+        <div class="mt-head">Provincia</div>
+        <div class="mt-head right">N</div>
+        <div class="mt-head right">Totale</div>
+        <div class="mt-head right">Media</div>
+        <ng-container *ngFor="let row of eventByProvince">
+          <div class="clickable-row row-label" (click)="openPopup('province', row.label)">
+            <span class="row-title">{{ row.label }}</span>
+            <div class="row-meter"><div class="row-meter-fill" [style.width.%]="barWidth(row.total, maxProvinceTotal)"></div></div>
+          </div>
+          <div class="right">{{ row.count }}</div>
+          <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
+        </ng-container>
+      </div>
+      <ng-template #noProvince><div class="empty">Nessuna provincia disponibile</div></ng-template>
+    </section>
+
+    <section class="card">
+      <h2>Per regione <span class="count-badge">{{ eventByRegion.length }}</span></h2>
+      <div class="territory-table" *ngIf="eventByRegion.length; else noRegion">
+        <div class="mt-head">Regione</div>
+        <div class="mt-head right">N</div>
+        <div class="mt-head right">Totale</div>
+        <div class="mt-head right">Media</div>
+        <ng-container *ngFor="let row of eventByRegion">
+          <div class="clickable-row row-label" (click)="openPopup('region', row.label)">
+            <span class="row-title">{{ row.label }}</span>
+            <div class="row-meter"><div class="row-meter-fill" [style.width.%]="barWidth(row.total, maxRegionTotal)"></div></div>
+          </div>
+          <div class="right">{{ row.count }}</div>
+          <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
+        </ng-container>
+      </div>
+      <ng-template #noRegion><div class="empty">Nessuna regione disponibile</div></ng-template>
+    </section>
+  </div>
+
+  <div class="territory-grid">
+    <section class="card">
+      <h2>Top location <span class="count-badge">{{ topVenues.length }}</span></h2>
+      <div class="territory-table" *ngIf="topVenues.length; else noVenuesFull">
+        <div class="mt-head">Location</div>
+        <div class="mt-head right">N</div>
+        <div class="mt-head right">Totale</div>
+        <div class="mt-head right">Media</div>
+        <ng-container *ngFor="let row of topVenues">
+          <div class="clickable-row row-label" (click)="openPopup('venue', row.label)">
+            <span class="row-title">{{ row.label }}</span>
+            <div class="row-meter"><div class="row-meter-fill" [style.width.%]="barWidth(row.total, maxVenueTotal)"></div></div>
+          </div>
+          <div class="right">{{ row.count }}</div>
+          <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
+        </ng-container>
+      </div>
+      <ng-template #noVenuesFull><div class="empty">Nessuna location disponibile</div></ng-template>
+    </section>
+
+    <section class="card">
+      <h2>Per gruppo/band <span class="count-badge">{{ concertCompByGroup.length }}</span></h2>
+      <div class="territory-table" *ngIf="concertCompByGroup.length; else noBandsFull">
+        <div class="mt-head">Gruppo</div>
+        <div class="mt-head right">N</div>
+        <div class="mt-head right">Totale</div>
+        <div class="mt-head right">Media</div>
+        <ng-container *ngFor="let row of concertCompByGroup">
+          <div class="clickable-row row-label" (click)="openPopup('band', row.label)">
+            <span class="row-title">{{ row.label }}</span>
+            <div class="row-meter"><div class="row-meter-fill" [style.width.%]="barWidth(row.total, maxGroupTotal)"></div></div>
+          </div>
+          <div class="right">{{ row.count }}</div>
+          <div class="right">{{ row.total | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right">{{ row.average | currency:'EUR':'symbol':'1.0-0' }}</div>
+        </ng-container>
+      </div>
+      <ng-template #noBandsFull><div class="empty">Nessun gruppo disponibile</div></ng-template>
+    </section>
+  </div>
+
+</ng-container>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     RICERCA
+     ═══════════════════════════════════════════════════════════════════════ -->
+<ng-container *ngIf="activeTab === 'search'">
+
+  <div class="search-box-wrap">
+    <span class="search-icon">🔍</span>
+    <input class="search-input" type="text"
+           placeholder="Cerca evento, location, banda, metodo di pagamento..."
+           [(ngModel)]="searchQuery" (ngModelChange)="onSearchChange()" autocomplete="off">
+    <button type="button" class="search-clear" *ngIf="searchQuery" (click)="searchQuery = ''; searchResults = []">✕</button>
+  </div>
+
+  <div class="search-filter-chips">
+    <button type="button" class="filter-chip" [class.active]="searchFilter === 'all'"
+            (click)="searchFilter = 'all'; onSearchChange()">Tutto</button>
+    <button type="button" class="filter-chip" [class.active]="searchFilter === 'concert'"
+            (click)="searchFilter = 'concert'; onSearchChange()">🎵 Eventi</button>
+    <button type="button" class="filter-chip" [class.active]="searchFilter === 'payment'"
+            (click)="searchFilter = 'payment'; onSearchChange()">💶 Pagamenti</button>
+    <button type="button" class="filter-chip" [class.active]="searchFilter === 'expense'"
+            (click)="searchFilter = 'expense'; onSearchChange()">🚗 Spese</button>
+  </div>
+
+  <div class="search-results" *ngIf="searchResults.length">
+    <div class="search-result-row" *ngFor="let r of searchResults">
+      <span class="sr-icon">{{ r.icon }}</span>
+      <div class="sr-body">
+        <div class="sr-title">{{ r.title }}</div>
+        <div class="sr-subtitle">{{ r.subtitle }}</div>
+      </div>
+      <div class="sr-amount" [class.neg]="r.amount < 0">
+        {{ r.amount | currency:'EUR':'symbol':'1.0-0' }}
+      </div>
+    </div>
+  </div>
+
+  <div class="search-state" *ngIf="searchQuery.length >= 2 && !searchResults.length">
+    <div class="search-empty-icon">🔍</div>
+    <div>Nessun risultato per <strong>"{{ searchQuery }}"</strong></div>
+  </div>
+
+  <div class="search-state search-hint-state" *ngIf="searchQuery.length < 2">
+    <div class="search-empty-icon">💡</div>
+    <div>Digita almeno 2 caratteri per cercare tra eventi, pagamenti e spese</div>
+  </div>
+
+</ng-container>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     POPUP MODAL
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="popup-backdrop" *ngIf="popup" (click)="closePopup()"></div>
+
+<div class="popup-modal" *ngIf="popup">
+  <div class="popup-header">
+    <div class="popup-header-left">
+      <span class="popup-type-badge">{{ popup.subtitle }}</span>
+      <h3 class="popup-title">{{ popup.title }}</h3>
+    </div>
+    <button type="button" class="popup-close" (click)="closePopup()">✕</button>
+  </div>
+
+  <div class="popup-body">
+    <div class="popup-kpis">
+      <div class="popup-kpi">
+        <span class="pk-label">Eventi</span>
+        <span class="pk-value">{{ popup.rows.length }}</span>
+      </div>
+      <div class="popup-kpi">
+        <span class="pk-label">Pattuito</span>
+        <span class="pk-value">{{ popup.totalDue | currency:'EUR':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="popup-kpi">
+        <span class="pk-label">Incassato</span>
+        <span class="pk-value ok">{{ popup.totalReceived | currency:'EUR':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="popup-kpi">
+        <span class="pk-label">Da incassare</span>
+        <span class="pk-value" [class.warn]="popup.totalPending > 0">{{ popup.totalPending | currency:'EUR':'symbol':'1.0-0' }}</span>
+      </div>
+      <div class="popup-kpi">
+        <span class="pk-label">Media / evento</span>
+        <span class="pk-value">{{ popup.avgFee | currency:'EUR':'symbol':'1.0-0' }}</span>
+      </div>
+    </div>
+
+    <div class="popup-table-wrap">
+      <div class="popup-table" *ngIf="popup.rows.length">
+        <div class="pt-head">Data</div>
+        <div class="pt-head">Evento</div>
+        <div class="pt-head">Location</div>
+        <div class="pt-head right">Pattuito</div>
+        <div class="pt-head right">Incassato</div>
+        <div class="pt-head right">Residuo</div>
+        <ng-container *ngFor="let r of popup.rows">
+          <div>{{ formatDate(r.date) }}</div>
+          <div class="pt-title" [title]="r.title">{{ r.title }}</div>
+          <div class="pt-sub"   [title]="r.location">{{ r.location }}</div>
+          <div class="right">{{ r.fee | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right">{{ r.received | currency:'EUR':'symbol':'1.0-0' }}</div>
+          <div class="right" [class.warn]="r.pending > 0">{{ r.pending | currency:'EUR':'symbol':'1.0-0' }}</div>
+        </ng-container>
+      </div>
+    </div>
+  </div>
+</div>

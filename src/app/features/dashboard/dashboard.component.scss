@@ -839,6 +839,17 @@
   }
 }
 
+.om-diff-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  background: rgba(254, 240, 138, 0.35);
+  color: #713f12;
+  font-size: 12px;
+  strong { color: #92400e; }
+}
+
 .om-choice-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

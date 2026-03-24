@@ -86,6 +86,31 @@
         </datalist>
       </label>
     </div>
+    <div class="row row-vehicle">
+      <label>Veicolo
+        <input type="text" formControlName="vehicleModel" placeholder="es. Fiat 500 1.2">
+      </label>
+      <label>Alimentazione
+        <select formControlName="vehicleFuelType">
+          <option value="benzina">Benzina</option>
+          <option value="diesel">Diesel</option>
+          <option value="gpl">GPL</option>
+          <option value="metano">Metano</option>
+          <option value="ibrido">Ibrido</option>
+          <option value="elettrico">Elettrico</option>
+          <option value="altro">Altro</option>
+        </select>
+      </label>
+      <label class="unit-consumption-field">Unità consumo
+        <select formControlName="vehicleConsumptionMode" (change)="onVehicleConsumptionModeChange($any($event.target).value)">
+          <option value="l_100km">Litri / 100 km</option>
+          <option value="km_l">Km / litro</option>
+        </select>
+      </label>
+      <label class="value-consumption-field">Consumo medio
+        <input type="number" formControlName="vehicleConsumption" min="0" step="0.1" placeholder="es. 6,2">
+      </label>
+    </div>
     <div class="section-divider"></div>
     <h2>Ruoli da coprire</h2>
     <p class="field-hint field-hint-spaced">Seleziona i ruoli che vuoi coprire nel tuo profilo.</p>
@@ -285,6 +310,40 @@
       <div class="info-box info-purple" *ngIf="form.get('musicianInpsExemptRole')?.value">
         <h4>Esenzione INPS ex ENPALS attiva</h4>
         <p>Impostazione applicata solo al ruolo Musicista. Puoi usare la firma qui sotto per i moduli di esenzione.</p>
+      </div>
+      <div class="info-box info-purple" *ngIf="form.get('musicianInpsExemptRole')?.value">
+        <h4>Motivazione esenzione</h4>
+        <p class="field-hint">Seleziona la condizione che ti consente di richiedere l’esenzione.</p>
+        <div class="row exemption-reasons">
+          <label class="check-label">
+            <input type="checkbox" formControlName="exemptReasonUnder18">
+            <span>Giovane fino a 18 anni</span>
+          </label>
+          <label class="check-label">
+            <input type="checkbox" formControlName="exemptReasonStudentUnder25">
+            <span>Studente fino a 25 anni</span>
+          </label>
+          <label class="check-label">
+            <input type="checkbox" formControlName="exemptReasonPensionerOver65">
+            <span>Pensionato oltre 65 anni</span>
+          </label>
+          <label class="check-label">
+            <input type="checkbox" formControlName="exemptReasonEmployee">
+            <span>Altra copertura previdenziale</span>
+          </label>
+        </div>
+        <div class="row inps-extra">
+          <label>Tipo copertura
+            <select formControlName="exemptEmployerType">
+              <option value="dipendente">Dipendente</option>
+              <option value="pensionato">Pensionato</option>
+              <option value="altro">Altro</option>
+            </select>
+          </label>
+          <label>Ente / Datore (se serve)
+            <input type="text" formControlName="exemptEmployer" placeholder="es. Azienda / Gestione / Ente">
+          </label>
+        </div>
       </div>
       <div class="signature-section" *ngIf="form.get('musicianInpsExemptRole')?.value">
         <h3>✍ Firma digitale Musicista</h3>

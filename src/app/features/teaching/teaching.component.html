@@ -3,6 +3,25 @@
   <p class="subtitle">Gestisci scuole, allievi, lezioni e compensi</p>
 </div>
 
+<section class="lesson-reminder-backdrop" *ngIf="showLessonReminder && reminderSession" (click)="closeLessonReminder()"></section>
+<section class="lesson-reminder-modal" *ngIf="showLessonReminder && reminderSession as rs">
+  <div class="lesson-reminder-head">
+    <strong>Promemoria lezione imminente</strong>
+    <button type="button" class="btn-outline" (click)="closeLessonReminder()">Chiudi</button>
+  </div>
+  <div class="lesson-reminder-grid">
+    <div><span>Allievo</span><strong>{{ studentName(rs.studentId) }}</strong></div>
+    <div><span>Ora</span><strong>{{ rs.timeStart || '16:00' }}</strong></div>
+    <div><span>Stato</span><strong [class.status-green]="rs.attendanceStatus !== 'absent'" [class.status-red]="rs.attendanceStatus === 'absent'">{{ rs.attendanceStatus === 'absent' ? 'Assente' : 'Presente' }}</strong></div>
+    <div class="full"><span>Compiti assegnati</span><p>{{ rs.homeworkAssigned || 'Nessun compito registrato' }}</p></div>
+  </div>
+  <div class="lesson-reminder-actions">
+    <button type="button" class="btn-outline" (click)="markReminderSessionAttendance('present')">Segna presente</button>
+    <button type="button" class="btn-outline danger" (click)="markReminderSessionAttendance('absent')">Segna assente</button>
+    <button type="button" class="btn-primary" (click)="sendHomeworkOnWhatsApp(rs)">Invia compiti WhatsApp</button>
+  </div>
+</section>
+
 <section class="card create-hub">
   <h2>Nuovo</h2>
   <div class="create-actions">
@@ -11,6 +30,28 @@
     <button type="button" class="btn-outline" [class.active]="creatorMode === 'lesson'" (click)="setCreatorMode('lesson')">Nuova lezione</button>
   </div>
   <p class="meta" *ngIf="creatorMode === 'none'">Seleziona cosa vuoi inserire: scuola, allievo o lezione.</p>
+</section>
+
+<section class="card reminder-settings">
+  <h2>Promemoria lezioni</h2>
+  <div class="reminder-inline">
+    <label>Mostra popup prima della lezione (minuti)
+      <input type="number" min="5" step="5" [ngModel]="reminderLeadMinutes" (ngModelChange)="onReminderLeadMinutesChange($event)">
+    </label>
+    <p class="meta">Il popup mostra allievo, stato presenza e compiti assegnati del giorno.</p>
+  </div>
+  <div class="reminder-inline grades-inline">
+    <label class="switch-row">
+      <input type="checkbox" [(ngModel)]="gradingEnabled" (ngModelChange)="onGradingSettingsChanged()">
+      <span>Aggiungi voti alle lezioni</span>
+    </label>
+    <label *ngIf="gradingEnabled">Modalità voti
+      <select [(ngModel)]="gradingMode" (ngModelChange)="onGradingSettingsChanged()">
+        <option value="simple">Voto semplice</option>
+        <option value="categories">Voti per categoria</option>
+      </select>
+    </label>
+  </div>
 </section>
 
 <div class="grid" *ngIf="creatorMode !== 'none'">
@@ -151,6 +192,9 @@
     <label>Data
       <input type="date" formControlName="date">
     </label>
+    <label>Ora lezione
+      <input type="time" formControlName="timeStart">
+    </label>
     <label>Tipo lezione
       <select formControlName="lessonType">
         <option value="private">Privata</option>
@@ -160,7 +204,7 @@
     </label>
     <label>Allievo
       <select formControlName="studentId">
-        <option value="">Nessuno</option>
+        <option value="">Seleziona allievo</option>
         <option *ngFor="let s of students" [value]="s.id">{{ s.fullName }}</option>
       </select>
     </label>
@@ -256,28 +300,98 @@
     <label>Note
       <input type="text" formControlName="notes">
     </label>
+    <label>Compiti assegnati
+      <textarea class="homework-textarea" formControlName="homeworkAssigned" rows="3" placeholder="Es. scale di Do maggiore, arpeggi lenti"></textarea>
+    </label>
+    <label>Compiti svolti / feedback
+      <textarea class="homework-textarea" formControlName="homeworkDone" rows="3" placeholder="Es. svolto metà esercizi, lavorare sul timing"></textarea>
+    </label>
+    <div class="grades-box" *ngIf="gradingEnabled">
+      <label *ngIf="gradingMode === 'simple'">Voto lezione (0-10)
+        <input type="number" min="0" max="10" step="0.5" formControlName="simpleGrade">
+      </label>
+      <div class="grades-grid" *ngIf="gradingMode === 'categories'">
+        <label>Tecnica
+          <input type="number" min="0" max="10" step="0.5" formControlName="gradeTechnique">
+        </label>
+        <label>Suono
+          <input type="number" min="0" max="10" step="0.5" formControlName="gradeSound">
+        </label>
+        <label>Ritmo
+          <input type="number" min="0" max="10" step="0.5" formControlName="gradeRhythm">
+        </label>
+        <label>Teoria
+          <input type="number" min="0" max="10" step="0.5" formControlName="gradeTheory">
+        </label>
+        <label>Espressione
+          <input type="number" min="0" max="10" step="0.5" formControlName="gradeExpression">
+        </label>
+      </div>
+    </div>
     <button type="button" class="btn-primary" (click)="createSession()">Salva lezione</button>
   </section>
 </div>
 
-<section class="card">
+<section class="card payments-card">
   <h2>Pagamenti insegnamento</h2>
   <p class="meta">La registrazione e la gestione pagamenti delle lezioni avviene nella sezione Contabilità.</p>
 </section>
 
-<div class="grid">
+<div class="two-col">
   <section class="card">
     <h2>Scuole</h2>
     <div class="list">
-      <div class="item" *ngFor="let s of schools">
-        <div>
-          <strong>{{ s.name }}</strong>
-          <div class="meta">Codice {{ s.code }}</div>
-          <div class="meta">Link: {{ schoolLink(s.code) }}</div>
+      <div class="school-item" *ngFor="let s of schools" [class.expanded]="expandedSchoolId === s.id">
+        <div class="school-row">
+          <div class="school-row-main">
+            <strong>{{ s.name }}</strong>
+            <div class="meta">Allievi: {{ schoolStudents(s.id).length }} • Lezioni: {{ schoolSessionCount(s.id) }}</div>
+            <div class="meta">Codice {{ s.code }} • Link {{ schoolLink(s.code) }}</div>
+          </div>
+          <div class="school-row-actions">
+            <button type="button" class="btn-outline" (click)="toggleSchoolExpanded(s.id)">
+              {{ expandedSchoolId === s.id ? 'Chiudi' : 'Dettagli' }}
+            </button>
+            <button type="button" class="btn-outline" (click)="copySchoolLink(s.code)">
+              {{ codeCopied === s.code ? 'Link copiato' : 'Copia link' }}
+            </button>
+          </div>
         </div>
-        <button type="button" class="btn-outline" (click)="copySchoolLink(s.code)">
-          {{ codeCopied === s.code ? 'Link copiato' : 'Copia link scuola' }}
-        </button>
+        <div class="school-details" *ngIf="expandedSchoolId === s.id">
+          <div class="meta" *ngIf="schoolStudents(s.id).length === 0">Nessun allievo associato</div>
+          <div class="school-students" *ngIf="schoolStudents(s.id).length > 0">
+            <div class="school-student-item" *ngFor="let st of schoolStudents(s.id)" [class.expanded]="expandedSchoolStudentId === st.id">
+              <div class="school-student-row">
+                <div class="school-student-main">
+                  <strong>{{ st.fullName }}</strong>
+                  <div class="meta">Presenze: {{ studentPresenceCount(st.id) }} • Assenze: {{ studentAbsenceCount(st.id) }} • Lezioni: {{ studentSessions(st.id).length }}</div>
+                  <div class="meta" *ngIf="gradingEnabled">Media: {{ studentGradeAverage(st.id) === null ? 'N/D' : (studentGradeAverage(st.id) | number:'1.2-2') }} • Valutazioni: {{ studentGradeCount(st.id) }}</div>
+                </div>
+                <div class="school-student-actions">
+                  <button type="button" class="btn-outline" (click)="toggleSchoolStudentExpanded(st.id)">
+                    {{ expandedSchoolStudentId === st.id ? 'Chiudi' : 'Storico' }}
+                  </button>
+                  <button type="button" class="btn-outline" (click)="exportStudentReportPdf(st)">Pagella PDF</button>
+                </div>
+              </div>
+              <div class="school-student-details" *ngIf="expandedSchoolStudentId === st.id">
+                <div class="mini-list">
+                  <div class="mini-row" *ngFor="let l of studentSessionsSorted(st.id).slice(0, 6)">
+                    <div class="mini-left">
+                      <strong>{{ l.date }} · {{ l.timeStart || '16:00' }}</strong>
+                      <span class="mini-pill" [class.status-green]="l.attendanceStatus !== 'absent'" [class.status-red]="l.attendanceStatus === 'absent'">{{ l.attendanceStatus === 'absent' ? 'Assente' : 'Presente' }}</span>
+                    </div>
+                    <div class="mini-right">
+                      <span class="meta">{{ paymentStatusLabel(l) }}</span>
+                      <span class="meta" *ngIf="gradingEnabled">Media {{ sessionGradeAverage(l) === null ? 'N/D' : (sessionGradeAverage(l) | number:'1.2-2') }}</span>
+                    </div>
+                  </div>
+                  <div class="meta" *ngIf="studentSessions(st.id).length === 0">Nessuna lezione registrata</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -285,35 +399,91 @@
   <section class="card">
     <h2>Lezioni registrate</h2>
     <div class="list">
-      <div class="item" *ngFor="let l of sessions">
-        <div>
-          <strong>{{ l.date }} - {{ l.lessonType }}</strong>
-          <div class="meta">Allievo: {{ studentName(l.studentId) }} | Scuola: {{ schoolName(l.schoolId) }}</div>
-          <div class="meta">Compenso: {{ l.compensation | currency:'EUR':'symbol':'1.0-0' }} ({{ l.invoiceMode }})</div>
-          <div class="meta">Pagamento: {{ paymentStatusLabel(l) }} • Residuo {{ paymentPendingAmount(l) | currency:'EUR':'symbol':'1.0-0' }}</div>
-          <div class="meta">
-            Presenza: {{ l.attendanceStatus === 'absent' ? 'Assente' : 'Presente' }}
+      <div class="lesson-item" *ngFor="let l of sessions" [class.expanded]="expandedSessionId === l.id">
+        <div class="lesson-row">
+          <div class="lesson-row-main">
+            <div class="lesson-title">
+              <strong>{{ l.date }} · {{ l.timeStart || '16:00' }}</strong>
+              <span class="lesson-type">{{ l.lessonType }}</span>
+              <span class="presence-badge" [class.status-green]="l.attendanceStatus !== 'absent'" [class.status-red]="l.attendanceStatus === 'absent'">
+                {{ l.attendanceStatus === 'absent' ? 'Assente' : 'Presente' }}
+              </span>
+            </div>
+            <div class="meta">Allievo: {{ studentName(l.studentId) }} • Scuola: {{ schoolName(l.schoolId) }}</div>
+            <div class="meta">Compenso: {{ l.compensation | currency:'EUR':'symbol':'1.0-0' }} • Pagamento: {{ paymentStatusLabel(l) }} • Residuo {{ paymentPendingAmount(l) | currency:'EUR':'symbol':'1.0-0' }}</div>
+            <div class="meta" *ngIf="gradingEnabled">Media: {{ sessionGradeAverage(l) === null ? 'N/D' : (sessionGradeAverage(l) | number:'1.2-2') }}</div>
+          </div>
+          <div class="lesson-row-actions">
+            <button type="button" class="btn-outline" (click)="toggleSessionExpanded(l.id)">
+              {{ expandedSessionId === l.id ? 'Chiudi' : 'Dettagli' }}
+            </button>
+            <button type="button" class="btn-outline" (click)="markAttendance(l, 'present')">Presente</button>
+            <button type="button" class="btn-outline danger" (click)="markAttendance(l, 'absent')">Assente</button>
+            <button type="button" class="btn-primary" (click)="sendHomeworkOnWhatsApp(l)">WhatsApp</button>
           </div>
         </div>
-        <div class="att-actions">
-          <button type="button" class="btn-outline" (click)="markAttendance(l, 'present')">Segna presente</button>
-          <button type="button" class="btn-outline" (click)="markAttendance(l, 'absent')">Segna assente</button>
+        <div class="lesson-details" *ngIf="expandedSessionId === l.id">
+          <div class="homework-box">
+            <label>Compiti assegnati
+              <textarea class="homework-textarea" [(ngModel)]="l.homeworkAssigned" (blur)="persistSessionRecord(l)" rows="4"></textarea>
+            </label>
+            <label>Compiti svolti / feedback
+              <textarea class="homework-textarea" [(ngModel)]="l.homeworkDone" (blur)="persistSessionRecord(l)" rows="4"></textarea>
+            </label>
+          </div>
+          <div class="grades-box" *ngIf="gradingEnabled">
+            <label *ngIf="gradingMode === 'simple'">Voto lezione (0-10)
+              <input type="number" min="0" max="10" step="0.5" [(ngModel)]="l.simpleGrade" (blur)="persistSessionRecord(l)">
+            </label>
+            <div class="grades-grid" *ngIf="gradingMode === 'categories'">
+              <label>Tecnica
+                <input type="number" min="0" max="10" step="0.5" [(ngModel)]="l.gradeTechnique" (blur)="persistSessionRecord(l)">
+              </label>
+              <label>Suono
+                <input type="number" min="0" max="10" step="0.5" [(ngModel)]="l.gradeSound" (blur)="persistSessionRecord(l)">
+              </label>
+              <label>Ritmo
+                <input type="number" min="0" max="10" step="0.5" [(ngModel)]="l.gradeRhythm" (blur)="persistSessionRecord(l)">
+              </label>
+              <label>Teoria
+                <input type="number" min="0" max="10" step="0.5" [(ngModel)]="l.gradeTheory" (blur)="persistSessionRecord(l)">
+              </label>
+              <label>Espressione
+                <input type="number" min="0" max="10" step="0.5" [(ngModel)]="l.gradeExpression" (blur)="persistSessionRecord(l)">
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 </div>
 
-<div class="grid">
+<div class="two-col">
   <section class="card">
     <h2>Report allievi</h2>
     <div class="list">
-      <div class="item" *ngFor="let st of students">
-        <div>
-          <strong>{{ st.fullName }}</strong>
-          <div class="meta">Scuola: {{ schoolName(st.schoolId) }}</div>
-          <div class="meta">Presenze: {{ studentPresenceCount(st.id) }} • Assenze: {{ studentAbsenceCount(st.id) }}</div>
-          <div class="meta">Lezioni totali: {{ studentSessions(st.id).length }}</div>
+      <div class="student-item" *ngFor="let st of students" [class.expanded]="expandedStudentId === st.id">
+        <div class="student-row">
+          <div class="student-row-main">
+            <strong>{{ st.fullName }}</strong>
+            <div class="meta">Scuola: {{ schoolName(st.schoolId) }} • Presenze: {{ studentPresenceCount(st.id) }} • Assenze: {{ studentAbsenceCount(st.id) }}</div>
+            <div class="meta">Lezioni totali: {{ studentSessions(st.id).length }}</div>
+            <div class="meta" *ngIf="gradingEnabled">Media: {{ studentGradeAverage(st.id) === null ? 'N/D' : (studentGradeAverage(st.id) | number:'1.2-2') }} • Valutazioni: {{ studentGradeCount(st.id) }}</div>
+          </div>
+          <div class="student-row-actions">
+            <button type="button" class="btn-outline" (click)="toggleStudentExpanded(st.id)">{{ expandedStudentId === st.id ? 'Chiudi' : 'Dettagli' }}</button>
+            <button type="button" class="btn-outline" (click)="exportStudentReportPdf(st)">Pagella PDF</button>
+          </div>
+        </div>
+        <div class="student-details" *ngIf="expandedStudentId === st.id && gradingEnabled && gradingMode === 'categories'">
+          <div class="grades-grid">
+            <div class="grade-kpi"><span>Tecnica</span><strong>{{ studentCategoryAverage(st.id, 'gradeTechnique') === null ? 'N/D' : (studentCategoryAverage(st.id, 'gradeTechnique') | number:'1.2-2') }}</strong></div>
+            <div class="grade-kpi"><span>Suono</span><strong>{{ studentCategoryAverage(st.id, 'gradeSound') === null ? 'N/D' : (studentCategoryAverage(st.id, 'gradeSound') | number:'1.2-2') }}</strong></div>
+            <div class="grade-kpi"><span>Ritmo</span><strong>{{ studentCategoryAverage(st.id, 'gradeRhythm') === null ? 'N/D' : (studentCategoryAverage(st.id, 'gradeRhythm') | number:'1.2-2') }}</strong></div>
+            <div class="grade-kpi"><span>Teoria</span><strong>{{ studentCategoryAverage(st.id, 'gradeTheory') === null ? 'N/D' : (studentCategoryAverage(st.id, 'gradeTheory') | number:'1.2-2') }}</strong></div>
+            <div class="grade-kpi"><span>Espressione</span><strong>{{ studentCategoryAverage(st.id, 'gradeExpression') === null ? 'N/D' : (studentCategoryAverage(st.id, 'gradeExpression') | number:'1.2-2') }}</strong></div>
+          </div>
         </div>
       </div>
     </div>

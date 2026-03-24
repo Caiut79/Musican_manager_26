@@ -82,11 +82,33 @@
         </div>
       </div>
       <div class="fuel-row">
+        <label>Veicolo
+          <input type="text" formControlName="vehicleModel" placeholder="es. Fiat 500 1.2">
+        </label>
+        <label>Alimentazione
+          <select formControlName="vehicleFuelType">
+            <option value="benzina">Benzina</option>
+            <option value="diesel">Diesel</option>
+            <option value="gpl">GPL</option>
+            <option value="metano">Metano</option>
+            <option value="ibrido">Ibrido</option>
+            <option value="elettrico">Elettrico</option>
+            <option value="altro">Altro</option>
+          </select>
+        </label>
+      </div>
+      <div class="fuel-row fuel-row-consumption">
         <label>Prezzo carburante (€/litro)
           <input type="number" formControlName="fuelPricePerLiter" min="0" step="0.01" placeholder="es. 1.85">
         </label>
-        <label>Consumo medio (l/100 km)
-          <input type="number" formControlName="vehicleConsumption" min="0" step="0.1" placeholder="es. 7.0">
+        <label class="fuel-narrow-field">Modalità consumo
+          <select formControlName="vehicleConsumptionMode" (change)="onConsumptionModeChange($any($event.target).value)">
+            <option value="l_100km">Litri / 100 km</option>
+            <option value="km_l">Km / litro</option>
+          </select>
+        </label>
+        <label class="fuel-narrow-field">{{ consumptionLabel }}
+          <input type="number" formControlName="vehicleConsumption" min="0" [step]="consumptionStep" [placeholder]="consumptionPlaceholder">
         </label>
       </div>
       <!-- Extras -->
@@ -188,6 +210,18 @@
 
   <!-- Right: map -->
   <div class="map-col">
+    <div class="map-toolbar">
+      <label>Stile mappa
+        <select [ngModel]="selectedMapTheme" [ngModelOptions]="{standalone: true}" (ngModelChange)="onMapThemeChange($event)">
+          <option *ngFor="let theme of mapThemeOptions" [ngValue]="theme.id">{{ theme.label }}</option>
+        </select>
+      </label>
+      <label>Colore percorso
+        <select [ngModel]="selectedRouteColor" [ngModelOptions]="{standalone: true}" (ngModelChange)="onRouteColorChange($event)">
+          <option *ngFor="let color of routeColorOptions" [ngValue]="color.id">{{ color.label }}</option>
+        </select>
+      </label>
+    </div>
     <div class="map-wrapper">
       <div #mapContainer class="leaflet-map" [class.pick-active]="mapWaypointPickMode"></div>
       <div class="map-placeholder" *ngIf="!result">
@@ -252,9 +286,49 @@
         <span>{{ ex.distanceKm }} km</span>
         <span *ngIf="ex.tollEstimatedRoundTrip !== undefined && ex.tollEstimatedRoundTrip !== null">Pedaggio {{ ex.tollEstimatedRoundTrip | currency:'EUR':'symbol':'1.2-2' }}</span>
         <span>{{ ex.date }}</span>
+        <span *ngIf="ex.eventId">Evento: {{ eventLabelById(ex.eventId) || ex.eventId }}</span>
         <strong>{{ ex.totalExpense | currency:'EUR':'symbol':'1.2-2' }}</strong>
       </div>
-      <button type="button" class="btn-remove" (click)="deleteExpense(ex.id)" title="Elimina">🗑</button>
+      <div class="expense-actions">
+        <button type="button" class="btn-outline-sm" (click)="reviewExpenseOnMap(ex)" title="Rivedi percorso">🗺 Rivedi</button>
+        <button type="button" class="btn-outline-sm" (click)="openAssignEventModal(ex)" title="Assegna a evento">🔗 Assegna</button>
+        <button type="button" class="btn-remove" (click)="deleteExpense(ex.id)" title="Elimina">🗑</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="pedaggi-modal-backdrop" *ngIf="showAssignEventModal" (click)="closeAssignEventModal()"></div>
+<section class="pedaggi-modal assign-modal" *ngIf="showAssignEventModal" role="dialog" aria-modal="true">
+  <div class="pedaggi-modal-header">
+    <h3>Assegna spesa a evento</h3>
+    <button type="button" class="btn-remove" (click)="closeAssignEventModal()">✕</button>
+  </div>
+  <div class="pedaggi-modal-body">
+    <p class="pedaggi-note" *ngIf="assignSuggestedEventId">
+      Suggerimento trovato: {{ eventLabelById(assignSuggestedEventId) }}
+    </p>
+    <label>Evento
+      <select [(ngModel)]="assignSelectedEventId" [ngModelOptions]="{standalone: true}">
+        <option value="">Seleziona evento</option>
+        <option *ngFor="let ev of assignEvents" [ngValue]="ev.id">
+          {{ ev.date }} · {{ ev.title }} · {{ ev.venue || ev.address || 'Senza luogo' }}
+        </option>
+      </select>
+    </label>
+    <div class="assign-list">
+      <button type="button" class="assign-item"
+        *ngFor="let ev of assignEvents | slice:0:12"
+        [class.suggested]="isSuggestedEvent(ev.id)"
+        [class.active]="assignSelectedEventId === ev.id"
+        (click)="assignSelectedEventId = ev.id">
+        <span>{{ ev.date }} · {{ ev.title }}</span>
+        <small>{{ ev.venue || ev.address || 'Senza luogo' }}</small>
+      </button>
+    </div>
+    <div class="pedaggi-actions">
+      <button type="button" class="btn-outline" (click)="closeAssignEventModal()">Annulla</button>
+      <button type="button" class="btn-primary" [disabled]="!assignSelectedEventId" (click)="saveExpenseEventAssignment()">Conferma assegnazione</button>
     </div>
   </div>
 </section>

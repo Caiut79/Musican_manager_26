@@ -1,58 +1,111 @@
 <div class="doc" *ngIf="concert; else notFound">
   <div class="doc-head">
-    <div>
-      <h1>Esenzione Agibilità INPS ex ENPALS</h1>
-      <p class="subtitle">Autocertificazione ai sensi dell’art. 39 quater D.L. 159/2007 convertito in Legge n. 222/2007</p>
+    <div class="doc-head-left">
+      <span class="brand">Musican Manager</span>
+      <h1>Dichiarazione sostitutiva di atto notorio</h1>
+      <p class="subtitle">(Art. 47 D.P.R. 28 dicembre 2000, n. 445)</p>
     </div>
-    <button type="button" class="btn-primary no-print" (click)="printPdf()">Stampa / Salva PDF</button>
+    <button type="button" class="btn-primary no-print" (click)="printPdf()">Genera PDF</button>
   </div>
 
-  <section class="panel">
-    <h2>Dati evento</h2>
-    <div class="grid">
-      <div><span class="k">Data della serata</span><strong>{{ formatItalianDate(concert.date || todayIso) }}</strong></div>
+  <section class="paper" *ngIf="exemptionEnabled; else exemptionOff">
+    <div class="paper-meta">
+      <div><span>Data:</span> {{ formatItalianDate(todayIso) }}</div>
+      <div><span>Luogo:</span> {{ (eventPlace + (eventProvinceCode ? ' (' + eventProvinceCode + ')' : '')) | uppercase }}</div>
+      <div><span>Band:</span> {{ eventBandLabel | uppercase }}</div>
+    </div>
+
+    <p class="line">Il/La sottoscritto/a <strong>{{ fullName | uppercase }}</strong></p>
+    <p class="line">Nato/a a <strong>{{ (profile.birthPlace || 'N/D') | uppercase }}</strong> il <strong>{{ formatItalianDate(profile.birthDate) }}</strong></p>
+    <p class="line">Codice Fiscale: <strong>{{ (profile.fiscalCode || 'N/D') | uppercase }}</strong></p>
+    <p class="line">Residente a: <strong>{{ (profile.residence || 'N/D') | uppercase }}</strong></p>
+    <p class="line">Codice musicista: <strong>{{ (musicianCode || 'N/D') | uppercase }}</strong></p>
+
+    <h2>DICHIARA SOTTO LA PROPRIA RESPONSABILITÀ</h2>
+    <p class="legal">
+      di avvalersi dell’esenzione dagli adempimenti previdenziali INPS ex ENPALS ai sensi della normativa vigente
+      e con riferimento all’evento <strong>{{ concert.title | uppercase }}</strong> del <strong>{{ formatItalianDate(concert.date || todayIso) }}</strong>.
+    </p>
+    <p class="legal">Che ricorrono congiuntamente le seguenti condizioni:</p>
+    <ol class="clauses">
+      <li>La retribuzione annua lorda per esibizioni musicali non supera € 5.000,00.</li>
+      <li>
+        Rientra in una delle seguenti categorie:
+        <div class="checks">
+          <div class="check-row" *ngFor="let c of exemptionChecks">
+            <span class="box">{{ c.selected ? 'X' : '' }}</span>
+            <span>{{ c.label }}</span>
+          </div>
+        </div>
+      </li>
+    </ol>
+    <p class="legal">Si impegna a comunicare tempestivamente il superamento della soglia di € 5.000,00 annui.</p>
+
+    <div class="event-box">
       <div><span class="k">Evento</span><strong>{{ concert.title | uppercase }}</strong></div>
-      <div><span class="k">Luogo evento (locale e provincia)</span><strong>{{ eventPlace | uppercase }}</strong></div>
       <div><span class="k">Band / Progetto</span><strong>{{ eventBandLabel | uppercase }}</strong></div>
+      <div><span class="k">Data serata</span><strong>{{ formatItalianDate(concert.date || todayIso) }}</strong></div>
+      <div><span class="k">Luogo evento</span><strong>{{ eventPlace | uppercase }}</strong></div>
+      <div><span class="k">Provincia</span><strong>{{ (eventProvinceCode || 'N/D') | uppercase }}</strong></div>
       <div><span class="k">Partenza</span><strong>{{ travelOrigin | uppercase }}</strong></div>
       <div><span class="k">Destinazione</span><strong>{{ travelDestination | uppercase }}</strong></div>
+      <div><span class="k">Condizione previdenziale</span><strong>{{ (profile.exemptEmployerType || 'N/D') | uppercase }}</strong></div>
+      <div><span class="k">Ente / Datore</span><strong>{{ (profile.exemptEmployer || 'N/D') | uppercase }}</strong></div>
     </div>
-    <p class="legal warn" *ngIf="eventProvinceHint">{{ eventProvinceHint }}</p>
-  </section>
 
-  <section class="panel exemption" *ngIf="exemptionEnabled">
-    <h2>Dichiarazione di esenzione contributiva spettacolo</h2>
-    <p class="legal">
-      Il sottoscritto dichiara di svolgere attività di musica dal vivo e di rientrare nelle condizioni previste dalla normativa vigente per l’esenzione.
-    </p>
-    <div class="grid">
-      <div><span class="k">Dichiarante</span><strong>{{ fullName | uppercase }}</strong></div>
-      <div><span class="k">Nato a</span><strong>{{ (profile.birthPlace || 'N/D') | uppercase }}</strong></div>
-      <div><span class="k">Data di nascita</span><strong>{{ formatItalianDate(profile.birthDate) }}</strong></div>
-      <div><span class="k">Residenza</span><strong>{{ (profile.residence || 'N/D') | uppercase }}</strong></div>
-      <div><span class="k">Codice fiscale</span><strong>{{ (profile.fiscalCode || 'N/D') | uppercase }}</strong></div>
-    </div>
-    <div class="checks">
-      <div class="check-row" *ngFor="let c of exemptionChecks">
-        <span class="box">{{ c.selected ? 'X' : '' }}</span>
-        <span>{{ c.label }}</span>
+    <p class="legal warn" *ngIf="eventProvinceHint">{{ eventProvinceHint }}</p>
+
+    <div class="signature-panel">
+      <div class="sig-head no-print">
+        <span class="sig-title">Firma del dichiarante</span>
+        <button type="button" class="btn-outline" *ngIf="signatureDataUrl && !editingSignature" (click)="startEditSignature()">Modifica firma</button>
       </div>
-    </div>
-    <p class="legal">
-      Si dichiara inoltre che la retribuzione annua derivante dall’attività musicale rientra nei limiti previsti per l’esenzione.
-    </p>
-    <div class="sign-row">
-      <div class="sign-box">
-        <div class="signature-area" *ngIf="signatureDataUrl">
-          <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" [attr.src]="signatureDataUrl" alt="Firma dichiarante" class="signature-img">
-          <div class="signature-line"></div>
-          <span class="k signature-caption">Firma del dichiarante</span>
+
+      <div class="signature-area" *ngIf="signatureDataUrl && !editingSignature">
+        <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" [attr.src]="signatureDataUrl" alt="Firma dichiarante" class="signature-img">
+        <div class="signature-line"></div>
+        <span class="k signature-caption">Firma del dichiarante</span>
+      </div>
+
+      <div class="sig-edit no-print" *ngIf="editingSignature">
+        <div class="sig-wrapper">
+          <canvas #sigCanvas class="sig-canvas"
+            width="560" height="160"
+            (mousedown)="onSigMouseDown($event)"
+            (mousemove)="onSigMouseMove($event)"
+            (mouseup)="onSigMouseUp()"
+            (mouseleave)="onSigMouseUp()"
+            (touchstart)="onSigTouchStart($event)"
+            (touchmove)="onSigTouchMove($event)"
+            (touchend)="onSigTouchEnd()">
+          </canvas>
         </div>
-        <strong>{{ fullName | uppercase }}</strong>
+        <div class="sig-actions">
+          <button type="button" class="btn-ghost" (click)="clearSignature()">Cancella</button>
+          <button type="button" class="btn-primary" (click)="saveSignature()">
+            {{ signatureSaved ? 'Firma salvata' : 'Salva firma' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="sign-row">
+        <div class="sign-box">
+          <span class="k">In fede</span>
+          <strong>{{ fullName | uppercase }}</strong>
+        </div>
       </div>
     </div>
   </section>
 </div>
+
+<ng-template #exemptionOff>
+  <section class="paper">
+    <h2>Esenzione INPS ex ENPALS non attiva</h2>
+    <p class="legal">
+      Attiva l’opzione di esenzione nel profilo Musicista per generare il modulo in PDF.
+    </p>
+  </section>
+</ng-template>
 
 <ng-template #notFound>
   <div class="doc">

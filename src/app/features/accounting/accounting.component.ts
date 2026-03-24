@@ -545,6 +545,15 @@ export class AccountingComponent implements OnInit {
     return this.round2(Math.max(0, Number(this.draft.receivedAmount || 0) - this.draftCooperativeFeeAmount));
   }
 
+  get draftOutsideInvoiceDifference(): number {
+    if (this.isDraftMonthlyConcert()) return 0;
+    if (this.draft.paymentMethod !== 'contanti' && this.draft.paymentMethod !== 'bonifico') return 0;
+    const agreed = Number(this.draft.agreedFee || 0);
+    const received = Number(this.draft.receivedAmount || 0);
+    if (!Number.isFinite(agreed) || !Number.isFinite(received) || agreed <= 0) return 0;
+    return this.round2(Math.max(0, agreed - received));
+  }
+
   isCooperativeManagedDraft(): boolean {
     if (this.draft.category !== 'concerto') return false;
     if (this.draft.paymentMode === 'pattuito_fattura') return true;
@@ -651,6 +660,11 @@ export class AccountingComponent implements OnInit {
 
   savePayment(): void {
     if (!this.draft.receivedAmount || this.draft.receivedAmount <= 0) return;
+    const outsideInvoiceDifference = this.draftOutsideInvoiceDifference;
+    const outsideInvoiceNote = outsideInvoiceDifference > 0
+      ? `Differenza fuori fattura: ${outsideInvoiceDifference.toFixed(2)} €`
+      : '';
+    const mergedNotes = [this.draft.notes, outsideInvoiceNote].filter(x => `${x || ''}`.trim().length > 0).join(' • ');
     const cooperativeManaged = this.isCooperativeManagedDraft();
     const cooperativeSettlementState: CooperativeSettlementState = !cooperativeManaged
       ? 'none'
@@ -683,7 +697,7 @@ export class AccountingComponent implements OnInit {
       cooperativeSettledAt: '',
       confirmed:       true,
       confirmedAt:     new Date().toISOString(),
-      notes:           this.draft.notes,
+      notes:           mergedNotes,
       createdAt:       new Date().toISOString()
     };
     this.payments = [...this.payments, payment];

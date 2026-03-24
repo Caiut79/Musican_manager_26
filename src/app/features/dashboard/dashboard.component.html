@@ -56,10 +56,16 @@
       </div>
 
       <div class="om-block" *ngIf="overdueStep === 'paymentAsk'">
-        <div class="om-block-title">In quel giorno hai ricevuto un acconto o un bonifico?</div>
+        <div class="om-block-title">
+          {{ p.paymentCadence === 'mensile'
+            ? 'In quel giorno hai ricevuto un acconto o un bonifico?'
+            : 'In quel giorno hai ricevuto il saldo in contanti o bonifico?' }}
+        </div>
         <div class="om-choice-grid">
           <button type="button" class="om-choice choice-neutral" (click)="overduePaymentAnswered('no')">No</button>
-          <button type="button" class="om-choice choice-acconto" (click)="overduePaymentAnswered('acconto')">Acconto</button>
+          <button type="button" class="om-choice choice-acconto" (click)="overduePaymentAnswered(p.paymentCadence === 'mensile' ? 'acconto' : 'contanti')">
+            {{ p.paymentCadence === 'mensile' ? 'Acconto' : 'Contanti' }}
+          </button>
           <button type="button" class="om-choice choice-bonifico" (click)="overduePaymentAnswered('bonifico')">Bonifico</button>
         </div>
       </div>
@@ -70,7 +76,8 @@
           <label>
             <span>Tipo</span>
             <select [(ngModel)]="overdueMonthlyKind" [disabled]="true">
-              <option value="acconto">Acconto (contanti)</option>
+              <option value="acconto" *ngIf="p.paymentCadence === 'mensile'">Acconto (contanti)</option>
+              <option value="contanti" *ngIf="p.paymentCadence !== 'mensile'">Saldo (contanti)</option>
               <option value="bonifico">Bonifico</option>
             </select>
           </label>
@@ -78,6 +85,9 @@
             <span>Importo</span>
             <input type="number" min="0" step="0.01" [(ngModel)]="overduePaymentAmount">
           </label>
+        </div>
+        <div class="om-diff-note" *ngIf="currentOverdueOutsideInvoiceDifference > 0">
+          Differenza fuori fattura calcolata: <strong>{{ currentOverdueOutsideInvoiceDifference | currency:'EUR':'symbol':'1.2-2' }}</strong>
         </div>
         <div class="om-actions">
           <button type="button" class="btn-outline" (click)="skipOverduePrompt()">Salta</button>

@@ -24,6 +24,9 @@
               "node_modules/leaflet/dist/leaflet.css",
               "src/styles.scss"
             ],
+            "allowedCommonJsDependencies": [
+              "leaflet"
+            ],
             "scripts": []
           },
           "configurations": {
@@ -41,11 +44,11 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "musicista:build"
+            "buildTarget": "musicista:build"
           },
           "configurations": {
             "production": {
-              "browserTarget": "musicista:build:production"
+              "buildTarget": "musicista:build:production"
             }
           }
         },

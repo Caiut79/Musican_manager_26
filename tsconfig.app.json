@@ -11,5 +11,8 @@
   "include": [
     "src/**/*.d.ts",
     "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/app/core/address.service.ts"
   ]
 }

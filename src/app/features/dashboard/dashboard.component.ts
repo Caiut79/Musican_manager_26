@@ -133,7 +133,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   overdueStep: 'start' | 'statusAsk' | 'paymentAsk' | 'paymentAmount' | 'done' = 'start';
   overdueEventOutcome: 'effettuato' | 'annullato' | 'rimborsato' | 'da_fare' = 'effettuato';
   overduePaymentAmount = 0;
-  overdueMonthlyKind: 'acconto' | 'bonifico' = 'acconto';
+  overdueMonthlyKind: 'acconto' | 'bonifico' | 'contanti' = 'acconto';
   private refundedConcertIds = new Set<string>();
   private overduePromptStateKey = 'mm_overdue_prompt_state_v3';
   private overduePromptProcessedKey = 'mm_overdue_prompt_processed_v1';
@@ -164,7 +164,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const storedEvents: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
     const withSignedContracts = this.ensureSignedContractsInEvents(storedEvents);
     const cleanedEvents = this.cleanupDashboardDraftEvents(withSignedContracts);
-    this.allEvents = [...cleanedEvents].sort((a, b) => a.date.localeCompare(b.date));
+    const normalizedImported = this.ensureBandLabelOnConcertEvents(cleanedEvents);
+    this.allEvents = [...normalizedImported].sort((a, b) => a.date.localeCompare(b.date));
     const now = this.today;
     this.todayEvents    = cleanedEvents.filter(e => e.date === now);
     this.upcomingEvents = cleanedEvents
@@ -463,11 +464,30 @@ export class DashboardComponent implements OnInit, OnDestroy {
   eventGroupLabel(event: EventDetail): string {
     if (event.type === 'dj_set') return `${event.venue || event.address || ''}`.trim();
     if (event.type !== 'concert') return '';
-    const venue = `${event.venue || ''}`.trim();
-    if (venue) return venue;
+    const notes = `${event.notes || ''}`;
+    const extracted = this.sanitizeBandName(this.extractRubricaName(notes));
+    if (extracted) return extracted;
     const names = Array.isArray(event.band) ? event.band.map(x => `${x?.name || ''}`.trim()).filter(Boolean) : [];
     if (!names.length) return '';
     return names[0];
+  }
+
+  private ensureBandLabelOnConcertEvents(events: EventDetail[]): EventDetail[] {
+    let changed = false;
+    const next = events.map(ev => {
+      if (ev.type !== 'concert') return ev;
+      const names = Array.isArray(ev.band) ? ev.band.map(x => `${x?.name || ''}`.trim()).filter(Boolean) : [];
+      if (names.length) return ev;
+      const extracted = this.sanitizeBandName(this.extractRubricaName(`${ev.notes || ''}`));
+      if (!extracted) return ev;
+      changed = true;
+      return { ...ev, band: [{ name: extracted }] };
+    });
+    if (changed) {
+      localStorage.setItem('mm_events', JSON.stringify(next));
+      void this.syncSupabaseEvents();
+    }
+    return next;
   }
 
   notifIconClass(type: string): string {
@@ -841,7 +861,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const p = this.currentOverduePrompt;
     if (!p) return;
     this.overduePaymentAmount = Math.max(0, Number(p.grossFee || 0));
-    this.overdueMonthlyKind = p.monthlySettlement === 'bonifico' ? 'bonifico' : 'acconto';
+    this.overdueMonthlyKind = p.paymentCadence === 'mensile'
+      ? (p.monthlySettlement === 'bonifico' ? 'bonifico' : 'acconto')
+      : 'contanti';
     this.overdueEventOutcome = 'effettuato';
     this.overdueStep = 'statusAsk';
     this.showOverduePrompt = true;
@@ -871,7 +893,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.overdueStep = 'paymentAsk';
   }
 
-  overduePaymentAnswered(choice: 'no' | 'acconto' | 'bonifico'): void {
+  overduePaymentAnswered(choice: 'no' | 'acconto' | 'bonifico' | 'contanti'): void {
     const p = this.currentOverduePrompt;
     if (!p) return;
     if (choice === 'no') {
@@ -880,7 +902,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.nextOverduePrompt();
       return;
     }
-    this.overdueMonthlyKind = choice === 'bonifico' ? 'bonifico' : 'acconto';
+    this.overdueMonthlyKind = choice;
     this.overdueStep = 'paymentAmount';
   }
 
@@ -897,7 +919,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const mode = this.resolvePaymentModeForEvent(p.eventId);
     const createdAt = new Date().toISOString();
     const method: ServicePayment['paymentMethod'] = this.overdueMonthlyKind === 'bonifico' ? 'bonifico' : 'contanti';
-    const paymentType: ServicePayment['paymentType'] = this.overdueMonthlyKind === 'acconto' ? 'acconto' : 'saldo';
+    const paymentType: ServicePayment['paymentType'] = 'saldo';
+    const outsideInvoiceDiff = this.currentOverdueOutsideInvoiceDifference;
+    const diffNote = outsideInvoiceDiff > 0 ? `Differenza fuori fattura: ${outsideInvoiceDiff.toFixed(2)} €` : '';
     const payment: ServicePayment = {
       id: crypto.randomUUID(),
       createdAt,
@@ -914,13 +938,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       invoiceTotal: this.round2(amount),
       cooperativeManaged: false,
       cooperativeSettlementAt: null,
-      notes: 'Inserito da popup post-evento'
+      notes: ['Inserito da popup post-evento', diffNote].filter(Boolean).join(' • ')
     };
     all.unshift(payment);
     localStorage.setItem('mm_service_payments', JSON.stringify(all));
     this.markOverdueEventProcessed(p.eventId);
     this.dismissOverduePrompt(p.eventId);
     this.nextOverduePrompt();
+  }
+
+  get currentOverdueOutsideInvoiceDifference(): number {
+    const p = this.currentOverduePrompt;
+    if (!p || p.paymentCadence === 'mensile') return 0;
+    const amount = Number(this.overduePaymentAmount || 0);
+    const gross = Number(p.grossFee || 0);
+    if (!Number.isFinite(amount) || !Number.isFinite(gross) || gross <= 0) return 0;
+    return this.round2(Math.max(0, gross - amount));
   }
 
   saveOverdueMonthlyPayment(): void {
@@ -938,7 +971,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       id: crypto.randomUUID(),
       bandKey: p.bandKey,
       bandName: p.bandName,
-      kind: this.overdueMonthlyKind,
+      kind: this.overdueMonthlyKind === 'bonifico' ? 'bonifico' : 'acconto',
       amount: this.round2(amount),
       createdAt: new Date().toISOString()
     } satisfies BandCreditEntry);

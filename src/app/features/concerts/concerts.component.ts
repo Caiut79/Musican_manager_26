@@ -477,6 +477,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
 
   private appendToAgenda(record: ConcertRecord): void {
     const events: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const bandNames = record.bands.length ? record.bands : record.musicians;
     const event: EventDetail = {
       id: record.id,
       title: record.title,
@@ -488,7 +489,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
       grossFee: record.agreedFee,
       netFee: record.agreedFee + record.reimbursement,
       compensoType: record.billingMode,
-      band: record.musicians.map(name => ({ name })),
+      band: bandNames.map(name => ({ name })),
       status: 'pending',
       notes: `${record.notes || ''}${record.contactId ? ` • [Rubrica:${this.contactName(record.contactId)}]` : ''}${record.paymentCadence === 'mensile' ? ` • [Pagamento mensile: ${record.monthlySettlement}]` : ' • [Pagamento a prestazione: saldo immediato]'} • [Spese extra:${record.extraExpensesOutsideInvoice ? 'fuori_fattura' : 'in_fattura'}]`,
       createdAt: record.createdAt
@@ -955,7 +956,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
   }
 
   openExemptionModule(concert: ConcertRecord): void {
-    window.open(`${window.location.origin}/confirm/${concert.id}`, '_blank');
+    window.open(`${window.location.origin}/confirm/${concert.id}?pdf=1`, '_blank');
   }
 
   private syncConcertToAgenda(concert: ConcertRecord): void {

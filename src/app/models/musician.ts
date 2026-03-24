@@ -26,6 +26,12 @@ export type RoleTaxSetup = {
   cooperativeTaxPercent?: number;
   eventGrossEstimate?: number;
   inpsExempt?: boolean;
+  inpsExemptReasons?: {
+    under18?: boolean;
+    studentUnder25?: boolean;
+    pensionerOver65?: boolean;
+    otherCoverage?: boolean;
+  };
 };
 
 export type RoleSettings = {
@@ -58,6 +64,10 @@ export type Musician = {
   exemptEmployer?: string;
   exemptEmployerType?: 'dipendente' | 'pensionato' | 'altro';
   homeBase?: string;
+  vehicleModel?: string;
+  vehicleFuelType?: 'benzina' | 'diesel' | 'gpl' | 'metano' | 'ibrido' | 'elettrico' | 'altro';
+  vehicleConsumption?: number;
+  vehicleConsumptionMode?: 'l_km' | 'km_l' | 'l_100km';
   instrument?: string;
   level?: string;
   stylesPlayed?: string[];

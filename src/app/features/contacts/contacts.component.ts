@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SupabaseService } from '../../core/supabase.service';
@@ -52,7 +52,7 @@ type ContactAddressField = 'positionCity' | 'positionAddress' | 'billingCity' | 
   templateUrl: './contacts.component.html',
   styleUrls: ['./contacts.component.scss']
 })
-export class ContactsComponent implements OnInit {
+export class ContactsComponent implements OnInit, OnDestroy {
   contacts: ContactEntry[] = [];
   form: ContactEntry = this.defaultForm();
   saved = false;
@@ -69,6 +69,7 @@ export class ContactsComponent implements OnInit {
   billingCountrySuggestions: string[] = [];
   private addressSearchTimers: Partial<Record<ContactAddressField, ReturnType<typeof setTimeout>>> = {};
   private addressSearchAborters: Partial<Record<ContactAddressField, AbortController>> = {};
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private supabase: SupabaseService) {}
 
@@ -77,6 +78,29 @@ export class ContactsComponent implements OnInit {
     this.persistContacts();
     await this.mergeSupabaseContacts();
     await this.syncContactsSafe();
+    this.refreshTimer = setInterval(() => {
+      void this.refreshFromSupabase();
+    }, 15000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    Object.values(this.addressSearchTimers).forEach(timer => {
+      if (timer) clearTimeout(timer);
+    });
+    Object.values(this.addressSearchAborters).forEach(controller => controller?.abort());
+  }
+
+  @HostListener('window:focus')
+  onWindowFocus(): void {
+    void this.refreshFromSupabase();
+  }
+
+  @HostListener('document:visibilitychange')
+  onVisibilityChange(): void {
+    if (document.visibilityState === 'visible') {
+      void this.refreshFromSupabase();
+    }
   }
 
   openNewContactForm(): void {
@@ -139,23 +163,21 @@ export class ContactsComponent implements OnInit {
     };
     this.contacts.unshift(next);
     this.contacts = this.sortContacts(this.contacts);
-    this.persistContacts();
-    const verifySaved = this.readContacts().some(c => c.id === next.id);
-    if (!verifySaved) {
-      this.formError = 'Salvataggio locale non riuscito, riprova';
-      return;
-    }
-    void this.syncContactsSafe();
+    const persisted = this.persistContacts();
+    void this.syncContactsSafe(!persisted);
     this.form = this.defaultForm();
     this.showCreateForm = false;
     this.saved = true;
+    if (!persisted) {
+      this.syncMessage = 'Contatto salvato senza cache locale stabile • disponibile via sincronizzazione remota';
+    }
     setTimeout(() => (this.saved = false), 1500);
   }
 
   removeContact(id: string): void {
     this.contacts = this.contacts.filter(x => x.id !== id);
-    this.persistContacts();
-    void this.syncContactsSafe();
+    const persisted = this.persistContacts();
+    void this.syncContactsSafe(!persisted);
   }
 
   get filteredContacts(): ContactEntry[] {
@@ -286,9 +308,14 @@ export class ContactsComponent implements OnInit {
     reader.readAsDataURL(file);
   }
 
-  private persistContacts(): void {
+  private persistContacts(): boolean {
     this.contacts = this.sortContacts(this.contacts);
-    localStorage.setItem('mm_contacts', JSON.stringify(this.contacts));
+    try {
+      localStorage.setItem('mm_contacts', JSON.stringify(this.contacts));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private readContacts(): ContactEntry[] {
@@ -415,7 +442,7 @@ export class ContactsComponent implements OnInit {
     const remote = await this.supabase.loadContactsFromSupabase(musicianId);
     if (!remote.length) return;
     const merged = [...this.contacts];
-    const index = new Set(merged.map(c => this.normalizeKey(c.type, c.displayName)));
+    const index = new Map(merged.map((c, position) => [this.normalizeKey(c.type, c.displayName), position]));
     remote.forEach((row: any) => {
       const payload = row.payload || {};
       const normalized: ContactEntry = {
@@ -454,24 +481,41 @@ export class ContactsComponent implements OnInit {
         createdAt: `${payload.createdAt || new Date().toISOString()}`
       };
       const key = this.normalizeKey(normalized.type, normalized.displayName);
-      if (!normalized.displayName || index.has(key)) return;
-      merged.push(normalized);
-      index.add(key);
+      if (!normalized.displayName) return;
+      const existingIndex = index.get(key);
+      if (existingIndex === undefined) {
+        merged.push(normalized);
+        index.set(key, merged.length - 1);
+        return;
+      }
+      merged[existingIndex] = {
+        ...merged[existingIndex],
+        ...normalized,
+        id: merged[existingIndex].id || normalized.id,
+        createdAt: merged[existingIndex].createdAt || normalized.createdAt
+      };
     });
     this.contacts = this.sortContacts(merged);
     this.persistContacts();
   }
 
-  private async syncContactsSafe(): Promise<void> {
+  private async refreshFromSupabase(): Promise<void> {
+    this.contacts = this.mergeInferredContacts(this.readContacts());
+    await this.mergeSupabaseContacts();
+  }
+
+  private async syncContactsSafe(forceRemote = false): Promise<void> {
     const musicianId = localStorage.getItem('musicianId') || '';
     if (!musicianId) {
       this.syncMessage = 'Sync Supabase non attiva: profilo non ancora collegato';
       return;
     }
-    const ok = await this.supabase.syncContactsFromLocalStorage(musicianId);
+    const ok = forceRemote
+      ? await this.supabase.syncContactsToSupabase(musicianId, this.contacts)
+      : await this.supabase.syncContactsFromLocalStorage(musicianId);
     this.syncMessage = ok
       ? `Contatti sincronizzati con Supabase • ${this.contacts.length} salvati`
-      : `Contatti salvati in locale • tabella Supabase contatti non disponibile`;
+      : `Contatti salvati in questo dispositivo • accedi allo stesso account per sincronizzarli tra i dispositivi`;
   }
 
   private defaultForm(): ContactEntry {

@@ -1,37 +1,129 @@
 <div class="booking-wrap">
   <div class="booking-card">
-    <h1>Richiesta {{ roleLabel() }}</h1>
-    <p class="subtitle">Stai richiedendo disponibilità per <strong>{{ musicianName }}</strong></p>
-    <p class="subtitle role-chip">Ruolo selezionato: <strong>{{ roleLabel() }}</strong></p>
-    <p class="subtitle" *ngIf="affiliationCode">Codice di appartenenza: <strong>{{ affiliationCode }}</strong></p>
-    <p class="subtitle ok-text" *ngIf="allowBandInvites">Questo profilo può essere aggiunto dalle band.</p>
+    <div class="booking-header">
+      <div class="role-badge">{{ roleLabel() }}</div>
+      <h1>Richiedi disponibilità</h1>
+      <p class="subtitle">Stai richiedendo disponibilità per <strong>{{ musicianName }}</strong></p>
+    </div>
 
     <form [formGroup]="form" (ngSubmit)="submit()">
-      <label>Nome e cognome
-        <input type="text" formControlName="customerName" placeholder="Mario Rossi">
-      </label>
-      <label>Email
-        <input type="email" formControlName="customerEmail" placeholder="mario@email.com" autocomplete="email">
-      </label>
-      <label>Data evento
-        <input type="date" formControlName="eventDate">
-      </label>
-      <label>Orario inizio
-        <input type="time" formControlName="eventTime">
-      </label>
-      <label>Tipo evento
-        <input type="text" formControlName="eventType" placeholder="Serata privata">
-      </label>
-      <label>Codice di appartenenza (opzionale)
-        <input type="text" formControlName="bookingCode" placeholder="Inserisci codice ricevuto">
-      </label>
-      <label>Messaggio
-        <textarea rows="4" formControlName="message" placeholder="Descrivi il tuo evento..."></textarea>
-      </label>
-      <button type="submit" class="btn-primary">Invia richiesta</button>
+      <div class="form-section">
+        <div class="section-label">I tuoi dati</div>
+        <div class="row-2">
+          <label>Nome e cognome *
+            <input type="text" formControlName="customerName" placeholder="Mario Rossi">
+          </label>
+          <label>Nome band / gruppo
+            <input type="text" formControlName="bandName" placeholder="es. I Fenomeni">
+          </label>
+        </div>
+        <div class="row-2">
+          <label>Email *
+            <input type="email" formControlName="customerEmail" placeholder="mario@email.com" autocomplete="email">
+          </label>
+          <label>Telefono / WhatsApp
+            <input type="text" formControlName="customerPhone" placeholder="+39 333 1234567" autocomplete="tel">
+          </label>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="section-label">Luogo evento</div>
+        <div class="row-2">
+          <div class="city-autocomplete-wrap">
+            <label>Paese / città
+              <input type="text" formControlName="eventCity" placeholder="Inizia a digitare..."
+                     (input)="onCityInput($any($event.target).value)" autocomplete="off">
+            </label>
+            <div class="city-suggestions" *ngIf="citySuggestions.length">
+              <button type="button" class="city-suggestion" *ngFor="let s of citySuggestions" (mousedown)="selectCity(s)">
+                {{ s.label }}
+              </button>
+            </div>
+            <div class="city-searching" *ngIf="citySearching">Ricerca...</div>
+          </div>
+          <label>Provincia
+            <input type="text" formControlName="eventProvince" placeholder="Compilata automaticamente" readonly>
+          </label>
+        </div>
+      </div>
+
+      <!-- Single date: normal layout with event type -->
+      <div class="form-section" *ngIf="dates.length === 1">
+        <div class="section-label">Data e evento</div>
+        <div formArrayName="dates">
+          <div [formGroupName]="0" class="single-date-row">
+            <div class="row-2">
+              <label>Data evento *
+                <input type="date" formControlName="eventDate">
+              </label>
+              <label>Orario inizio *
+                <input type="time" formControlName="eventTime">
+              </label>
+            </div>
+            <label>Tipo evento
+              <input type="text" formControlName="eventType" placeholder="Serata privata, matrimonio, festa...">
+            </label>
+          </div>
+        </div>
+        <div class="date-busy-warn" *ngIf="isDateBusy(0) && !isSlotBusy(0)">⚠ Ci sono già impegni in questa data</div>
+        <div class="date-busy-block" *ngIf="isSlotBusy(0)">🚫 Questo orario è già occupato — scegli un altro orario</div>
+      </div>
+
+      <!-- Multiple dates: compact rows with inline event type -->
+      <div class="form-section" *ngIf="dates.length > 1">
+        <div class="section-label">
+          Date richieste
+          <span class="section-hint">{{ dates.length }} date</span>
+        </div>
+        <div class="dates-list" formArrayName="dates">
+          <div class="date-row" *ngFor="let d of dates.controls; let i = index" [formGroupName]="i">
+            <div class="date-row-top">
+              <span class="date-num-badge">#{{ i + 1 }}</span>
+              <div class="date-row-fields">
+                <input type="date" formControlName="eventDate" class="compact-input">
+                <input type="time" formControlName="eventTime" class="compact-input">
+                <input type="text" formControlName="eventType" class="compact-input type-input" placeholder="Tipo evento">
+              </div>
+              <button type="button" class="remove-date-btn" (click)="removeDateSlot(i)" title="Rimuovi">✕</button>
+            </div>
+            <div class="date-busy-warn" *ngIf="isDateBusy(i) && !isSlotBusy(i)">⚠ Impegni già presenti in questa data</div>
+            <div class="date-busy-block" *ngIf="isSlotBusy(i)">🚫 Orario occupato</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="add-date-wrap" *ngIf="dates.length < 10">
+        <button type="button" class="add-date-btn" (click)="addDateSlot()">
+          + Aggiungi {{ dates.length === 0 ? 'una data' : 'altra data' }}
+        </button>
+        <span class="add-date-hint" *ngIf="dates.length >= 1">Puoi richiedere fino a 10 date</span>
+      </div>
+
+      <div class="form-section">
+        <div class="section-label">Messaggio</div>
+        <label>Note o richieste particolari
+          <textarea rows="4" formControlName="message" placeholder="Facoltativo: descrivi esigenze, location o dettagli organizzativi..."></textarea>
+        </label>
+      </div>
+
+      <button type="submit" class="btn-submit" [disabled]="form.invalid">
+        <ng-container *ngIf="dates.length > 1; else singleRequestLabel">Invia {{ dates.length }} richieste</ng-container>
+        <ng-template #singleRequestLabel>Invia richiesta</ng-template>
+      </button>
     </form>
 
-    <div class="ok" *ngIf="sent">✓ Richiesta inviata con successo</div>
+    <div class="ok" *ngIf="sent">
+      <span class="ok-icon">✓</span>
+      <div>
+        <strong>
+          <ng-container *ngIf="sentCount > 1; else singleSentLabel">{{ sentCount }} richieste inviate</ng-container>
+          <ng-template #singleSentLabel>Richiesta inviata</ng-template>
+          con successo!
+        </strong>
+        <p>Riceverai una risposta il prima possibile.</p>
+      </div>
+    </div>
     <div class="error" *ngIf="error">{{ error }}</div>
   </div>
 </div>

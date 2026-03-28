@@ -145,7 +145,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private baseQuickLinks = [
     { label: 'Nuovo Concerto', icon: 'ti-music',      route: '/concerts',  sub: 'Aggiungi serata' },
     { label: 'Nuova Lezione',  icon: 'ti-school',     route: '/teaching',  sub: 'Agenda lezioni' },
-    { label: 'Calcola Spese',  icon: 'ti-map-pin',    route: '/expenses',  sub: 'Rimborsi km' },
+    { label: 'Itinerari & Spese', icon: 'ti-map-pin', route: '/expenses',  sub: 'Percorsi e rimborsi' },
     { label: 'Report',         icon: 'ti-chart-bar',  route: '/reports',   sub: 'Statistiche' },
     { label: 'Rubrica',        icon: 'ti-address-book', route: '/contacts', sub: 'Band e singoli' },
     { label: 'Archivio',       icon: 'ti-archive',    route: '/archive',   sub: 'Documenti' },
@@ -1166,7 +1166,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private async syncSupabaseEvents(): Promise<void> {
     const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
-    const musicianId = `${profile.id || ''}`.trim();
+    const musicianId = `${profile.id || localStorage.getItem('musicianId') || ''}`.trim();
     if (!musicianId) return;
     try {
       await this.supabase.syncEventsFromLocalStorage(musicianId);

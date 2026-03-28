@@ -72,6 +72,7 @@
   .brand-mm { display: block; }
   .theme-row { align-items: stretch; flex-direction: column; gap: 2px; padding: 4px 8px 10px; }
   .theme-btn { padding: 10px 0; width: auto; justify-content: center; gap: 0; }
+  .logout-btn { padding: 10px 0; gap: 0; }
 
   /* ── HOVER EXPAND (desktop & tablet con mouse) ── */
   @media (hover: hover) and (min-width: 768px) {
@@ -97,6 +98,7 @@
       .theme-row { flex-direction: row; padding: 10px 10px; justify-content: flex-start; gap: 4px; }
       .theme-row { flex-direction: row; padding: 10px 8px 14px; justify-content: flex-start; gap: 6px; }
       .theme-btn { padding: 6px 6px; width: auto; justify-content: center; gap: 6px; flex: 1 1 0; min-width: 0; }
+      .logout-btn { padding: 10px 12px; gap: 8px; }
     }
   }
 }
@@ -124,6 +126,69 @@
     }
   }
 
+}
+
+@media (max-width: 430px) {
+  .sidebar-backdrop {
+    background: rgba(15, 23, 42, 0.56);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+
+  .sidebar {
+    width: min(86vw, 310px) !important;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+
+    &.mobile-open {
+      box-shadow: 10px 0 30px rgba(15, 23, 42, 0.42);
+    }
+  }
+
+  .sidebar-header {
+    min-height: 62px;
+    padding: 14px 14px 12px;
+    gap: 12px;
+  }
+
+  .brand-logo {
+    width: 30px;
+    height: 30px;
+  }
+
+  .brand-name {
+    strong { font-size: 15px; }
+    small { font-size: 10px; }
+  }
+
+  .sidebar-nav {
+    padding: 8px 10px;
+    gap: 4px;
+  }
+
+  .nav-item {
+    min-height: 46px;
+    border-radius: 12px;
+  }
+
+  .nav-icon {
+    font-size: 20px;
+  }
+
+  .nav-label {
+    font-size: 14px;
+  }
+
+  .theme-row {
+    padding: 10px 10px 12px;
+    gap: 8px;
+  }
+
+  .theme-btn,
+  .logout-btn {
+    min-height: 42px;
+    border-radius: 12px;
+  }
 }
 
 /* ════════════════════════════════════════
@@ -279,6 +344,28 @@
   font-size: 13px;
 }
 
+.nav-badge {
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 1px 6px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+  animation: badgePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
 /* ════════════════════════════════════════
    THEME SWITCHER
 ════════════════════════════════════════ */
@@ -290,6 +377,40 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
   transition: all 0.22s ease;
+}
+
+.sidebar-footer {
+  padding: 0 8px 14px;
+  flex-shrink: 0;
+}
+
+.logout-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  i {
+    font-size: 16px;
+    width: 18px;
+    display: inline-flex;
+    justify-content: center;
+  }
+  &:hover {
+    background: rgba(127, 29, 29, 0.28);
+    border-color: rgba(252, 165, 165, 0.42);
+    color: #fee2e2;
+  }
 }
 
 .theme-btn {

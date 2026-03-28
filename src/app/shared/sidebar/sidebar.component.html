@@ -30,6 +30,7 @@
       (click)="sidebarClose.emit()">
       <i class="nav-icon ti {{ item.icon }}"></i>
       <span class="nav-label">{{ item.label }}</span>
+      <span class="nav-badge" *ngIf="badgeCounts[item.route] > 0">{{ badgeCounts[item.route] }}</span>
     </a>
   </nav>
 
@@ -49,6 +50,13 @@
             (click)="setTheme('amoled')" title="AMOLED">
       <i class="ti ti-circle-filled"></i>
       <span class="theme-lbl">AMOLED</span>
+    </button>
+  </div>
+
+  <div class="sidebar-footer">
+    <button type="button" class="logout-btn" (click)="logoutClick.emit(); sidebarClose.emit()">
+      <i class="ti ti-logout"></i>
+      <span class="theme-lbl">Logout</span>
     </button>
   </div>
 

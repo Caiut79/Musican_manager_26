@@ -816,7 +816,7 @@ export class TeachingComponent implements OnInit {
 
   private async syncSupabaseEvents(): Promise<void> {
     const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
-    const musicianId = `${profile.id || ''}`.trim();
+    const musicianId = `${profile.id || localStorage.getItem('musicianId') || ''}`.trim();
     if (!musicianId) return;
     try {
       await this.supabase.syncEventsFromLocalStorage(musicianId);
@@ -825,7 +825,7 @@ export class TeachingComponent implements OnInit {
 
   private async syncSupabaseContacts(): Promise<void> {
     const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
-    const musicianId = `${profile.id || ''}`.trim();
+    const musicianId = `${profile.id || localStorage.getItem('musicianId') || ''}`.trim();
     if (!musicianId) return;
     try {
       await this.supabase.syncContactsFromLocalStorage(musicianId);

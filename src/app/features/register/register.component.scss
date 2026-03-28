@@ -19,6 +19,35 @@ h1 {
   font-size: 13px;
 }
 
+.invite-ok {
+  color: var(--clr-success);
+}
+
+.invite-warn {
+  color: var(--clr-primary);
+}
+
+.invite-mode {
+  display: flex;
+  gap: 8px;
+  margin: -6px 0 14px;
+}
+
+.mode-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-2, #f8fafc);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  &.active {
+    border-color: var(--clr-primary);
+    color: var(--clr-primary);
+    background: color-mix(in srgb, var(--clr-primary) 8%, transparent);
+  }
+}
+
 form {
   display: flex;
   flex-direction: column;
@@ -37,6 +66,9 @@ input {
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 14px;
+  &[readonly] {
+    background: var(--surface-2, #f8fafc);
+  }
 }
 
 .btn-primary {
@@ -47,6 +79,10 @@ input {
   color: #fff;
   padding: 10px 14px;
   cursor: pointer;
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 }
 
 .btn-link {
@@ -56,6 +92,20 @@ input {
   color: var(--clr-primary);
   cursor: pointer;
   padding: 0;
+}
+
+.request-box {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 8px;
+  p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.45;
+  }
 }
 
 .error {

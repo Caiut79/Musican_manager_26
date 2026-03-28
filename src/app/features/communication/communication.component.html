@@ -1,7 +1,7 @@
 <div class="page-header">
   <div>
     <h1>Comunicazione</h1>
-    <p class="subtitle">Genera il link di prenotazione e configura le tue tariffe</p>
+    <p class="subtitle">Gestisci prenotazioni, impostazioni e comunicazioni con i clienti</p>
   </div>
 </div>
 
@@ -11,12 +11,15 @@
   <button type="button" class="role-btn" [class.active]="activeRole === 'teacher'" [disabled]="!roleEnabled.teacher" (click)="selectRole('teacher')">🎓 Insegnante</button>
 </div>
 
-<div class="comm-grid">
-
-  <!-- Link generator -->
-  <section class="card">
-    <h2>Link di prenotazione</h2>
-
+<!-- ═══ ACCORDION: Link di prenotazione ═══ -->
+<div class="accordion-card" [class.open]="linkExpanded">
+  <button type="button" class="accordion-trigger" (click)="linkExpanded = !linkExpanded">
+    <span class="acc-icon">🔗</span>
+    <span class="acc-title">Link di prenotazione</span>
+    <span class="acc-badge" *ngIf="bookingSlug">Attivo</span>
+    <span class="acc-chevron">{{ linkExpanded ? '▲' : '▼' }}</span>
+  </button>
+  <div class="accordion-body" *ngIf="linkExpanded">
     <div class="alert-info" *ngIf="!bookingSlug">
       ⚠ Completa prima il <a routerLink="/profile">profilo musicista</a> con nome e cognome.
     </div>
@@ -45,20 +48,25 @@
         <div class="preview-field"><label>Ruolo</label><div class="preview-input">{{ roleLabel }}</div></div>
         <div class="preview-field"><label>Nome</label><div class="preview-input">Mario Rossi</div></div>
         <div class="preview-field"><label>Email</label><div class="preview-input">mario&#64;email.com</div></div>
-        <div class="preview-field"><label>Data richiesta</label><div class="preview-input">15/04/2025</div></div>
-        <div class="preview-field"><label>Orario inizio</label><div class="preview-input">21:00</div></div>
-        <div class="preview-field"><label>Tipo evento</label><div class="preview-input">Serata privata</div></div>
+        <div class="preview-field"><label>Telefono</label><div class="preview-input">+39 333 1234567</div></div>
+        <div class="preview-field"><label>Date (multiple)</label><div class="preview-input">15/04, 22/04, 29/04</div></div>
         <div class="preview-field span-2"><label>Messaggio</label><div class="preview-input preview-textarea">Ciao, ti vorrei contattare per una serata...</div></div>
         <div class="preview-actions">
           <div class="preview-btn">Invia richiesta →</div>
         </div>
       </div>
     </div>
-  </section>
+  </div>
+</div>
 
-  <!-- Settings -->
-  <section class="card" [formGroup]="settingsForm">
-    <h2>Impostazioni {{ roleLabel }}</h2>
+<!-- ═══ ACCORDION: Impostazioni ═══ -->
+<div class="accordion-card" [class.open]="settingsExpanded">
+  <button type="button" class="accordion-trigger" (click)="settingsExpanded = !settingsExpanded">
+    <span class="acc-icon">⚙️</span>
+    <span class="acc-title">Impostazioni {{ roleLabel }}</span>
+    <span class="acc-chevron">{{ settingsExpanded ? '▲' : '▼' }}</span>
+  </button>
+  <div class="accordion-body" *ngIf="settingsExpanded" [formGroup]="settingsForm">
 
     <div class="settings-group">
       <h3>💶 Tariffa serata</h3>
@@ -77,21 +85,31 @@
     </div>
 
     <div class="settings-group">
-      <h3>🔐 Appartenenza e band</h3>
-      <div class="fixed-code-box">
-        <span class="fixed-code-label">Codice di appartenenza</span>
-        <strong>{{ affiliationCode || 'Non assegnato' }}</strong>
-      </div>
-      <div class="check-row">
-        <label class="check-label">
-          <input type="checkbox" formControlName="allowBandInvites">
-          <span>Consenti di essere aggiunto dalle band</span>
+      <h3>🌍 Zona operativa</h3>
+      <div class="row">
+        <label>Città / comune di partenza
+          <input type="text" formControlName="departureCity" placeholder="es. Milano">
+        </label>
+        <label>Regione
+          <select formControlName="departureRegion">
+            <option value="">— Seleziona —</option>
+            <option *ngFor="let r of italianRegions" [value]="r">{{ r }}</option>
+          </select>
         </label>
       </div>
-      <div class="inline-actions">
-        <button type="button" class="share-btn copy" (click)="copyAffiliationCode()">
-          {{ codeCopied ? '✓ Codice copiato' : '📋 Copia codice di appartenenza' }}
-        </button>
+      <div class="field-block">
+        <label>Raggio di ricerca (km)</label>
+        <div class="range-row">
+          <input type="range" formControlName="searchRadiusKm" min="10" max="2000" step="10">
+          <span class="range-value">{{ settingsForm.get('searchRadiusKm')?.value || 100 }} km</span>
+        </div>
+      </div>
+      <div class="range-presets">
+        <button type="button" class="preset-btn" (click)="settingsForm.patchValue({searchRadiusKm: 50})">50 km</button>
+        <button type="button" class="preset-btn" (click)="settingsForm.patchValue({searchRadiusKm: 100})">100 km</button>
+        <button type="button" class="preset-btn" (click)="settingsForm.patchValue({searchRadiusKm: 300})">300 km</button>
+        <button type="button" class="preset-btn" (click)="settingsForm.patchValue({searchRadiusKm: 1000})">Tutta Italia</button>
+        <button type="button" class="preset-btn" (click)="settingsForm.patchValue({searchRadiusKm: 2000})">Europa</button>
       </div>
     </div>
 
@@ -139,44 +157,176 @@
     <button type="button" class="btn-primary" (click)="saveSettings()">
       {{ saved ? '✓ Salvato!' : 'Salva impostazioni' }}
     </button>
-  </section>
-
+  </div>
 </div>
 
-<section class="card history-card">
-  <h2>Storico comunicazioni e contatti</h2>
-  <div class="history-grid">
-    <div class="history-col">
-      <h3>Richieste da link/codice</h3>
-      <div class="history-list" *ngIf="bookingRequests.length; else noRequests">
-        <div class="history-item" *ngFor="let r of bookingRequests | slice:0:12">
-          <div class="history-main">{{ r.customerName || r.name || 'Cliente' }} · {{ r.roleLabel || r.role || '—' }}</div>
-          <div class="history-sub">{{ r.eventDate || r.date }} {{ r.eventTime || '' }} · via {{ r.sourceType || 'link' }}</div>
-        </div>
+<!-- ═══ STORICO, COMUNICAZIONI E CONTATTI (always visible) ═══ -->
+<section class="history-section">
+  <div class="history-header">
+    <h2>Comunicazioni e contatti</h2>
+    <div class="history-kpis" *ngIf="canManageArchiveHistory">
+      <div class="hk-item hk-pending">
+        <span class="hk-value">{{ pendingRequestCount }}</span>
+        <span class="hk-label">Da gestire</span>
       </div>
-      <ng-template #noRequests><p class="history-empty">Nessuna richiesta ricevuta</p></ng-template>
-    </div>
-
-    <div class="history-col">
-      <h3>Contatti creati</h3>
-      <div class="history-list" *ngIf="contactsHistory.length; else noContacts">
-        <div class="history-item" *ngFor="let c of contactsHistory | slice:0:12">
-          <div class="history-main">{{ c.name || 'Contatto' }}</div>
-          <div class="history-sub">{{ c.role || 'cliente' }} · {{ c.phone || c.email || '—' }}</div>
-        </div>
+      <div class="hk-item hk-confirmed">
+        <span class="hk-value">{{ confirmedRequestCount }}</span>
+        <span class="hk-label">Confermate</span>
       </div>
-      <ng-template #noContacts><p class="history-empty">Nessun contatto nello storico</p></ng-template>
-    </div>
-
-    <div class="history-col">
-      <h3>Azioni comunicazione</h3>
-      <div class="history-list" *ngIf="communicationHistory.length; else noLogs">
-        <div class="history-item" *ngFor="let l of communicationHistory | slice:0:12">
-          <div class="history-main">{{ l.type }}</div>
-          <div class="history-sub">{{ l.createdAt | date:'dd/MM/yyyy HH:mm' }}</div>
-        </div>
+      <div class="hk-item hk-receipt">
+        <span class="hk-value">{{ requestReceiptCount }}</span>
+        <span class="hk-label">Ricevute</span>
       </div>
-      <ng-template #noLogs><p class="history-empty">Nessuna azione registrata</p></ng-template>
     </div>
   </div>
+
+  <ng-container *ngIf="canManageArchiveHistory; else teacherHistoryNote">
+
+    <!-- Tabs for history sub-sections -->
+    <div class="history-tabs">
+      <button type="button" class="ht-btn" [class.active]="historyTab === 'requests'" (click)="historyTab = 'requests'">
+        Richieste <span class="ht-count" *ngIf="activeBookingRequests.length">{{ activeBookingRequests.length }}</span>
+      </button>
+      <button type="button" class="ht-btn" [class.active]="historyTab === 'contacts'" (click)="historyTab = 'contacts'">
+        Contatti <span class="ht-count" *ngIf="activeContactsHistory.length">{{ activeContactsHistory.length }}</span>
+      </button>
+      <button type="button" class="ht-btn" [class.active]="historyTab === 'log'" (click)="historyTab = 'log'">
+        Azioni
+      </button>
+    </div>
+
+    <!-- REQUESTS (batch grouped) -->
+    <div class="history-content" *ngIf="historyTab === 'requests'">
+      <div *ngIf="activeBatchGroups.length; else noRequests">
+        <div class="batch-card" *ngFor="let batch of activeBatchGroups | slice:0:20">
+          <!-- Header: nome, band, data richiesta, stato globale -->
+          <div class="batch-header">
+            <div class="batch-header-left">
+              <div class="batch-name">
+                {{ batch.customerName || 'Cliente' }}
+                <span class="batch-band" *ngIf="batch.bandName">· {{ batch.bandName }}</span>
+              </div>
+              <div class="batch-meta">
+                <span *ngIf="batch.eventCity">{{ batch.eventCity }}<span *ngIf="batch.eventProvince"> ({{ batch.eventProvince }})</span> ·</span>
+                <span>{{ batch.customerPhone || batch.customerEmail || '—' }}</span>
+                <span class="batch-date-label">· Richiesta del {{ batch.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
+              </div>
+            </div>
+            <span class="batch-status" [ngClass]="requestStatusClass(batchStatus(batch))">{{ requestStatusLabel(batchStatus(batch)) }}</span>
+          </div>
+
+          <!-- Date list with availability toggle -->
+          <div class="batch-dates">
+            <div class="batch-date-row" *ngFor="let r of batch.requests; let i = index">
+              <span class="batch-date-num">#{{ i + 1 }}</span>
+              <span class="batch-date-val">{{ r.eventDate || '—' }}</span>
+              <span class="batch-date-time">{{ r.eventTime || '' }}</span>
+              <span class="batch-date-type">{{ r.eventType || 'Evento' }}</span>
+              <span class="batch-date-loc" *ngIf="r.eventCity && batch.requests.length > 1">{{ r.eventCity }}</span>
+              <button type="button" class="avail-toggle" [class.avail-yes]="r.status === 'confirmed' || r.status === 'receipt_sent'"
+                      [class.avail-no]="r.status === 'declined'" (click)="toggleDateAvailability(r)">
+                <span *ngIf="r.status === 'confirmed' || r.status === 'receipt_sent'">✓ Disponibile</span>
+                <span *ngIf="r.status === 'declined'">✕ Non disponibile</span>
+                <span *ngIf="r.status === 'new'">Da gestire</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Message -->
+          <div class="batch-message" *ngIf="batch.message">
+            <span class="msg-label">Messaggio:</span> {{ batch.message }}
+          </div>
+
+          <!-- Internal notes -->
+          <div class="batch-notes">
+            <textarea class="notes-textarea" [value]="batch.requests[0].internalNotes || ''"
+                      (blur)="saveInternalNotes(batch, $any($event.target).value)"
+                      placeholder="Note interne (visibili solo a te)..."></textarea>
+          </div>
+
+          <!-- Single action bar -->
+          <div class="batch-actions">
+            <button type="button" class="ra-btn ra-contact" (click)="ensureContactForRequest(batch.requests[0])" [disabled]="hasRequestContact(batch.requests[0])">
+              {{ hasRequestContact(batch.requests[0]) ? '✓ In rubrica' : '+ Rubrica' }}
+            </button>
+            <button type="button" class="ra-btn ra-primary" (click)="sendBatchReceipt(batch)">Invia ricevuta</button>
+            <button type="button" class="ra-btn ra-whatsapp" (click)="contactViaWhatsApp(batch.requests[0])">💬 WhatsApp</button>
+            <button type="button" class="ra-btn ra-danger" (click)="declineBatch(batch)" *ngIf="batchStatus(batch) !== 'declined'">Rifiuta tutte</button>
+          </div>
+
+          <!-- Inline reply -->
+          <div class="reply-section" *ngIf="replyingTo === batch.batchId">
+            <textarea class="reply-textarea" [(ngModel)]="replyMessage" placeholder="Scrivi messaggio di risposta..."></textarea>
+            <div class="reply-actions">
+              <button type="button" class="ra-btn ra-whatsapp" (click)="sendBatchReply(batch, 'whatsapp')" [disabled]="!replyMessage.trim()">💬 WhatsApp</button>
+              <button type="button" class="ra-btn ra-outline" (click)="sendBatchReply(batch, 'email')" [disabled]="!replyMessage.trim()">✉ Email</button>
+              <button type="button" class="ra-btn ra-ghost" (click)="replyingTo = ''">Annulla</button>
+            </div>
+          </div>
+          <button type="button" class="reply-toggle" *ngIf="replyingTo !== batch.batchId" (click)="replyingTo = batch.batchId; replyMessage = ''">
+            ✏️ Rispondi
+          </button>
+        </div>
+      </div>
+      <ng-template #noRequests>
+        <div class="empty-state">
+          <div class="empty-icon">📬</div>
+          <div>Nessuna richiesta ricevuta per {{ roleLabel }}</div>
+          <div class="empty-hint">Condividi il link di prenotazione per ricevere richieste</div>
+        </div>
+      </ng-template>
+    </div>
+
+    <!-- CONTACTS -->
+    <div class="history-content" *ngIf="historyTab === 'contacts'">
+      <div *ngIf="activeContactsHistory.length; else noContacts">
+        <div class="contact-card" *ngFor="let c of activeContactsHistory | slice:0:20">
+          <div class="contact-top">
+            <div class="contact-avatar">{{ (c.displayName || c.name || '?')[0] | uppercase }}</div>
+            <div class="contact-info">
+              <div class="contact-name">{{ c.displayName || c.name || 'Contatto' }}</div>
+              <div class="contact-sub">{{ c.phone || '—' }} · {{ c.email || '—' }}</div>
+            </div>
+          </div>
+          <div class="contact-notes" *ngIf="c.notes">{{ c.notes }}</div>
+        </div>
+      </div>
+      <ng-template #noContacts>
+        <div class="empty-state">
+          <div class="empty-icon">👥</div>
+          <div>Nessun contatto nello storico {{ roleLabel }}</div>
+        </div>
+      </ng-template>
+    </div>
+
+    <!-- LOG -->
+    <div class="history-content" *ngIf="historyTab === 'log'">
+      <div *ngIf="activeCommunicationHistory.length; else noLogs">
+        <div class="log-item" *ngFor="let l of activeCommunicationHistory | slice:0:30">
+          <div class="log-dot" [ngClass]="logDotClass(l.type)"></div>
+          <div class="log-body">
+            <div class="log-title">{{ communicationLabel(l.type) }}</div>
+            <div class="log-sub">
+              {{ l.createdAt | date:'dd/MM/yyyy HH:mm' }}
+              <span *ngIf="l.data['name'] || l.data['customerName']"> · {{ l.data['name'] || l.data['customerName'] }}</span>
+              <span *ngIf="l.data['channel']"> · {{ l.data['channel'] }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ng-template #noLogs>
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <div>Nessuna azione registrata per {{ roleLabel }}</div>
+        </div>
+      </ng-template>
+    </div>
+
+  </ng-container>
+
+  <ng-template #teacherHistoryNote>
+    <div class="teacher-note">
+      La parte storico/conferme non viene archiviata per l'insegnamento. Qui gestisci link e impostazioni, mentre archivio e conferme restano attivi solo per Musicista e DJ.
+    </div>
+  </ng-template>
 </section>

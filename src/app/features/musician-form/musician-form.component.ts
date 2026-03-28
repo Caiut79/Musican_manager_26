@@ -1,6 +1,7 @@
 import { Component, ViewChild, ElementRef } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { SupabaseService } from '../../core/supabase.service';
+import { IdentityContextService } from '../../core/identity-context.service';
 import { Musician } from '../../models/musician';
 import { Router } from '@angular/router';
 import { formatItalianAddressLabel, italianAddressTypeScore } from '../../core/italian-geo';
@@ -176,7 +177,12 @@ export class MusicianFormComponent {
     djColor:     ['#8b5cf6'],
   });
 
-  constructor(private fb: FormBuilder, private supabase: SupabaseService, private router: Router) {
+  constructor(
+    private fb: FormBuilder,
+    private supabase: SupabaseService,
+    private router: Router,
+    private identityContext: IdentityContextService
+  ) {
     this.loadSavedProfile();
     this.migrateVehicleConsumptionModeIfNeeded();
     void this.restoreProfileFromDemo();
@@ -252,6 +258,7 @@ export class MusicianFormComponent {
     const hasLocalProfile = this.hasValue(this.form.get('firstName')?.value) && this.hasValue(this.form.get('lastName')?.value);
     if (hasLocalProfile) return;
     try {
+      await this.identityContext.bootstrap('musician_manager');
       const restored = await this.supabase.loadRegistryProfileForCurrentContext();
       if (!restored) return;
       this.form.patchValue(this.normalizeIrpefBracketsPatch(restored));
@@ -733,7 +740,8 @@ export class MusicianFormComponent {
       persist.forEach(([k, val]) => { if (val) localStorage.setItem(k, val); });
       if (Number.isFinite(Number(v.vehicleConsumption))) localStorage.setItem('mm_vehicleConsumption', String(v.vehicleConsumption));
       if (v.licenseEmail) localStorage.setItem('mm_user_email', v.licenseEmail);
-      localStorage.setItem('mm_profile_snapshot', JSON.stringify(this.form.value));
+      const previousSnapshot = this.readProfileSnapshot();
+      const mergedSnapshotDraft = this.mergeProfileSnapshot(previousSnapshot, this.form.value);
 
       const m: Musician = {
         firstName:      v.firstName!,
@@ -864,6 +872,7 @@ export class MusicianFormComponent {
       if (resolvedId) {
         await this.supabase.syncAllFromLocalStorage(resolvedId);
       }
+      localStorage.setItem('mm_profile_snapshot', JSON.stringify(mergedSnapshotDraft));
       this.hasSavedProfile = true;
       this.refreshIncompleteSteps();
       this.savedOk = true;
@@ -872,6 +881,10 @@ export class MusicianFormComponent {
         : (v.isDj ? `${resolvedDjCode}` : `${musicianRoleCode || resolvedCode}`);
       this.router.navigateByUrl('/dashboard');
     } catch (e: any) {
+      if (this.isDuplicateMusicianCodeError(e)) {
+        const recovered = await this.recoverAfterDuplicateCode();
+        if (recovered) return;
+      }
       this.error = e?.message ? `Salvataggio non riuscito: ${e.message}` : 'Salvataggio non riuscito';
     } finally {
       this.submitting = false;
@@ -929,5 +942,61 @@ export class MusicianFormComponent {
     const code = `DJ${`${hash}`.padStart(4, '0')}`;
     localStorage.setItem('mm_dj_code', code);
     return code;
+  }
+
+  private readProfileSnapshot(): Record<string, any> {
+    try {
+      const parsed = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private mergeProfileSnapshot(previous: Record<string, any>, next: Record<string, any>): Record<string, any> {
+    const merged: Record<string, any> = { ...previous };
+    for (const [key, value] of Object.entries(next || {})) {
+      if (this.hasMeaningfulProfileValue(value)) {
+        merged[key] = value;
+        continue;
+      }
+      if (!(key in merged)) merged[key] = value;
+    }
+    return merged;
+  }
+
+  private hasMeaningfulProfileValue(value: unknown): boolean {
+    if (Array.isArray(value)) return value.length > 0;
+    if (value && typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+    if (typeof value === 'string') return value.trim().length > 0;
+    return value !== null && value !== undefined;
+  }
+
+  private isDuplicateMusicianCodeError(error: any): boolean {
+    const text = `${error?.message || ''} ${error?.appCause?.message || ''} ${error?.appCause?.details || ''}`.toLowerCase();
+    return text.includes('musician_registry_profiles_musician_code_key') || text.includes('duplicate key value');
+  }
+
+  private async recoverAfterDuplicateCode(): Promise<boolean> {
+    try {
+      const context = await this.identityContext.bootstrap('musician_manager');
+      if (!context) return false;
+      const restored = await this.supabase.loadRegistryProfileForCurrentContext();
+      if (restored) {
+        this.form.patchValue(this.normalizeIrpefBracketsPatch(restored), { emitEvent: false });
+      }
+      const snapshot = { ...this.readProfileSnapshot(), ...this.form.value };
+      localStorage.setItem('mm_profile_snapshot', JSON.stringify(snapshot));
+      this.hasSavedProfile = true;
+      this.refreshIncompleteSteps();
+      this.savedOk = true;
+      const musicianCode = `${localStorage.getItem('mm_musician_role_code') || localStorage.getItem('mm_affiliation_code') || ''}`.trim();
+      const djCode = `${localStorage.getItem('mm_dj_code') || ''}`.trim();
+      this.resultCode = musicianCode && djCode ? `${musicianCode} · ${djCode}` : (djCode || musicianCode || 'Profilo recuperato');
+      await this.router.navigateByUrl('/dashboard');
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

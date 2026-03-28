@@ -15,8 +15,10 @@ export type NavItem = {
 export class SidebarComponent {
   @Input() collapsed = false;
   @Input() mobileOpen = false;
+  @Input() badgeCounts: Record<string, number> = {};
   @Output() sidebarToggle = new EventEmitter<void>();
   @Output() sidebarClose = new EventEmitter<void>();
+  @Output() logoutClick = new EventEmitter<void>();
 
   constructor(public themeService: ThemeService) {}
 
@@ -35,7 +37,7 @@ export class SidebarComponent {
     { label: 'Concerti',      icon: 'ti-music',            route: '/concerts' },
     { label: 'Insegnamento',  icon: 'ti-school',           route: '/teaching' },
     { label: 'Report',        icon: 'ti-chart-bar',        route: '/reports' },
-    { label: 'Spese',         icon: 'ti-map-pin',          route: '/expenses' },
+    { label: 'Itinerari & Spese', icon: 'ti-map-pin',      route: '/expenses' },
     { label: 'Comunicazione', icon: 'ti-message-circle',   route: '/communication' },
     { label: 'Rubrica',       icon: 'ti-address-book',     route: '/contacts' },
     { label: 'Archivio',      icon: 'ti-archive',          route: '/archive' },

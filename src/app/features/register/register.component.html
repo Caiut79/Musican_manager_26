@@ -1,24 +1,40 @@
 <div class="auth-card">
-  <h1>{{ mode === 'register' ? 'Attiva account musicista' : 'Accedi' }}</h1>
+  <h1>{{ isInviteFlow ? 'Attiva account musicista' : 'Accedi' }}</h1>
   <p class="subtitle" *ngIf="licenseRef">Ref licenza: <strong>{{ licenseRef }}</strong></p>
+  <p class="subtitle" *ngIf="isInviteFlow; else loginSubtitle">
+    Questo link arriva dal super admin Band Manager. Completa l’attivazione con email e password.
+  </p>
+  <ng-template #loginSubtitle>
+    <p class="subtitle">L’attivazione account demo/licenza viene gestita dal super admin. Qui puoi accedere solo con un account già abilitato.</p>
+  </ng-template>
+  <p class="subtitle invite-ok" *ngIf="isInviteFlow && inviteStatus === 'valid'">{{ inviteInfo }}</p>
+  <p class="subtitle invite-warn" *ngIf="isInviteFlow && inviteStatus === 'checking'">Verifica link licenza in corso…</p>
+  <div class="invite-mode" *ngIf="isInviteFlow && inviteStatus === 'valid'">
+    <button type="button" class="mode-btn" [class.active]="inviteMode === 'signup'" (click)="switchInviteMode('signup')">Nuovo account</button>
+    <button type="button" class="mode-btn" [class.active]="inviteMode === 'login'" (click)="switchInviteMode('login')">Hai già un account? Accedi</button>
+  </div>
 
   <form [formGroup]="form" (ngSubmit)="submit()">
     <label>Email
-      <input type="email" formControlName="email" placeholder="nome@email.com" autocomplete="email">
+      <input type="email" formControlName="email" placeholder="nome@email.com" autocomplete="email" [readonly]="isInviteFlow && !!inviteEmail">
     </label>
 
     <label>Password
       <input type="password" formControlName="password" placeholder="Minimo 6 caratteri" autocomplete="current-password">
     </label>
 
-    <button type="submit" class="btn-primary" [disabled]="loading">
-      {{ loading ? 'Attendere…' : (mode === 'register' ? 'Registrati e continua' : 'Accedi e continua') }}
+    <button type="submit" class="btn-primary" [disabled]="loading || (isInviteFlow && inviteStatus === 'invalid')">
+      {{ loading ? 'Attendere…' : (isInviteFlow ? (inviteMode === 'login' ? 'Accedi e attiva licenza' : 'Attiva account e continua') : 'Accedi e continua') }}
     </button>
   </form>
 
-  <button type="button" class="btn-link" (click)="toggleMode()">
-    {{ mode === 'register' ? 'Hai già un account? Accedi' : 'Non hai un account? Registrati' }}
-  </button>
+  <div class="request-box" *ngIf="!isInviteFlow">
+    <strong>Non hai ancora l’accesso?</strong>
+    <p>Invia la richiesta al super admin e fai attivare la tua demo/licenza. Il testo viene copiato negli appunti così puoi inoltrarlo subito.</p>
+    <button type="button" class="btn-link" (click)="copyActivationRequest()">
+      {{ requestCopied ? 'Richiesta copiata' : 'Copia richiesta attivazione' }}
+    </button>
+  </div>
 
   <p class="error" *ngIf="error">{{ error }}</p>
 </div>

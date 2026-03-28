@@ -1,7 +1,14 @@
 node_modules
 build
 dist
+.angular
 .git
+.github
+.vscode
+.claude
+.DS_Store
+coverage
+.eslintcache
 .trae
 .log
 .figma

@@ -104,6 +104,7 @@ body {
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 h1,
@@ -119,6 +120,7 @@ select,
 textarea {
   font-family: inherit;
   font-size: 14px;
+  max-width: 100%;
 
   &:focus {
     outline: none;
@@ -264,6 +266,7 @@ textarea {
   border-radius: var(--radius);
   padding: 20px;
   box-shadow: var(--shadow);
+  min-width: 0;
 
   &.g-card-sm { padding: 14px; }
 }
@@ -366,7 +369,22 @@ textarea {
   input:not([type='checkbox']):not([type='color']):not([type='radio']),
   select,
   textarea {
-    font-size: 13px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 430px) {
+  .g-card {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .btn-primary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-toggle {
+    width: 100%;
+    min-height: 42px;
   }
 }
 

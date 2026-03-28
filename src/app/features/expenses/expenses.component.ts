@@ -1397,7 +1397,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private async syncSupabaseExpenses(): Promise<void> {
     const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
-    const musicianId = `${profile.id || ''}`.trim();
+    const musicianId = `${profile.id || localStorage.getItem('musicianId') || ''}`.trim();
     if (!musicianId) return;
     try {
       await this.supabase.syncExpensesFromLocalStorage(musicianId);

@@ -14,12 +14,14 @@ import { Subject } from 'rxjs';
 // Every localStorage key used anywhere in the app is declared here.
 export const LS = {
   // ── Identity ──────────────────────────────────────────────────────────────
+  AUTH_USER_ID:           'mm_auth_user_id',
   MUSICIAN_ID:            'musicianId',
   AFFILIATION_CODE:       'mm_affiliation_code',
   AFFILIATION_CODE_LEGACY:'musicianCode',           // kept for backward compat reads
   LICENSE_REF:            'mm_license_ref',
   LICENSE_APP:            'mm_license_app',
   USER_EMAIL:             'mm_user_email',
+  APP_SCHEMA_VERSION:     'mm_app_schema_version',
 
   // ── Profile ───────────────────────────────────────────────────────────────
   PROFILE_SNAPSHOT:       'mm_profile_snapshot',
@@ -40,6 +42,7 @@ export const LS = {
   BAND_CREDITS:           'mm_band_credits',
   EXPENSES:               'mm_expenses',
   CONTACTS:               'mm_contacts',
+  BOOKING_REQUESTS:       'mm_booking_requests',
   NOTIFICATIONS:          'mm_notifications',
   CONTRACTS:              'mm_contracts',
   INVOICES:               'mm_invoices',
@@ -209,6 +212,50 @@ export class LocalStorageService {
       licenseRef: localStorage.getItem(LS.LICENSE_REF),
       email:      localStorage.getItem(LS.USER_EMAIL),
     };
+  }
+
+  getAuthUserId(): string | null {
+    return localStorage.getItem(LS.AUTH_USER_ID);
+  }
+
+  setAuthIdentity(authUserId: string | null, email?: string | null): void {
+    if (authUserId) localStorage.setItem(LS.AUTH_USER_ID, authUserId);
+    else localStorage.removeItem(LS.AUTH_USER_ID);
+    if (email !== undefined) {
+      const normalizedEmail = `${email || ''}`.trim().toLowerCase();
+      if (normalizedEmail) localStorage.setItem(LS.USER_EMAIL, normalizedEmail);
+      else localStorage.removeItem(LS.USER_EMAIL);
+    }
+  }
+
+  clearAccountScopedData(): void {
+    const preserve = new Map<string, string>();
+    [LS.THEME, LS.TOLLGURU_API_KEY, LS.TOLLGURU_VEHICLE_TYPE].forEach(key => {
+      const value = localStorage.getItem(key);
+      if (value !== null) preserve.set(key, value);
+    });
+    localStorage.clear();
+    preserve.forEach((value, key) => localStorage.setItem(key, value));
+  }
+
+  clearOperationalData(): void {
+    [
+      LS.EVENTS,
+      LS.CONCERTS,
+      LS.SERVICE_PAYMENTS,
+      LS.BAND_CREDITS,
+      LS.EXPENSES,
+      LS.CONTACTS,
+      LS.BOOKING_REQUESTS,
+      LS.NOTIFICATIONS,
+      LS.CONTRACTS,
+      LS.INVOICES,
+      LS.ARCHIVE_DIRECTORY,
+      LS.DASHBOARD_EXPENSE_CTX,
+      LS.DASHBOARD_EXPENSE_RES,
+      LS.CONCERT_EXPENSE_CTX,
+      LS.CONCERT_EXPENSE_RES,
+    ].forEach(key => localStorage.removeItem(key));
   }
 
   /** True if the user has completed basic registration (has a name). */

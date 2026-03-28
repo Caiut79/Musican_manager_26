@@ -11,6 +11,7 @@
   gap: 14px;
   margin-bottom: 14px;
   @media (max-width: 900px) { grid-template-columns: 1fr; }
+  @media (max-width: 430px) { gap: 12px; }
 }
 
 .form-col { display: flex; flex-direction: column; gap: 12px; }
@@ -52,6 +53,7 @@
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);
   display: flex; flex-direction: column; gap: 12px;
+  min-width: 0;
 
   h2 { font-size: 13px; font-weight: 700; margin: 0; padding-bottom: 10px;
     border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; gap: 8px;
@@ -442,5 +444,156 @@ select {
   }
   &.suggested {
     box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.45);
+  }
+}
+
+@media (max-width: 430px) {
+  .page-header {
+    margin-bottom: 12px;
+    h1 { font-size: 20px; }
+    .subtitle { font-size: 12px; }
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  label {
+    font-size: 13px;
+  }
+
+  .field-hint,
+  .address-suggestion,
+  .itinerary-meta,
+  .result-label,
+  .pedaggi-note,
+  .waypoints-hint {
+    font-size: 12px;
+  }
+
+  .waypoints-header,
+  .extras-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .waypoint-actions,
+  .pedaggi-tools,
+  .pedaggi-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .waypoint-actions > *,
+  .pedaggi-tools > *,
+  .pedaggi-actions > * {
+    flex: 1 1 0;
+    min-height: 38px;
+  }
+
+  .waypoint-row {
+    grid-template-columns: 20px 1fr;
+    gap: 8px;
+
+    .btn-remove {
+      grid-column: 2;
+      justify-self: end;
+    }
+  }
+
+  .extra-row {
+    grid-template-columns: 1fr;
+  }
+
+  .amount-input {
+    text-align: left;
+  }
+
+  .itinerary-btn {
+    padding: 12px;
+    gap: 4px;
+  }
+
+  .itinerary-title {
+    font-size: 14px;
+  }
+
+  .result-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+  }
+
+  .result-value {
+    font-size: 15px;
+  }
+
+  .nav-buttons {
+    flex-direction: column;
+  }
+
+  .nav-btn {
+    width: 100%;
+    min-height: 42px;
+    justify-content: flex-start;
+    padding: 10px 12px;
+  }
+
+  .map-toolbar {
+    position: sticky;
+    top: calc(60px + env(safe-area-inset-top));
+    z-index: 4;
+    background: var(--bg);
+    padding-bottom: 6px;
+  }
+
+  .map-wrapper {
+    height: 320px;
+    border-radius: 14px;
+  }
+
+  .map-placeholder span {
+    font-size: 34px;
+  }
+
+  .pedaggi-modal {
+    inset: auto 0 0 0;
+    top: auto;
+    left: 0;
+    transform: none;
+    width: 100vw;
+    max-height: min(82dvh, 720px);
+    border-radius: 18px 18px 0 0;
+  }
+
+  .pedaggi-modal-body {
+    padding: 12px 12px calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .pedaggi-row,
+  .pedaggi-row.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .expenses-list {
+    gap: 10px;
+  }
+
+  .expense-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .expense-route,
+  .expense-details,
+  .expense-actions {
+    width: 100%;
+  }
+
+  .expense-actions {
+    justify-content: flex-end;
   }
 }

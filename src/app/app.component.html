@@ -2,8 +2,10 @@
   <app-sidebar
     [collapsed]="sidebarCollapsed"
     [mobileOpen]="mobileMenuOpen"
+    [badgeCounts]="sidebarBadges"
     (sidebarToggle)="toggleSidebar()"
-    (sidebarClose)="closeMobileMenu()">
+    (sidebarClose)="closeMobileMenu()"
+    (logoutClick)="logout()">
   </app-sidebar>
 
   <div class="app-layout" [class.sidebar-collapsed]="sidebarCollapsed">
@@ -11,13 +13,29 @@
       <button *ngIf="!mobileMenuOpen" type="button" class="hamburger" (click)="toggleSidebar()" aria-label="Menu">
         <span></span><span></span><span></span>
       </button>
-      <span class="mobile-brand">𝅘𝅥𝅮 Musican Manager</span>
+      <span class="mobile-brand">𝅘𝅥𝅮 Musican Manager</span>
+      <button type="button" class="mobile-notifications" (click)="openNotifications()" aria-label="Notifiche">
+        <span class="mobile-notifications-icon">🔔</span>
+        <span class="mobile-notifications-badge" *ngIf="unreadNotifications > 0">{{ unreadNotifications }}</span>
+      </button>
     </header>
     <main class="app-content" aria-label="Contenuto principale">
       <div class="container">
         <router-outlet></router-outlet>
       </div>
     </main>
+  </div>
+
+  <!-- Toast notifications -->
+  <div class="toast-container">
+    <div class="toast" *ngFor="let t of toasts" (click)="onToastClick(t)">
+      <div class="toast-icon">🔔</div>
+      <div class="toast-body">
+        <div class="toast-title">{{ t.title }}</div>
+        <div class="toast-msg">{{ t.message }}</div>
+      </div>
+      <button type="button" class="toast-close" (click)="dismissToast(t.id); $event.stopPropagation()">✕</button>
+    </div>
   </div>
 </ng-container>
 

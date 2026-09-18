@@ -353,6 +353,9 @@
   font-weight: 500;
   border: 1px solid #a7f3d0;
 }
+.gcal-message--multiline {
+  white-space: pre-line;
+}
 .gcal-message.is-error {
   background: #fef2f2;
   color: #991b1b;

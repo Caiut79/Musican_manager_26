@@ -68,7 +68,7 @@
         type="button"
         class="btn-ghost"
         (click)="toggleInstructions()"
-        *ngIf="showInstructions || state == 'not_configured'">
+        *ngIf="showInstructions || state === 'not_configured'">
         {{ showInstructions ? 'Nascondi istruzioni' : 'Mostra istruzioni' }}
       </button>
     </div>
@@ -224,7 +224,7 @@
         <div class="gcal-warning" *ngIf="!selectedCalendarId">
           <span class="gcal-warning-icon" aria-hidden="true">⚠️</span>
           <div class="gcal-warning-text">
-            <strong>Push automatico disattivato!</strong><br/>
+            <strong>Push automatico disattivato!</strong><br>
             Seleziona un calendario in elenco per sincronizzare gli eventi che crei nell'app
             direttamente nel tuo Google Calendar. Senza un calendario selezionato,
             gli eventi rimarranno solo in locale (non verranno inviati a Google).
@@ -281,7 +281,7 @@
        1️⃣ 📡 GRUPPO 1: Connessione Google & Credenziali
        (tutto quello che serve per collegarsi: istruzioni, client id, tendina calendari)
        ══════════════════════════════════════════════════════════════════════════ -->
-  <div class="gcal-section-group" aria-label="Gruppo 1 - Connessione e credenziali Google">
+  <section class="gcal-section-group" aria-label="Gruppo 1 - Connessione e credenziali Google">
     <header class="gcal-section-header gcal-section-header--blue">
       <div class="gcal-section-icon" aria-hidden="true">📡</div>
       <div class="gcal-section-title-wrap">
@@ -292,13 +292,13 @@
         </p>
       </div>
     </header>
-  </div>
+  </section>
 
   <!-- ══════════════════════════════════════════════════════════════════════════
        2️⃣ 🔄 GRUPPO 2: Sincronizzazione & Manutenzione
        (Cutoff, Pulizia Passato, Deduplica, Reset)
        ══════════════════════════════════════════════════════════════════════════ -->
-  <div class="gcal-section-group" aria-label="Gruppo 2 - Sincronizzazione e strumenti manutenzione">
+  <section class="gcal-section-group" aria-label="Gruppo 2 - Sincronizzazione e strumenti manutenzione">
     <header class="gcal-section-header gcal-section-header--green">
       <div class="gcal-section-icon" aria-hidden="true">🔄</div>
       <div class="gcal-section-title-wrap">
@@ -310,7 +310,7 @@
         </p>
       </div>
     </header>
-  </div>
+  </section>
 
   <!-- ══════════════════════════════════════════════════════════════════════════
        3️⃣ 📝 GRUPPO 3: Formato Note Google Calendar
@@ -418,7 +418,7 @@
 
       <!-- Colonna DX: ANTEPRIMA LIVE card stile Google -->
       <div class="gcal-notes-col-preview">
-        <div class="gcal-note-preview" role="region" aria-label="Anteprima nota Google di esempio">
+        <section class="gcal-note-preview" aria-label="Anteprima nota Google di esempio">
           <header class="gcal-note-preview-head">
             <div class="gcal-note-preview-head-icon" aria-hidden="true">📝</div>
             <div>
@@ -426,7 +426,7 @@
               <p class="gcal-note-preview-title">{{ previewSampleEvent.title }}</p>
             </div>
           </header>
-          <pre class="gcal-note-preview-body" aria-label="Versione testuale anteprima nota Google">{{ notePreviewText }}</pre>
+          <pre class="gcal-note-preview-body">{{ notePreviewText }}</pre>
           <footer class="gcal-note-preview-foot">
             <p>
               🎯 <strong>Stesso formato 1:1</strong> che vedrai dentro Google
@@ -434,12 +434,12 @@
               userà questa configurazione.
             </p>
           </footer>
-        </div>
+        </section>
       </div>
 
     </div>
   </section>
-  <div class="gcal-cutoff-section" aria-label="Filtro data di inizio sincronizzazione con Google Calendar">
+  <section class="gcal-cutoff-section" aria-label="Filtro data di inizio sincronizzazione con Google Calendar">
     <header class="gcal-cutoff-head">
       <div class="gcal-cutoff-icon" aria-hidden="true">
         <!-- Icona SVG a gradiente (NON emoji!) — Filtro + Calendario (icona professionale) -->
@@ -469,7 +469,7 @@
         <h3 class="gcal-cutoff-title">🎚️  Filtro sincronizzazione</h3>
         <p class="gcal-cutoff-subtitle">
           Decidi <strong>da quale data</strong> l'applicazione deve sincronizzare gli eventi con il tuo Google Calendar.
-          <br/>
+          <br>
           Qualsiasi evento <strong>precedente</strong> alla data scelta verrà <em>ignorato completamente</em>:
           non verrà importato nel calendario dell'app, e nessuna modifica o cancellazione locale verrà riportata su Google per quelle date.
         </p>
@@ -515,19 +515,18 @@
         entra in MODIFICA e usa il pulsante <strong>"📍 Oggi"</strong> per evitare di importare tutto lo storico passato,
         poi clicca SALVA.
       </p>
-      <p class="gcal-message"
+      <p class="gcal-message gcal-message--multiline"
          *ngIf="syncStartDateMessage"
-         [class.is-error]="syncStartDateMessageIsError"
-         style="white-space: pre-line;">
+         [class.is-error]="syncStartDateMessageIsError">
         {{ syncStartDateMessage }}
       </p>
     </div>
-  </div>
+  </section>
 
   <!-- ══════════════════════════════════════════════════════════════════════════
        SEZIONE PULIZIA PASSATO (solo App, NON Google Calendar!)
        ══════════════════════════════════════════════════════════════════════════ -->
-  <div class="gcal-wipe-section" aria-label="Pulizia eventi passati dalla applicazione">
+  <section class="gcal-wipe-section" aria-label="Pulizia eventi passati dalla applicazione">
     <header class="gcal-wipe-head">
       <div class="gcal-wipe-icon" aria-hidden="true">
         <!-- Icone SVG stilizzate, gradienti, NON emoji (profilo Claudio) -->
@@ -596,12 +595,12 @@
        [class.is-error]="wipeMessageIsError">
       {{ wipeMessage }}
     </p>
-  </div>
+  </section>
 
   <!-- ══════════════════════════════════════════════════════════════════════════
        SEZIONE DEDUPLICAZIONE EVENTI (stesso titolo + data + tipo)
        ══════════════════════════════════════════════════════════════════════════ -->
-  <div class="gcal-wipe-section gcal-dedup-section" aria-label="Deduplicazione eventi duplicati">
+  <section class="gcal-wipe-section gcal-dedup-section" aria-label="Deduplicazione eventi duplicati">
     <header class="gcal-wipe-head">
       <div class="gcal-wipe-icon" aria-hidden="true">
         <svg viewBox="0 0 48 48" width="38" height="38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Deduplica">
@@ -686,10 +685,9 @@
         </p>
       </div>
 
-      <p class="gcal-message"
+      <p class="gcal-message gcal-message--multiline"
          *ngIf="dedupMessage"
-         [class.is-error]="dedupMessageIsError"
-         style="white-space: pre-line;">
+         [class.is-error]="dedupMessageIsError">
         {{ dedupMessage }}
       </p>
     </div>
@@ -760,21 +758,20 @@
         </p>
       </div>
 
-      <p class="gcal-message"
+      <p class="gcal-message gcal-message--multiline"
          *ngIf="gDedupMessage"
-         [class.is-error]="gDedupMessageIsError"
-         style="white-space: pre-line;">
+         [class.is-error]="gDedupMessageIsError">
         {{ gDedupMessage }}
       </p>
     </div>
-  </div>
+  </section>
 
   <!-- ════════════════════════════════════════════════════════════════════════
        SEZIONE RESET COMPLETO LOCALE (per NUOVO CALENDARIO GOOGLE)
        Claudio ha creato un nuovo calendario pulito con 8-9 date →
        svuota eventi e pagamenti in APP, parte da zero con import pulito.
        ════════════════════════════════════════════════════════════════════════ -->
-  <div class="gcal-reset-section" aria-label="Reset completo locale per nuovo calendario">
+  <section class="gcal-reset-section" aria-label="Reset completo locale per nuovo calendario">
     <header class="gcal-reset-head">
       <div class="gcal-reset-icon" aria-hidden="true">
         <svg viewBox="0 0 48 48" width="38" height="38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Reset completo">
@@ -885,11 +882,10 @@
       </p>
     </div>
 
-    <p class="gcal-message"
+    <p class="gcal-message gcal-message--multiline"
        *ngIf="resetMessage"
-       [class.is-error]="resetMessageIsError"
-       style="white-space: pre-line;">
+       [class.is-error]="resetMessageIsError">
       {{ resetMessage }}
     </p>
-  </div>
+  </section>
 </section>

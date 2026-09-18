@@ -1,7 +1,7 @@
 <section class="dashboard-hero">
   <div class="hero-copy">
     <span class="hero-kicker">Panoramica operativa</span>
-    <div class="page-header" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+    <div class="page-header">
       <div>
         <h1 *ngIf="musicianName">Ciao, <strong>{{ musicianName }}</strong></h1>
         <h1 *ngIf="!musicianName">Benvenuto in Musican Manager</h1>
@@ -18,7 +18,7 @@
       </button>
     </div>
     <!-- Messaggio risultato quick sync GCal -->
-    <div *ngIf="gcalQuickMsg" class="form-success" style="margin:8px 0 0; padding:10px 14px; border-radius:10px; background:#eef2ff; color:#3730a3; font-size:13px;">
+    <div *ngIf="gcalQuickMsg" class="form-success gcal-quick-msg-dashboard">
       {{ gcalQuickMsg }}
     </div>
   </div>

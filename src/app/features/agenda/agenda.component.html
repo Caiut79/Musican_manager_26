@@ -12,7 +12,7 @@
       <ng-container *ngIf="!isTeacherProfile && !isMusicianProfile && !isDjProfile">Gestisci eventi</ng-container>
     </p>
   </div>
-  <div class="header-actions" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+  <div class="header-actions header-actions-inline">
     <button
       type="button"
       class="quick-sync-btn"
@@ -27,7 +27,7 @@
 </div>
 
 <!-- Messaggio risultato quick sync GCal -->
-<div *ngIf="gcalQuickMsg" class="form-success" style="margin:8px 0 16px; padding:10px 14px; border-radius:10px; background:#eef2ff; color:#3730a3; font-size:13px;">
+<div *ngIf="gcalQuickMsg" class="form-success gcal-quick-msg">
   {{ gcalQuickMsg }}
 </div>
 

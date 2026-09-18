@@ -6,6 +6,22 @@
   margin-bottom: 20px;
 }
 
+.header-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gcal-quick-msg {
+  margin: 8px 0 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 13px;
+}
+
 .page-header-left {
   h1 {
     font-size: 22px;

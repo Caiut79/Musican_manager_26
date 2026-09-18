@@ -6,7 +6,9 @@ import {
   ConnectionState
 } from '../../core/google-calendar.service';
 import {
-  runMigration_WipePastEventsFromAppOnly
+  runMigration_WipePastEventsFromAppOnly,
+  analyzeDuplicateStats,
+  runMigration_DeduplicateEvents
 } from '../../core/local-storage.service';
 import { Subject, takeUntil } from 'rxjs';
 
@@ -67,6 +69,29 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     } catch { /* ignora */ }
   }
 
+  // --- Campi per DEDUPLICAZIONE EVENTI (stesso titolo + data + tipo) ---
+  dedupRunning = false;
+  dedupMessage = '';
+  dedupMessageIsError = false;
+  dedupStats = {
+    totalEvents: 0,
+    duplicateGroupsCount: 0,
+    duplicateEventsCount: 0,
+    groups: [] as { key: string; sampleTitle: string; date: string; count: number; }[],
+    lastRemovedCount: 0,
+    lastGroupsCleaned: 0,
+    lastBackupKey: '',
+  };
+  private _refreshDedupStats(): void {
+    try {
+      const s = analyzeDuplicateStats();
+      this.dedupStats.totalEvents = s.totalEvents;
+      this.dedupStats.duplicateGroupsCount = s.duplicateGroupsCount;
+      this.dedupStats.duplicateEventsCount = s.duplicateEventsCount;
+      this.dedupStats.groups = s.groups.slice(0, 8);
+    } catch { /* ignora */ }
+  }
+
   private readonly _destroy$ = new Subject<void>();
 
   constructor(private readonly gcal: GoogleCalendarService) {}
@@ -78,6 +103,7 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     this.syncStartDateInput = initialCutoff;
     this.syncStartDateDisplay = this._formatSyncStartDateIta(initialCutoff);
     this._computeWipeStats();
+    this._refreshDedupStats(); // ★ Statistiche deduplica live
     this.gcal.connectionState$
       .pipe(takeUntil(this._destroy$))
       .subscribe((s) => {
@@ -292,6 +318,7 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
         if (bk) this.wipeStats.backupKey = bk;
       } catch {}
       this._computeWipeStats();
+      this._refreshDedupStats(); // ★ Aggiorna anche stats dedup
       if (removed > 0) {
         this.wipeMessage =
           `✅ Pulizia completata con successo! ` +
@@ -308,6 +335,65 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
       this.wipeMessageIsError = true;
     } finally {
       this.wipeRunning = false;
+    }
+  }
+
+  // ─── Azione: DEDUPLICAZIONE EVENTI (stesso titolo + data + tipo) ──────────
+  public async onDedupEventsClick(): Promise<void> {
+    if (this.dedupRunning) return;
+    this.dedupRunning = true;
+    this.dedupMessage = '';
+    this.dedupMessageIsError = false;
+    this._refreshDedupStats();
+
+    const duplicates = this.dedupStats.duplicateEventsCount;
+    if (duplicates === 0) {
+      this.dedupMessage = '✅ Nessun evento duplicato! Il tuo calendario è già pulito.';
+      this.dedupRunning = false;
+      return;
+    }
+
+    // Conferma 2 fasi perché comunque rimuove eventi (anche se con backup!)
+    const msg = `Procedere con la DEDUPLICAZIONE?\n\n` +
+      `📦  Eventi totali presenti:    ${this.dedupStats.totalEvents}\n` +
+      `🔍  Gruppi duplicati:          ${this.dedupStats.duplicateGroupsCount}\n` +
+      `🗑️  Eventi superflui (N-1):    ${this.dedupStats.duplicateEventsCount}\n\n` +
+      (this.dedupStats.groups.length ? `💡 Esempi:\n${this.dedupStats.groups.slice(0, 4).map(g => `   · ${g.date}: "${g.sampleTitle.slice(0, 40)}" ×${g.count}`).join('\n')}\n\n` : '') +
+      `💾  Verrà creato un BACKUP COMPLETO nel browser.\n` +
+      `🎯  Per ogni gruppo terrò 1 solo evento (quello con googleEventId o più recente).\n` +
+      `🔒  Google Calendar NON VERRA' TOCATO (scritta LS diretta, bypass sync).\n\n` +
+      `Confermi di voler procedere?`;
+    const ok = window.confirm(msg);
+    if (!ok) {
+      this.dedupRunning = false;
+      return;
+    }
+
+    try {
+      const r = runMigration_DeduplicateEvents();
+      this.dedupStats.lastRemovedCount = r.removedCount;
+      this.dedupStats.lastGroupsCleaned = r.groupsCleaned;
+      this.dedupStats.lastBackupKey = r.backupKey;
+      this._refreshDedupStats();
+      this._computeWipeStats();
+
+      if (r.removedCount > 0) {
+        this.dedupMessage =
+          `✅ Deduplicazione completata! ` +
+          `❌ Rimossi ${r.removedCount} eventi superflui (${r.groupsCleaned} gruppi puliti). ` +
+          `✅ Restanti: ${r.afterCount} eventi. ` +
+          `💾 Backup LS: ${(r.backupKey || 'creato').slice(0, 45)}...` +
+          ` ⚠️  RICARICA la pagina (F5) per vedere le liste AGGIORNATE e i badge riallineati!`;
+      } else {
+        this.dedupMessage = '⚠️ Nessun evento rimosso (backup fatto, controlla Console DevTools).';
+        this.dedupMessageIsError = true;
+      }
+    } catch (err) {
+      console.error('[UI] dedup fallito:', err);
+      this.dedupMessage = `❌ Errore durante deduplica: ${String(err)}`;
+      this.dedupMessageIsError = true;
+    } finally {
+      this.dedupRunning = false;
     }
   }
 

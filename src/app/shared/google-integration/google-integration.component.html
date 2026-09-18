@@ -383,4 +383,100 @@
       {{ wipeMessage }}
     </p>
   </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       SEZIONE DEDUPLICAZIONE EVENTI (stesso titolo + data + tipo)
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="gcal-wipe-section gcal-dedup-section" aria-label="Deduplicazione eventi duplicati">
+    <header class="gcal-wipe-head">
+      <div class="gcal-wipe-icon" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="38" height="38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Deduplica">
+          <defs>
+            <linearGradient id="dedupBlueGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#60a5fa"/>
+              <stop offset="100%" stop-color="#2563eb"/>
+            </linearGradient>
+            <linearGradient id="dedupCheckGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#34d399"/>
+              <stop offset="100%" stop-color="#059669"/>
+            </linearGradient>
+          </defs>
+          <!-- 3 Cards pila (duplicati) -->
+          <rect x="6" y="10" width="30" height="22" rx="4" fill="#cbd5e1" stroke="#94a3b8" stroke-width="2" transform="translate(5, 0)"/>
+          <rect x="6" y="10" width="30" height="22" rx="4" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2" transform="translate(2.5, 3)"/>
+          <rect x="6" y="10" width="30" height="22" rx="4" fill="url(#dedupBlueGrad)" stroke="#1d4ed8" stroke-width="2"/>
+          <!-- Riga titolo evento -->
+          <rect x="10" y="16" width="16" height="3" rx="1.5" fill="#fff" opacity="0.9"/>
+          <rect x="10" y="22" width="22" height="3" rx="1.5" fill="#fff" opacity="0.6"/>
+          <rect x="10" y="27" width="12" height="3" rx="1.5" fill="#fff" opacity="0.6"/>
+          <!-- Badge Check verde sull'angolo -->
+          <circle cx="37" cy="35" r="7.5" fill="url(#dedupCheckGrad)" stroke="#065f46" stroke-width="1.8"/>
+          <path d="M33.5 35.2 L36 37.8 L40.5 32.6" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
+      <div class="gcal-wipe-head-copy">
+        <h3 class="gcal-wipe-title">Deduplica eventi</h3>
+        <p class="gcal-wipe-subtitle">
+          Risolve i duplicati: concerti o lezioni con <strong>stesso titolo, data e tipo</strong>.
+          Mantiene 1 solo evento per gruppo (quello già sincronizzato su Google o più recente).
+          Utile dopo errori di sincronizzazione o import ripetuti.
+        </p>
+      </div>
+    </header>
+
+    <div class="gcal-wipe-stats">
+      <div class="gcal-wipe-stat stat-total">
+        <span class="ws-num">{{ dedupStats.totalEvents }}</span>
+        <span class="ws-label">📦 Eventi TOTALI</span>
+      </div>
+      <div class="gcal-wipe-stat stat-past" [class.has-dup]="dedupStats.duplicateGroupsCount > 0">
+        <span class="ws-num">{{ dedupStats.duplicateGroupsCount }}</span>
+        <span class="ws-label">🔍 GRUPPI duplicati</span>
+      </div>
+      <div class="gcal-wipe-stat stat-future" [class.has-dup]="dedupStats.duplicateEventsCount > 0">
+        <span class="ws-num">{{ dedupStats.duplicateEventsCount }}</span>
+        <span class="ws-label">🗑️  SUPERFLUI (N-1)</span>
+      </div>
+    </div>
+
+    <!-- Esempi primi 4 gruppi duplicati (diagnostica utente) -->
+    <ng-container *ngIf="dedupStats.groups.length > 0 && !dedupMessage">
+      <div class="gcal-dedup-samples">
+        <p class="gcal-dedup-samples-title">💡 Anteprima gruppi che verranno riuniti:</p>
+        <ul class="gcal-dedup-list">
+          <li *ngFor="let g of dedupStats.groups">
+            <span class="dup-count">×{{ g.count }}</span>
+            <span class="dup-date">{{ g.date }}</span>
+            <span class="dup-title">{{ g.sampleTitle.length > 48 ? g.sampleTitle.slice(0, 48) + '…' : g.sampleTitle }}</span>
+          </li>
+        </ul>
+      </div>
+    </ng-container>
+
+    <div class="gcal-wipe-actions">
+      <button
+        type="button"
+        class="btn-primary btn-wipe-past"
+        style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border-color: #1e40af;"
+        (click)="onDedupEventsClick()"
+        [disabled]="dedupRunning || dedupStats.duplicateEventsCount === 0">
+        {{ dedupRunning ? 'Deduplicazione in corso…' : '🧬  Deduplica eventi (Solo dalla App!)' }}
+      </button>
+      <p class="gcal-wipe-hint" *ngIf="dedupStats.duplicateEventsCount === 0 && !dedupMessage">
+        🎉 Nessun evento duplicato. Il tuo calendario è già pulito.
+      </p>
+      <p class="gcal-wipe-hint" *ngIf="dedupStats.duplicateEventsCount > 0 && !dedupMessage">
+        💾 Prima della deduplicazione viene creato un <strong>backup completo</strong> in
+        <code>localStorage</code> chiave <code>mm_backup_pre_dedup_*</code> (ripristinabile in 1 clic).
+        &nbsp;🔒&nbsp; Google Calendar <strong>NON viene toccato</strong>.
+      </p>
+    </div>
+
+    <p class="gcal-message"
+       *ngIf="dedupMessage"
+       [class.is-error]="dedupMessageIsError"
+       style="white-space: pre-line;">
+      {{ dedupMessage }}
+    </p>
+  </div>
 </section>

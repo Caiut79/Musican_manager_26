@@ -1243,3 +1243,206 @@ export function runMigration_WipePastEventsFromAppOnly(): number {
 
   return removedEventsCount;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MIGRAZIONE 3: 🧹 DEDUPLICAZIONE EVENTI (stesso titolo + data + tipo)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Normalizzazione titolo per chiave deduplica (stessa logica fuzzy match GCal) */
+function _normDedup(s: string): string {
+  return `${s || ''}`
+    .trim()
+    .toLowerCase()
+    .replace(/[\s\-_.,;:'"!?()\[\]{}]/g, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+/** Statistiche live sui duplicati (per UI Profilo). NON modifica nulla.
+ *  Restituisce gruppi di eventi duplicati (stessa data + titolo norm. + tipo).
+ *  Utile per mostrare "5 gruppi duplicati · 12 eventi superflui da rimuovere".
+ */
+export function analyzeDuplicateStats(): {
+  totalEvents: number;
+  duplicateGroupsCount: number;
+  duplicateEventsCount: number;       // quanti eventi superflui (N-1 per gruppo)
+  groups: { key: string; sampleTitle: string; date: string; count: number; keepCandidateTitle: string; }[];
+} {
+  let totalEvents = 0;
+  const buckets = new Map<string, EventDetail[]>();
+  try {
+    const raw = localStorage.getItem(LS.EVENTS);
+    if (!raw) { return { totalEvents: 0, duplicateGroupsCount: 0, duplicateEventsCount: 0, groups: [] }; }
+    const parsed = JSON.parse(raw);
+    const arr: EventDetail[] = Array.isArray(parsed) ? parsed : [];
+    totalEvents = arr.length;
+    for (const ev of arr) {
+      const k = `${ev.date || ''}|${_normDedup(ev.title || '')}|${ev.type || 'other'}`;
+      const list = buckets.get(k) || [];
+      list.push(ev);
+      buckets.set(k, list);
+    }
+  } catch { /* vuoto */ }
+
+  const groupsArr: { key: string; sampleTitle: string; date: string; count: number; keepCandidateTitle: string; }[] = [];
+  let dupCount = 0;
+  buckets.forEach((list, key) => {
+    if (list.length >= 2) {
+      // Ordina per preferire: (1) con googleEventId, (2) updatedAt piu' recente
+      list.sort((a, b) => {
+        const aH = a.googleEventId ? 1 : 0;
+        const bH = b.googleEventId ? 1 : 0;
+        if (bH !== aH) return bH - aH;
+        return (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '');
+      });
+      groupsArr.push({
+        key,
+        sampleTitle: list[0].title || '(senza titolo)',
+        date: list[0].date || '',
+        count: list.length,
+        keepCandidateTitle: list[0].title || ''
+      });
+      dupCount += (list.length - 1); // N-1 = superflui
+    }
+  });
+
+  // Ordina gruppi: prima quelli con piu' copie
+  groupsArr.sort((a, b) => b.count - a.count);
+  return {
+    totalEvents,
+    duplicateGroupsCount: groupsArr.length,
+    duplicateEventsCount: dupCount,
+    groups: groupsArr,
+  };
+}
+
+/** 🧹 Deduplica eventi con stesso titolo+data+tipo.
+ *  Backup preventivo LS, mantiene 1 evento per gruppo (con googleEventId + updatedAt recentissimo).
+ *  NON attiva sync outgoing (scrittura LS diretta — come Wipe Past).
+ *  Restituisce numero di eventi RIMOSSI dal bucket mm_events.
+ */
+export function runMigration_DeduplicateEvents(): {
+  removedCount: number;
+  groupsCleaned: number;
+  backupKey: string;
+  beforeCount: number;
+  afterCount: number;
+} {
+  const LS_KEY_EVENTS = 'mm_events';
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = `${today.getMonth() + 1}`.padStart(2, '0');
+  const d = `${today.getDate()}`.padStart(2, '0');
+  const backupTag = `${y}${m}${d}`;
+  const backupKey = `mm_backup_pre_dedup_${backupTag}_${Math.floor(today.getTime() / 1000)}`;
+
+  // 1. Carica eventi
+  let allEvents: EventDetail[] = [];
+  try {
+    const raw = localStorage.getItem(LS_KEY_EVENTS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      allEvents = Array.isArray(parsed) ? parsed : [];
+    }
+  } catch { allEvents = []; }
+  const beforeCount = allEvents.length;
+  if (!beforeCount) {
+    return { removedCount: 0, groupsCleaned: 0, backupKey: '', beforeCount: 0, afterCount: 0 };
+  }
+
+  // 2. Raggruppa per chiave dedup
+  const buckets = new Map<string, EventDetail[]>();
+  for (const ev of allEvents) {
+    const k = `${ev.date || ''}|${_normDedup(ev.title || '')}|${ev.type || 'other'}`;
+    const list = buckets.get(k) || [];
+    list.push(ev);
+    buckets.set(k, list);
+  }
+
+  // 3. BACKUP preventivo PRIMA di modifiche
+  try {
+    const backupPayload = {
+      createdAt: new Date().toISOString(),
+      description: 'Backup completo PRIMA di DEDUPLICAZIONE eventi.' +
+                   ' Per ripristinare: localStorage.setItem("' + LS_KEY_EVENTS + '", JSON.stringify(BACKUP.events)) poi F5.',
+      totalEventsBefore: beforeCount,
+      events: allEvents,
+    };
+    localStorage.setItem(backupKey, JSON.stringify(backupPayload));
+    console.info(
+      `%c[LS Dedup] 💾 BACKUP COMPLETO creato in LS "${backupKey}" (${beforeCount} eventi)`,
+      'font-weight:bold; color:#7c3aed; background:#ede9fe; padding:2px 8px; border-radius:4px;'
+    );
+  } catch (err) {
+    console.error('[LS Dedup] ❌ BACKUP FALLITO — operazione INTERROTTA per sicurezza.', err);
+    return { removedCount: 0, groupsCleaned: 0, backupKey: '', beforeCount, afterCount: beforeCount };
+  }
+
+  // 4. Per ogni gruppo: mantieni 1 solo (preferenza: googleEventId presente → più recente)
+  let groupsCleaned = 0;
+  let removedCount = 0;
+  const survivorIds = new Set<string>();
+
+  buckets.forEach((list) => {
+    if (list.length === 1) {
+      survivorIds.add(list[0].id);
+      return;
+    }
+    // Ordina per preferenza: (1) con googleEventId, (2) updatedAt piu' recente
+    list.sort((a, b) => {
+      const aH = a.googleEventId ? 1 : 0;
+      const bH = b.googleEventId ? 1 : 0;
+      if (bH !== aH) return bH - aH;
+      return (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '');
+    });
+    // Primo = sopravvissuto
+    survivorIds.add(list[0].id);
+    groupsCleaned++;
+    removedCount += (list.length - 1);
+  });
+
+  const kept = allEvents.filter((ev) => survivorIds.has(ev.id));
+  const afterCount = kept.length;
+
+  if (removedCount <= 0) {
+    // Nessun duplicato trovato, niente scritture
+    return { removedCount: 0, groupsCleaned: 0, backupKey, beforeCount, afterCount };
+  }
+
+  // 5. SCRITTURA ATOMICA in LS
+  try {
+    // 👉 scrittura DIRETTA per evitare sync outgoing con Google! (come Wipe Past)
+    localStorage.setItem(LS_KEY_EVENTS, JSON.stringify(kept));
+  } catch (err) {
+    console.error('[LS Dedup] ❌ Errore scrittura LS:', err);
+    return { removedCount: 0, groupsCleaned: 0, backupKey, beforeCount, afterCount: beforeCount };
+  }
+
+  // 6. Report console VISIVO
+  const report =
+    `\n%c========================================\n` +
+    `%c  🧹 DEDUPLICAZIONE EVENTI COMPLETATA!  \n` +
+    `%c========================================\n` +
+    `%c  📦 Eventi PRIMA:        ${beforeCount}\n` +
+    `%c  🔍 Gruppi puliti:       ${groupsCleaned}\n` +
+    `%c  🗑️  Eventi RIMOSSI:      ${removedCount}\n` +
+    `%c  ✅ Eventi DOPO:         ${afterCount}\n` +
+    `%c  💾 Backup LS key:       ${backupKey}\n` +
+    `%c  🔒 Sync Google bypass:  SI' (scritta LS diretta)\n` +
+    `%c========================================\n`;
+  console.log(
+    report,
+    '',
+    'background:#0f766e;color:#fff;font-weight:bold;',
+    '',
+    'color:#0369a1;font-weight:600;',
+    'color:#7c3aed;font-weight:700;',
+    'color:#be123c;font-weight:700;',
+    'color:#15803d;font-weight:700;',
+    'color:#7c3aed;font-weight:600;',
+    'color:#0369a1;font-weight:700;',
+    ''
+  );
+  return { removedCount, groupsCleaned, backupKey, beforeCount, afterCount };
+}
+

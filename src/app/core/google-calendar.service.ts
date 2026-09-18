@@ -486,6 +486,26 @@ export class GoogleCalendarService {
     const { token, calendarId } = await this._ensureContext();
     if (!token || !calendarId) return '';
 
+    // ⭐ FIX ANTI-DUPLICATI #1: PRIMA di creare un evento NUOVO su Google,
+    // facciamo una ricerca sul calendario di quel giorno per lo STESSO TITOLO.
+    // Se troviamo un evento già esistente → usiamo QUELL'ID invece di crearne
+    // uno nuovo. Questo impedisce il ciclo 1→2→4→8 di duplicati esponenziali.
+    try {
+      const preExistingGoogleId = await this._findExistingOnGoogleByTitleDate(
+        token, calendarId, local.title || '', local.date || '', local.timeStart
+      );
+      if (preExistingGoogleId) {
+        console.info(
+          `%c[GCal create] 🔎 Trovato evento già ESISTENTE su Google per "${local.title}" (${local.date}) → ` +
+          `riuso googleId=${preExistingGoogleId.slice(0, 12)}... invece di POST duplicato.`,
+          'background:#047857;color:#fff;padding:2px 8px;border-radius:4px;'
+        );
+        return preExistingGoogleId;
+      }
+    } catch (lookupErr) {
+      console.warn('[GCal create] lookup preventivo fallito (procedo con POST):', lookupErr);
+    }
+
     const payload = this._toGoogleEvent(local);
     try {
       const resp = await fetch(
@@ -509,6 +529,76 @@ export class GoogleCalendarService {
       return `${json?.id || ''}`;
     } catch (err) {
       console.error('[GCal] createEvent fallito:', err);
+      return '';
+    }
+  }
+
+  /** ⭐ Lookup preventivo (anti-duplicati) — CERCA su Google il giorno specificato
+   *  e restituisce l'ID del primo evento con titolo fuzzy-match corrispondente.
+   *  Ritorna '' se non trovato. */
+  private async _findExistingOnGoogleByTitleDate(
+    token: string,
+    calendarId: string,
+    title: string,
+    dateStr: string,
+    timeStart?: string | null
+  ): Promise<string> {
+    if (!dateStr || !title) return '';
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Rome';
+      // timeMin = inizio giornata (00:00 locale)
+      const isoMin = this._toIsoWithTimezone(dateStr, '00:00', tz);
+      // timeMax = fine giornata (23:59 locale -> d+1 00:00)
+      const dNext = new Date(`${dateStr}T00:00:00`);
+      dNext.setDate(dNext.getDate() + 1);
+      const nextStr = dNext.toISOString().slice(0, 10);
+      const isoMax = this._toIsoWithTimezone(nextStr, '00:00', tz);
+
+      const params = new URLSearchParams({
+        timeMin: isoMin,
+        timeMax: isoMax,
+        maxResults: '50',
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        showDeleted: 'false',
+      });
+      const url = `${this.GOOGLE_API_BASE}/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`;
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (resp.status === 401) { this._onUnauthorized(); return ''; }
+      if (!resp.ok) return '';
+      const json = await resp.json();
+      const items: any[] = Array.isArray(json?.items) ? json.items : [];
+      if (!items.length) return '';
+
+      // Normalizzazione titolo (stessa logica _findFuzzyMatch locale!)
+      const norm = (s: string) => `${s || ''}`
+        .trim().toLowerCase()
+        .replace(/[\s\-_.,;:'"!?()\[\]{}]/g, '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const needle = norm(title);
+      if (needle.length < 3) return '';
+
+      // Passo 1 — Match ESATTO titolo (senza contare timeStart)
+      for (const gEv of items) {
+        const hay = norm(gEv.summary || '');
+        if (hay && hay === needle) return `${gEv.id}`;
+      }
+      // Passo 2 — Match fuzzy incluso >= 75% (come _findFuzzyMatch)
+      if (needle.length >= 10) {
+        for (const gEv of items) {
+          const hay = norm(gEv.summary || '');
+          if (hay.length >= 10) {
+            const minLen = Math.min(hay.length, needle.length);
+            const maxLen = Math.max(hay.length, needle.length);
+            if ((hay.includes(needle) || needle.includes(hay)) && minLen / maxLen >= 0.75) {
+              return `${gEv.id}`;
+            }
+          }
+        }
+      }
+      return '';
+    } catch (err) {
+      console.warn('[GCal] _findExistingOnGoogle errore non bloccante:', err);
       return '';
     }
   }
@@ -643,6 +733,14 @@ export class GoogleCalendarService {
       // Contatori diagnostici distribuzione match (console DevTools)
       const diag = { nMatchGoogleId: 0, nFuzzy: 0, nNewEvent: 0, nCancelled: 0, nNoId: 0 };
 
+      // ⭐ FIX ANTI-DUPLICATI #3: Set degli eventi locali GIA' "consumati" (linkati
+      // a un evento Google nel ciclo attuale) — evitiamo che 8 eventi Google identici
+      // vengano fuzzy-match-ati TUTTI sullo STESSO evento locale #1 (causa del
+      // ciclo 1→2→4→8 duplicati).
+      const consumedLocalIds = new Set<string>();
+      // Id degli eventi locali che hanno gia' un googleEventId (link stabile 1:1)
+      local.forEach(ev => { if (ev.googleEventId) consumedLocalIds.add(ev.id); });
+
       const now = new Date().toISOString();
       for (const gEv of items) {
         if (!gEv.id) { diag.nNoId++; report.skipped++; continue; }
@@ -651,11 +749,6 @@ export class GoogleCalendarService {
         // ⭐ CUTOFF CHECK PRIMA DI TUTTO IL RESTO!
         const parsedDate = this._parseGoogleDateTime(gEv.start, gEv.end);
         if (!this.isEventWithinSyncWindow(parsedDate.date)) {
-          // ❌ Evento PRIMA della data di inizio sincro → SKIP TOTALE.
-          // Non importiamo, non aggiorniamo, NON tocchiamo nulla in locale.
-          // Lo skippiamo esplicitamente anche nei report skipped (non conta
-          // perché è per scelta cutoff dell'utente). Per chiarezza usiamo un
-          // counter separato per la console.
           nSkippedCutoff++;
           continue;
         }
@@ -671,15 +764,19 @@ export class GoogleCalendarService {
             merged.updatedAt = now;
             localIdx.set(merged.id, merged);
             byGoogleId.set(gEv.id, merged);
+            consumedLocalIds.add(merged.id); // Segna come preso
             report.updated++;
           } else {
+            consumedLocalIds.add(existing.id);
             report.skipped++;
           }
         } else {
           const nuovo = this._fromGoogleEvent(gEv, now);
-          const dup = this._findFuzzyMatch(local, nuovo);
+          // ⭐ FIX #3b: passa consumedLocalIds a _findFuzzyMatch cosi' non riprende eventi locali gia' linkati!
+          const dup = this._findFuzzyMatch(local, nuovo, consumedLocalIds);
           if (dup) {
             diag.nFuzzy++;
+            consumedLocalIds.add(dup.id); // IMPORTANTE: marca come PRESO adesso! (prossimo evento Google non lo riuscira')
             const localTs = dup.updatedAt || dup.createdAt || now;
             if (googleTs > localTs) {
               const merged = this._mergeBaseFields(dup, gEv);
@@ -689,15 +786,18 @@ export class GoogleCalendarService {
               byGoogleId.set(gEv.id, merged);
               report.updated++;
             } else {
-              dup.googleEventId = gEv.id;
-              localIdx.set(dup.id, dup);
-              byGoogleId.set(gEv.id, dup);
-              report.updated++;
+                // locale vince — ma dobbiamo salvare il googleEventId cmq!
+                const toSave = localIdx.get(dup.id) || dup;
+                toSave.googleEventId = gEv.id;
+                localIdx.set(dup.id, toSave);
+                byGoogleId.set(gEv.id, toSave);
+                report.updated++;
             }
           } else {
             diag.nNewEvent++;
             localIdx.set(nuovo.id, nuovo);
             byGoogleId.set(gEv.id, nuovo);
+            consumedLocalIds.add(nuovo.id); // Anche gli importati nuovi sono presi
             report.imported++;
           }
         }
@@ -1319,7 +1419,7 @@ export class GoogleCalendarService {
    * matchava con GOOGLE "Concerto di Natale 2023" → poi finiva in fuzzy branch invece che
    * come nuovo evento importato, generando centinaia di falsi "conflitti").
    */
-  private _findFuzzyMatch(local: EventDetail[], candidate: EventDetail): EventDetail | null {
+  private _findFuzzyMatch(local: EventDetail[], candidate: EventDetail, excludeIds?: Set<string>): EventDetail | null {
     const norm = (s: string) => `${s || ''}`
       .trim()
       .toLowerCase()
@@ -1331,7 +1431,26 @@ export class GoogleCalendarService {
     const needle = norm(candidate.title);
     if (!needle || needle.length < 3) return null;
 
-    const sameDay = local.filter((e) => e.date === candidate.date);
+    // ⭐ FIX #4 (anti-duplicati): consideriamo SOLO gli eventi dello stesso giorno
+    // che NON sono gia' in excludeIds (= gia' linkati a un evento Google nello
+    // stesso ciclo di import). Cosi' 8 eventi Google uguali non si appoggiano
+    // TUTTI sullo STESSO locale #1, ma ognuno sul prossimo disponibile!
+    let sameDay = local.filter((e) => e.date === candidate.date);
+    if (excludeIds && excludeIds.size) {
+      sameDay = sameDay.filter(e => !excludeIds.has(e.id));
+    }
+    if (!sameDay.length) return null;
+
+    // Ordina mettendo PRIMA quelli SENZA googleEventId (piu' "freschi" da linkare)
+    // — cosi' previligiamo eventi locali gia' esistenti ma NON ancora sincronizzati
+    // invece di creare importati nuovi.
+    sameDay.sort((a, b) => {
+      const aHas = a.googleEventId ? 1 : 0;
+      const bHas = b.googleEventId ? 1 : 0;
+      if (aHas !== bHas) return aHas - bHas;
+      return 0;
+    });
+
     for (const ev of sameDay) {
       const hay = norm(ev.title);
       if (!hay) continue;
@@ -1420,6 +1539,9 @@ export class GoogleCalendarService {
               let mutated = false;
               const patched = current.map((x) => {
                 if (x.id === ev.id && !x.googleEventId) {
+                  // ⭐ FIX #5a: idempotenza — scriviamo googleEventId SOLO se
+                  // l'evento locale è ancora SENZA (evitiamo Promise concorrenti
+                  // che si sovrascrivono a vicenda).
                   mutated = true;
                   return { ...x, googleEventId: gId } as EventDetail;
                 }
@@ -1427,7 +1549,11 @@ export class GoogleCalendarService {
               });
               if (mutated) {
                 writeEventsWithTimestamp(patched);
+                // Notifica Dashboard/Agenda di ricaricare gli array in memoria:
+                setTimeout(() => this._eventsChanged$.next(), 50);
                 console.info(`[GCal push create OK] ${ev.title} (${ev.date}) → googleId=${gId.slice(0, 12)}...`);
+              } else {
+                console.info(`[GCal push create] ${ev.title} (${ev.date}) gia' patchato con googleId in corso (skip doppia write).`);
               }
             } catch (err) {
               console.error('[GCal push create patch locale fallita]:', err);
@@ -1517,17 +1643,26 @@ export class GoogleCalendarService {
       void this.createGoogleEvent(ev)
         .then((gId) => {
           if (!gId) return;
-          const current = readEventsWithBackfill();
-          let mutated = false;
-          const patched = current.map((x) => {
-            if (x.id === ev.id && !x.googleEventId) {
-              mutated = true;
-              return { ...x, googleEventId: gId } as EventDetail;
+          try {
+            const current = readEventsWithBackfill();
+            let mutated = false;
+            const patched = current.map((x) => {
+              if (x.id === ev.id && !x.googleEventId) {
+                // ⭐ FIX #5b: idempotenza — patch solo se ancora senza googleId
+                mutated = true;
+                return { ...x, googleEventId: gId } as EventDetail;
+              }
+              return x;
+            });
+            if (mutated) {
+              writeEventsWithTimestamp(patched);
+              console.info(`   #${n} ${ev.date} ${ev.title} → googleId=${gId.slice(0, 14)}...`);
+            } else {
+              console.info(`   #${n} ${ev.date} ${ev.title} (gia' patchato — skip)`);
             }
-            return x;
-          });
-          if (mutated) writeEventsWithTimestamp(patched);
-          console.info(`   #${n} ${ev.date} ${ev.title} → googleId=${gId.slice(0, 14)}...`);
+          } catch (err) {
+            console.error(`   #${n} FAIL patch ${ev.title}:`, err);
+          }
         })
         .catch(err => console.error(`   #${n} FAIL ${ev.title}`, err));
     }

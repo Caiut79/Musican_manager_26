@@ -9,7 +9,9 @@ import {
   DEFAULT_NOTE_FORMAT,
   readEventsWithBackfill,
   writeEventsWithTimestamp,
-  registerGlobalOutgoingSyncHandler
+  registerGlobalOutgoingSyncHandler,
+  tombstoneAddDeletedGoogleEventId,
+  tombstoneHasDeletedGoogleEventId,
 } from './local-storage.service';
 
 // ─── Tipi interni ────────────────────────────────────────────────────────────
@@ -109,52 +111,25 @@ export class GoogleCalendarService {
   /** Preventivi per refresh loop infiniti: contatore refresh falliti consecutivi */
   private _consecutiveRefreshFails = 0;
 
-  // 🧟  Set TOMBSTONE: googleEventId di eventi che l'utente ha CANCELLATO VOLUTAMENTE
-  //      nell'app. Questi ID NON DEVONO MAI essere RE-importati da Google,
-  //      anche se per qualche motivo (cutoff, offline, API fallita ecc.)
-  //      esistessero ancora sul calendario Google remoto.
-  //      Persistiti in: localStorage chiave `mm_gcal_tombstones_deleted_ids`.
-  /** Chiave LS per il tombstone set */
   private readonly TOMBSTONE_KEY = 'mm_gcal_tombstones_deleted_ids';
-  /** Set in memoria caricato all'avvio */
+  /** @deprecated Use i wrapper condivisi {tombstoneAddDeletedGoogleEventId, tombstoneHasDeletedGoogleEventId} da LS service. */
   private readonly _deletedGoogleEventIds = new Set<string>();
   /** true = almeno un ID aggiunto durante questa sessione e non salvato */
   private _tombstoneDirty = false;
 
-  /** Carica in memoria il Set TOMBSTONE da LS. */
+  /** @deprecated Ora carica il set persistito tramite wrapper condiviso (stessa chiave LS). */
   private _tombstoneLoad(): void {
-    try {
-      const raw = localStorage.getItem(this.TOMBSTONE_KEY);
-      if (!raw) { this._deletedGoogleEventIds.clear(); return; }
-      const parsed = JSON.parse(raw);
-      const ids = Array.isArray(parsed) ? parsed : [];
-      this._deletedGoogleEventIds.clear();
-      ids.forEach((id) => { if (typeof id === 'string') this._deletedGoogleEventIds.add(id); });
-    } catch { this._deletedGoogleEventIds.clear(); }
+    // (mantenuto vuoto per retrocompatibilità — non viene più usato)
   }
-  /** Persiste il TOMBSTONE su LS (write-through: chiamato spesso quando si aggiunge un id). */
-  private _tombstonePersist(): void {
-    try {
-      const arr = Array.from(this._deletedGoogleEventIds);
-      localStorage.setItem(this.TOMBSTONE_KEY, JSON.stringify(arr));
-      this._tombstoneDirty = false;
-    } catch (err) {
-      console.error('[GCal Tombstone] Persist fallito:', err);
-    }
-  }
-  /** Aggiunge un googleEventId ai tombstone + persiste. */
+  /** @deprecated Usa tombstoneAddDeletedGoogleEventId (pubblico, LS service). */
+  private _tombstonePersist(): void { /* non usato più */ }
+  /** Wrapper verso helper condiviso (entry point SEMPRE garantito persistEventsWithSync + defense-in-depth qui). */
   private _tombstoneAdd(googleEventId: string | null | undefined): boolean {
-    if (!googleEventId || typeof googleEventId !== 'string') return false;
-    if (this._deletedGoogleEventIds.has(googleEventId)) return false;
-    this._deletedGoogleEventIds.add(googleEventId);
-    this._tombstoneDirty = true;
-    this._tombstonePersist();
-    return true;
+    return tombstoneAddDeletedGoogleEventId(googleEventId);
   }
-  /** Verifica se un googleEventId è marcato come cancellato definitivamente. */
+  /** Wrapper verso helper condiviso (skip tassativo import loop). */
   private _tombstoneHas(googleEventId: string | null | undefined): boolean {
-    if (!googleEventId || typeof googleEventId !== 'string') return false;
-    return this._deletedGoogleEventIds.has(googleEventId);
+    return tombstoneHasDeletedGoogleEventId(googleEventId);
   }
 
   private readonly GOOGLE_API_BASE = 'https://www.googleapis.com';

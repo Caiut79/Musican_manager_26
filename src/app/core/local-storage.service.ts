@@ -889,6 +889,44 @@ export type OutgoingSyncDeltaFn = (prev: EventDetail[], next: EventDetail[]) => 
 
 let _globalOutgoingSyncFn: OutgoingSyncDeltaFn | null = null;
 
+// 🧟 Chiave tombstone condivisa (stesso ID GCal che NON DEVONO MAI essere ri-importati.
+// Nota: la logica di lookup/addizione è SPEDITA in 3 posti diversi (defense in depth):
+//   (A) [MORIRE persistEventsWithSync — entry point SEMPRE (LS 100% — GARANTITO
+//   (B) deleteGoogleEvent funzione syncOutgoingDelta delete loop — ridondanza
+//   (C) service.deleteGoogleEvent — ultima barriera prima di fetch API
+const GCAL_TOMBSTONE_KEY = 'mm_gcal_tombstones_deleted_ids';
+
+/** 🧟 Carica TOMBSTONE dal LS come Set<string> (helper condiviso tra LS service e GCal service. */
+function _tombstoneLoadIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(GCAL_TOMBSTONE_KEY);
+    if (!raw) return new Set<string>();
+    const p = JSON.parse(raw);
+    const ids = new Set<string>();
+    if (Array.isArray(p)) p.forEach(i => { if (typeof i === 'string') ids.add(i); });
+    return ids;
+  } catch { return new Set<string>(); }
+}
+/** Persiste TOMBSTONE LS (write-through). */
+function _tombstonePersistIds(ids: Set<string>): void {
+  try { localStorage.setItem(GCAL_TOMBSTONE_KEY, JSON.stringify(Array.from(ids))); }
+  catch { /* ignora */ }
+}
+/** Helper aggiunge googleEventId al tombstone (pubblico x service GCal / LS) */
+export function tombstoneAddDeletedGoogleEventId(gId: string | null | undefined): boolean {
+  if (!gId || typeof gId !== 'string') return false;
+  const set = _tombstoneLoadIds();
+  if (set.has(gId)) return false;
+  set.add(gId);
+  _tombstonePersistIds(set);
+  return true;
+}
+/** Helper "L'ID Google è marcato cancellato definitivamente? (per import skip) */
+export function tombstoneHasDeletedGoogleEventId(gId: string | null | undefined): boolean {
+  if (!gId || typeof gId !== 'string') return false;
+  return _tombstoneLoadIds().has(gId);
+}
+
 /**
  * Registra un handler globale che verrà chiamato DOPO ogni scrittura centralizzata
  * eventi (tramite persistEventsWithSync). Usato da GoogleCalendarService per
@@ -910,6 +948,37 @@ export function persistEventsWithSync(events: EventDetail[]): EventDetail[] {
   const previous = readEventsWithBackfill();
   const written = writeEventsWithTimestamp(events);
 
+  // ════════════════════════════════════════════════════════════════════════
+  // 🧟  TOMBSTONE LIVELLO 1 (ENTRY POINT GARANTITO 100%)
+  // Calcola delta: eventi presenti in previous ma NON in written = CANCELLATI.
+  // Per OGNI evento cancellato locale che ha un googleEventId valido:
+  // → AGGIUNGI SEMPRE AL TOMBSTONE QUI E ORA, PRIMA DI QUALSIASI COSA.
+  // Non aspettiamo GCalService, non aspettiamo fetch, non aspettiamo API.
+  // Perché persistEventsWithSync è CHIAMATO DA TUTTI I PUNTI:
+  //   Dashboard · Lista Eventi · Lista Concerti · Lista Lezioni · delete event modifiers
+  // ════════════════════════════════════════════════════════════════════════
+  try {
+    const prevMap = new Map<string, EventDetail>();
+    previous.forEach(ev => { if (ev && ev.id) prevMap.set(ev.id, ev); });
+    const writtenIds = new Set<string>();
+    written.forEach(ev => { if (ev && ev.id) writtenIds.add(ev.id); });
+    let tombCount = 0;
+    for (const prevEv of prevMap.values()) {
+      if (writtenIds.has(prevEv.id)) continue;
+      // evento CANCELLATO dall'utente
+      if (prevEv.googleEventId) {
+        const added = tombstoneAddDeletedGoogleEventId(prevEv.googleEventId);
+        if (added) tombCount++;
+      }
+    }
+    if (tombCount > 0) {
+      console.info(`%c[persistEventsWithSync] 🧟 ${tombCount} ID Google aggiunti a TOMBSTONE (cancellazioni utente)`,
+        'background:#7c3aed;color:#fff;padding:2px 8px;border-radius:4px;');
+    }
+  } catch (err) {
+    console.warn('[persistEventsWithSync] tombstone loop errore (non bloccante):', err);
+  }
+
   const tryRun = (tries = 0) => {
     if (_globalOutgoingSyncFn) {
       Promise.resolve()
@@ -920,9 +989,6 @@ export function persistEventsWithSync(events: EventDetail[]): EventDetail[] {
         .catch((err) => { console.error('[LS] persistEventsWithSync wrapper error:', err); });
       return;
     }
-    // Handler non ancora registrato (race: evento creato PRIMA che GoogleCalendarService
-    // venga injectato e constructor chiami registerGlobalOutgoingSyncHandler).
-    // Ritentiamo per massimo 4 volte (0.5s, 1s, 2s, 4s) poi diamo per perso.
     if (tries > 4) {
       console.warn('[LS] persistEventsWithSync: nessun handler dopo ~7.5s; push saltato.',
         'Se vuoi recuperare la sincronizzazione fai click sul pulsante Sincronizza Google.');

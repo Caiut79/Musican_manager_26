@@ -1,6 +1,7 @@
 import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { EventDetail } from '../../models/event-detail';
+import { readEventsWithBackfill, persistEventsWithSync, readEventsForDisplay } from '../../core/local-storage.service';
 
 interface Contract {
   id: string;
@@ -77,7 +78,7 @@ export class ContractViewComponent implements OnInit {
     if (this.contract?.signatureData) {
       const img = new Image();
       img.onload = () => ctx.drawImage(img, 0, 0);
-      img.src = this.contract!.signatureData!;
+      img.src = this.contract?.signatureData ?? null;
     }
   }
 
@@ -149,7 +150,7 @@ export class ContractViewComponent implements OnInit {
     const sigData = this._sigCanvas.nativeElement.toDataURL('image/png');
     const stored = localStorage.getItem('mm_contracts');
     const contracts: Contract[] = stored ? JSON.parse(stored) : [];
-    const idx = contracts.findIndex(c => c.id === this.contract!.id);
+    const idx = contracts.findIndex(c => c.id === this.contract?.id);
     if (idx < 0) return;
     contracts[idx].signatureData = sigData;
     contracts[idx].signedAt = new Date().toISOString();
@@ -161,14 +162,13 @@ export class ContractViewComponent implements OnInit {
   }
 
   private upsertAgendaEventFromContract(contract: Contract): void {
-    const raw = localStorage.getItem('mm_events');
-    const events: EventDetail[] = raw ? JSON.parse(raw) : [];
+    const events: EventDetail[] = readEventsWithBackfill();
     const marker = `contract:${contract.id}`;
     const existing = events.find(event => `${event.notes || ''}`.includes(marker));
     if (existing) {
       if (existing.status !== 'pending' && !this.hasAnyPayment(existing.id)) {
         existing.status = 'pending';
-        localStorage.setItem('mm_events', JSON.stringify(events));
+        persistEventsWithSync(events);
       }
       return;
     }
@@ -179,6 +179,7 @@ export class ContractViewComponent implements OnInit {
     const fallbackTitle = contract.contractType === 'insegnante'
       ? 'Lezione da contratto'
       : (contract.contractType === 'dj' ? 'DJ Set da contratto' : 'Concerto da contratto');
+    const now = new Date().toISOString();
 
     const newEvent: EventDetail = {
       id: crypto.randomUUID(),
@@ -195,11 +196,12 @@ export class ContractViewComponent implements OnInit {
       compensoType: contract.billingMode,
       notes: `${contract.notes ? contract.notes + ' · ' : ''}${marker}`,
       status: 'pending',
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
     events.push(newEvent);
-    localStorage.setItem('mm_events', JSON.stringify(events));
+    persistEventsWithSync(events);
   }
 
   private hasAnyPayment(eventId: string): boolean {

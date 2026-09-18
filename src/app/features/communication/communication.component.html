@@ -29,6 +29,16 @@
         <span class="link-label">Link prenotazione {{ roleLabel }}:</span>
         <div class="link-value">{{ bookingLink }}</div>
       </div>
+      <div class="link-meta">
+        <div class="link-meta-card">
+          <span class="link-meta-label">Cachet indicativo</span>
+          <strong>{{ expectedFeePreview }}</strong>
+        </div>
+        <div class="link-meta-card" *ngIf="feeNotesPreview">
+          <span class="link-meta-label">Nota cachet</span>
+          <span>{{ feeNotesPreview }}</span>
+        </div>
+      </div>
       <div class="share-buttons">
         <button type="button" class="share-btn copy" (click)="copyLink()">
           {{ copied ? '✓ Copiato!' : '📋 Copia link' }}
@@ -49,7 +59,9 @@
         <div class="preview-field"><label>Nome</label><div class="preview-input">Mario Rossi</div></div>
         <div class="preview-field"><label>Email</label><div class="preview-input">mario&#64;email.com</div></div>
         <div class="preview-field"><label>Telefono</label><div class="preview-input">+39 333 1234567</div></div>
+        <div class="preview-field"><label>Cachet indicativo</label><div class="preview-input">{{ expectedFeePreview }}</div></div>
         <div class="preview-field"><label>Date (multiple)</label><div class="preview-input">15/04, 22/04, 29/04</div></div>
+        <div class="preview-field span-2" *ngIf="feeNotesPreview"><label>Nota cachet</label><div class="preview-input preview-textarea">{{ feeNotesPreview }}</div></div>
         <div class="preview-field span-2"><label>Messaggio</label><div class="preview-input preview-textarea">Ciao, ti vorrei contattare per una serata...</div></div>
         <div class="preview-actions">
           <div class="preview-btn">Invia richiesta →</div>
@@ -147,6 +159,14 @@
           <span>Mostra stili musicali</span>
         </label>
       </div>
+      <label>Biografia artista / progetto
+        <textarea formControlName="profileBio" rows="4"
+          placeholder="Racconta chi sei, il progetto artistico, il repertorio e il tuo approccio live..."></textarea>
+      </label>
+      <label>Esperienze e punti forti
+        <textarea formControlName="profileExperience" rows="4"
+          placeholder="Festival, locali, collaborazioni, tournée, insegnamento, repertori e punti di forza..."></textarea>
+      </label>
     </div>
 
     <label>Messaggio personalizzato

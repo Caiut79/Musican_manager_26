@@ -3,6 +3,7 @@ import { FormBuilder, Validators } from '@angular/forms';
 import { EventDetail } from '../../models/event-detail';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../../core/supabase.service';
+import { readEventsWithBackfill, persistEventsWithSync, readEventsForDisplay } from '../../core/local-storage.service';
 
 type School = {
   id: string;
@@ -100,6 +101,9 @@ export class TeachingComponent implements OnInit {
   expandedSchoolId = '';
   expandedSchoolStudentId = '';
   creatorMode: 'none' | 'school' | 'student' | 'lesson' = 'none';
+
+  trackByIdFn = (i: number, x: any) => x?.id ?? i;
+
   newContact = {
     type: 'school' as 'band' | 'school' | 'student',
     displayName: '',
@@ -323,6 +327,8 @@ export class TeachingComponent implements OnInit {
     navigator.clipboard.writeText(this.schoolLink(code)).then(() => {
       this.codeCopied = code;
       setTimeout(() => this.codeCopied = null, 1500);
+    }).catch(err => {
+      console.warn('[Teaching] copia link scuola fallita:', err);
     });
   }
 
@@ -636,7 +642,7 @@ export class TeachingComponent implements OnInit {
   }
 
   private pushLessonInAgenda(session: TeachingSession): void {
-    const events: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const events: EventDetail[] = readEventsWithBackfill();
     const title = session.schoolId ? `Lezione scuola - ${this.schoolName(session.schoolId)}` : `Lezione privata - ${this.studentName(session.studentId)}`;
     const event: EventDetail = {
       id: session.id,
@@ -651,15 +657,16 @@ export class TeachingComponent implements OnInit {
       band: [],
       status: session.attendanceStatus === 'absent' ? 'cancelled' : 'confirmed',
       notes: `${session.notes || ''}${session.homeworkAssigned ? ` • [Compiti: ${session.homeworkAssigned}]` : ''}${session.homeworkDone ? ` • [Svolto: ${session.homeworkDone}]` : ''}${session.simpleGrade !== null ? ` • [Voto: ${session.simpleGrade}]` : ''}${session.gradeTechnique !== null ? ` • [Tec: ${session.gradeTechnique}]` : ''}${session.gradeSound !== null ? ` • [Suo: ${session.gradeSound}]` : ''}${session.gradeRhythm !== null ? ` • [Rit: ${session.gradeRhythm}]` : ''}${session.gradeTheory !== null ? ` • [Teo: ${session.gradeTheory}]` : ''}${session.gradeExpression !== null ? ` • [Esp: ${session.gradeExpression}]` : ''}${session.paymentCadence === 'mensile' ? ` • [Pagamento mensile: ${session.monthlySettlement}]` : ' • [Pagamento a prestazione: saldo immediato]'}`,
-      createdAt: session.createdAt
+      createdAt: session.createdAt,
+      updatedAt: new Date().toISOString()
     };
     const next = events.filter(e => e.id !== event.id);
     next.push(event);
-    localStorage.setItem('mm_events', JSON.stringify(next));
+    persistEventsWithSync(next);
   }
 
   private mergeLessonsFromAgenda(current: TeachingSession[]): TeachingSession[] {
-    const events: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const events: EventDetail[] = readEventsForDisplay();
     const byId = new Map(current.map(session => [session.id, session]));
     events
       .filter(event => event.type === 'lesson')

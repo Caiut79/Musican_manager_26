@@ -58,7 +58,10 @@ export class IdentityContextService {
           ? await this.supabase.findActiveLicenseByEmail(normalizedApp, email, ['active', 'pending'])
           : null;
         license = resolved?.license || refreshed || license;
-      } catch {}
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'errore sconosciuto';
+        console.error(`[Identity] activateLicenseFromRef durante bootstrap: ${msg}`);
+      }
     }
 
     const cachedCode = this.normalizeCode(this.ls.getAffilCode());
@@ -91,7 +94,10 @@ export class IdentityContextService {
           authUserId: authUser.id,
           licenseKey
         });
-      } catch {}
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'errore sconosciuto';
+        console.error(`[Identity] sync affiliazione/caricamento profilo: ${msg}`);
+      }
     }
     const mergedProfile = this.mergePreferNonEmpty(this.ls.getProfile(), profile || {});
     if (Object.keys(mergedProfile).length) {
@@ -105,7 +111,10 @@ export class IdentityContextService {
       await this.hydrateCaches(musicianId);
       try {
         await this.supabase.syncAllFromLocalStorage(musicianId);
-      } catch {}
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'errore sconosciuto';
+        console.error(`[Identity] syncAllFromLocalStorage fallita per musicista ${musicianId}: ${msg}`);
+      }
     }
 
     const hasServerContext = resolved?.canAccessApp === true || !!(license || profile);

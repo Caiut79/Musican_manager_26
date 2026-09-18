@@ -138,7 +138,7 @@
     <label>Scuola associata
       <select formControlName="schoolId">
         <option value="">Nessuna</option>
-        <option *ngFor="let s of schools" [value]="s.id">{{ s.name }}</option>
+        <option *ngFor="let s of schools; trackBy: trackByIdFn" [value]="s.id">{{ s.name }}</option>
       </select>
     </label>
     <label>Contatto rubrica allievo
@@ -206,14 +206,14 @@
       <label>Allievo
         <select formControlName="studentId">
           <option value="">Seleziona allievo</option>
-          <option *ngFor="let s of students" [value]="s.id">{{ s.fullName }}</option>
+          <option *ngFor="let s of students; trackBy: trackByIdFn" [value]="s.id">{{ s.fullName }}</option>
         </select>
       </label>
 
       <label>Scuola
         <select formControlName="schoolId">
           <option value="">Nessuna</option>
-          <option *ngFor="let s of schools" [value]="s.id">{{ s.name }}</option>
+          <option *ngFor="let s of schools; trackBy: trackByIdFn" [value]="s.id">{{ s.name }}</option>
         </select>
       </label>
       <label>Ore
@@ -353,7 +353,7 @@
   <section class="card">
     <h2>Scuole</h2>
     <div class="list">
-      <div class="school-item" *ngFor="let s of schools" [class.expanded]="expandedSchoolId === s.id">
+      <div class="school-item" *ngFor="let s of schools; trackBy: trackByIdFn" [class.expanded]="expandedSchoolId === s.id">
         <div class="school-row">
           <div class="school-row-main">
             <strong>{{ s.name }}</strong>
@@ -372,7 +372,7 @@
         <div class="school-details" *ngIf="expandedSchoolId === s.id">
           <div class="meta" *ngIf="schoolStudents(s.id).length === 0">Nessun allievo associato</div>
           <div class="school-students" *ngIf="schoolStudents(s.id).length > 0">
-            <div class="school-student-item" *ngFor="let st of schoolStudents(s.id)" [class.expanded]="expandedSchoolStudentId === st.id">
+            <div class="school-student-item" *ngFor="let st of schoolStudents(s.id); trackBy: trackByIdFn" [class.expanded]="expandedSchoolStudentId === st.id">
               <div class="school-student-row">
                 <div class="school-student-main">
                   <strong>{{ st.fullName }}</strong>
@@ -411,7 +411,7 @@
   <section class="card">
     <h2>Lezioni registrate</h2>
     <div class="list">
-      <div class="lesson-item" *ngFor="let l of sessions" [class.expanded]="expandedSessionId === l.id">
+      <div class="lesson-item" *ngFor="let l of sessions; trackBy: trackByIdFn" [class.expanded]="expandedSessionId === l.id">
         <div class="lesson-row">
           <div class="lesson-row-main">
             <div class="lesson-title">
@@ -475,7 +475,7 @@
   <section class="card">
     <h2>Report allievi</h2>
     <div class="list">
-      <div class="student-item" *ngFor="let st of students" [class.expanded]="expandedStudentId === st.id">
+      <div class="student-item" *ngFor="let st of students; trackBy: trackByIdFn" [class.expanded]="expandedStudentId === st.id">
         <div class="student-row">
           <div class="student-row-main">
             <strong>{{ st.fullName }}</strong>
@@ -504,13 +504,13 @@
   <section class="card">
     <h2>Report scuole</h2>
     <div class="list">
-      <div class="item item-col" *ngFor="let s of schools">
+      <div class="item item-col" *ngFor="let s of schools; trackBy: trackByIdFn">
         <div>
           <strong>{{ s.name }}</strong>
           <div class="meta">Allievi associati: {{ schoolStudents(s.id).length }} • Lezioni registrate: {{ schoolSessionCount(s.id) }}</div>
         </div>
         <div class="sub-list" *ngIf="schoolStudents(s.id).length > 0">
-          <div class="sub-item" *ngFor="let st of schoolStudents(s.id)">
+          <div class="sub-item" *ngFor="let st of schoolStudents(s.id); trackBy: trackByIdFn">
             <span>{{ st.fullName }}</span>
             <small>Presenze {{ studentPresenceCount(st.id) }} / Assenze {{ studentAbsenceCount(st.id) }}</small>
           </div>

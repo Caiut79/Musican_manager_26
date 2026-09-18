@@ -6,6 +6,14 @@ import { Expense, ExpenseExtra } from '../../models/expense';
 import { EventDetail } from '../../models/event-detail';
 import { SupabaseService } from '../../core/supabase.service';
 import { formatItalianAddressLabel, italianAddressTypeScore, provinceCodeFromAddressLabel, provinceCodeFromText, normalizeGeoText } from '../../core/italian-geo';
+import { readEventsWithBackfill, readEventsForDisplay } from '../../core/local-storage.service';
+
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
 
 type ItineraryOption = {
   id: string;
@@ -129,8 +137,8 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   constructor(private fb: FormBuilder, private supabase: SupabaseService, private route: ActivatedRoute, private router: Router) {}
 
   ngOnInit() {
-    this.expenses = this.normalizeStoredExpenses(JSON.parse(localStorage.getItem('mm_expenses') || '[]'));
-    const profileSnapshot = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    this.expenses = this.normalizeStoredExpenses(safeParse<any[]>(localStorage.getItem('mm_expenses'), []));
+    const profileSnapshot = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     const homeBaseRaw = `${localStorage.getItem('mm_homeBase') || profileSnapshot?.homeBase || profileSnapshot?.residence || ''}`.trim();
     const homeBase = this.normalizeAddressTextForUi(homeBaseRaw);
     const profileFuelType = `${profileSnapshot?.vehicleFuelType || localStorage.getItem('mm_vehicle_fuel_type') || 'benzina'}`.trim().toLowerCase();
@@ -395,12 +403,25 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     const parsed = this.parseCoordinatesFromText(query);
     if (parsed) return parsed;
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&countrycodes=it&addressdetails=1`;
-    const res  = await fetch(url, { headers: { 'Accept-Language': 'it' } });
-    const data = await res.json();
-    if (!data.length) return null;
-    const ranked = this.rankNominatimRows(data, query);
-    const best = ranked[0]?.row || data[0];
-    return [parseFloat(best.lat), parseFloat(best.lon)];
+    try {
+      const res = await fetch(url, { headers: { 'Accept-Language': 'it' } });
+      if (!res.ok) {
+        console.warn(`[Expenses] Nominatim geocode fallito HTTP ${res.status} per "${query}"`);
+        return null;
+      }
+      const data = await res.json();
+      if (!Array.isArray(data) || !data.length) return null;
+      const ranked = this.rankNominatimRows(data, query);
+      const best = ranked[0]?.row || data[0];
+      const lat = parseFloat(best?.lat);
+      const lon = parseFloat(best?.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return [lat, lon];
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'errore sconosciuto';
+      console.warn(`[Expenses] Nominatim geocode eccezione per "${query}": ${msg}`);
+      return null;
+    }
   }
 
   onAddressInput(field: AddressField, value: string): void {
@@ -687,36 +708,45 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     const coordStr   = allPoints.map(([lat, lon]) => `${lon},${lat}`).join(';');
     const hasWp      = waypoints.length > 0;
     const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson&alternatives=${hasWp ? 'false' : 'true'}&steps=true`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data   = await res.json();
-    const routes = Array.isArray(data?.routes) ? data.routes : [];
-    return routes.slice(0, 3).map((route: any, index: number) => {
-      const distanceKm  = +(Number(route?.distance || 0) / 1000).toFixed(1);
-      const durationMin = Math.max(1, Math.round(Number(route?.duration || 0) / 60));
-      const motorwaySegments = this.extractMotorwaySegments(route);
-      const motorwayKm  = motorwaySegments.reduce((sum, seg) => sum + seg.kmMotorway, 0);
-      const tollOneWay  = +motorwaySegments.reduce((sum, seg) => sum + this.segmentCost(seg), 0).toFixed(2);
-      const tollRoundTrip = tollOneWay === null ? null : +(tollOneWay * 2).toFixed(2);
-      const coordinates = Array.isArray(route?.geometry?.coordinates) ? route.geometry.coordinates : [];
-      const geometry: [number, number][] = coordinates
-        .map((c: any) => [Number(c[1]), Number(c[0])] as [number, number])
-        .filter((c: [number, number]) => Number.isFinite(c[0]) && Number.isFinite(c[1]));
-      const label = hasWp ? `Percorso con ${waypoints.length} ${waypoints.length === 1 ? 'tappa' : 'tappe'}` : `Itinerario ${index + 1}`;
-      return {
-        id: `route-${index + 1}`,
-        label,
-        distanceKm,
-        durationMin,
-        motorwayKm: +motorwayKm.toFixed(1),
-        tollOneWay,
-        tollRoundTrip,
-        tollProvider: 'stima',
-        tollBoothsCount: this.countEstimatedBooths(motorwaySegments),
-        motorwaySegments,
-        geometry
-      };
-    });
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.warn(`[Expenses] OSRM route HTTP ${res.status} per ${coordStr.length} chars`);
+        return [];
+      }
+      const data = await res.json();
+      const routes = Array.isArray(data?.routes) ? data.routes : [];
+      return routes.slice(0, 3).map((route: any, index: number) => {
+        const distanceKm  = +(Number(route?.distance || 0) / 1000).toFixed(1);
+        const durationMin = Math.max(1, Math.round(Number(route?.duration || 0) / 60));
+        const motorwaySegments = this.extractMotorwaySegments(route);
+        const motorwayKm  = motorwaySegments.reduce((sum, seg) => sum + seg.kmMotorway, 0);
+        const tollOneWay  = +motorwaySegments.reduce((sum, seg) => sum + this.segmentCost(seg), 0).toFixed(2);
+        const tollRoundTrip = tollOneWay === null ? null : +(tollOneWay * 2).toFixed(2);
+        const coordinates = Array.isArray(route?.geometry?.coordinates) ? route.geometry.coordinates : [];
+        const geometry: [number, number][] = coordinates
+          .map((c: any) => [Number(c[1]), Number(c[0])] as [number, number])
+          .filter((c: [number, number]) => Number.isFinite(c[0]) && Number.isFinite(c[1]));
+        const label = hasWp ? `Percorso con ${waypoints.length} ${waypoints.length === 1 ? 'tappa' : 'tappe'}` : `Itinerario ${index + 1}`;
+        return {
+          id: `route-${index + 1}`,
+          label,
+          distanceKm,
+          durationMin,
+          motorwayKm: +motorwayKm.toFixed(1),
+          tollOneWay,
+          tollRoundTrip,
+          tollProvider: 'stima',
+          tollBoothsCount: this.countEstimatedBooths(motorwaySegments),
+          motorwaySegments,
+          geometry
+        };
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'errore sconosciuto';
+      console.warn(`[Expenses] OSRM route eccezione: ${msg}`);
+      return [];
+    }
   }
 
   private estimateMotorwayKm(route: any): number {
@@ -1032,39 +1062,58 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
     this.mapTileLayer.addTo(this.map);
   }
 
+  /**
+   * Risolve i parametri Tile Layer per tema mappa.
+   *
+   * NOTA IMPORTANTE (Settembre 2026): I server pubblici Carto (basemaps.cartocdn.com
+   * /voyager, /light_all, /dark_all) adesso richiedono API key (mostrano "API KEY REQUIRED"
+   * sulla mappa). Quindi rimpiazzati con provider alternativi SEMPRE gratuiti e senza chiave.
+   *
+   * Temi attuali:
+   *  - light     : default = OSM France Carto "OpenTopoData" stile moderno
+   *  - street    : OpenStreetMap Standard (storico, sempre attivo)
+   *  - dark      : Stamen Toner (Stadia free tier public, no key)
+   *  - satellite : Esri ArcGIS World Imagery
+   *  - topo      : OpenTopoMap
+   *  - humanitarian: OSM Humanitarian (australia opendata free)
+   */
   private resolveMapThemeConfig(theme: MapThemeId): { url: string; attribution: string; maxZoom: number } {
     if (theme === 'street') {
       return {
         url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         attribution: '© OpenStreetMap contributors',
-        maxZoom: 19
+        maxZoom: 19,
       };
     }
     if (theme === 'dark') {
+      // Stamen Toner (grayscale scuro, stile "elegante"). Server pubblico Stadia,
+      // uso personale senza API key è concesso (CORS abilitati).
       return {
-        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        attribution: '© OpenStreetMap contributors © CARTO',
-        maxZoom: 19
+        url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}{r}.png',
+        attribution: 'Map tiles by Stamen Design, under CC BY 3.0. Data by OpenStreetMap, under ODbL.',
+        maxZoom: 20,
       };
     }
     if (theme === 'satellite') {
       return {
         url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         attribution: 'Tiles © Esri',
-        maxZoom: 18
+        maxZoom: 18,
       };
     }
     if (theme === 'topo') {
       return {
         url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
         attribution: 'Map data: © OpenStreetMap contributors, SRTM | Style: © OpenTopoMap',
-        maxZoom: 17
+        maxZoom: 17,
       };
     }
+    // Fallback default: tema "light" moderno, senza API key → stile "OpenStreetMap Carto"
+    // pulito, colorato, stile Google-maps-like.
     return {
-      url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-      attribution: '© OpenStreetMap contributors © CARTO',
-      maxZoom: 19
+      url: 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',
+      attribution: '© OpenStreetMap contributors · tiles OSM France',
+      maxZoom: 20,
     };
   }
 
@@ -1182,7 +1231,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
 
   openAssignEventModal(expense: Expense): void {
     this.assignTargetExpenseId = expense.id;
-    const allEvents: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const allEvents: EventDetail[] = readEventsForDisplay();
     const activeEvents = allEvents
       .filter(e => `${e?.date || ''}`.trim())
       .sort((a, b) => `${b.date || ''}`.localeCompare(`${a.date || ''}`));
@@ -1212,7 +1261,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   eventLabelById(eventId: string): string {
-    const source = this.assignEvents.length ? this.assignEvents : (JSON.parse(localStorage.getItem('mm_events') || '[]') as EventDetail[]);
+    const source = this.assignEvents.length ? this.assignEvents : readEventsWithBackfill();
     const event = source.find(e => `${e.id}` === `${eventId}`);
     if (!event) return '';
     return `${event.title || 'Evento'} • ${event.date || ''}`;
@@ -1396,7 +1445,7 @@ export class ExpensesComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private async syncSupabaseExpenses(): Promise<void> {
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     const musicianId = `${profile.id || localStorage.getItem('musicianId') || ''}`.trim();
     if (!musicianId) return;
     try {

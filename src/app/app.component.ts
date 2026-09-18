@@ -93,7 +93,10 @@ export class AppComponent implements OnInit, OnDestroy {
   async logout(): Promise<void> {
     try {
       await this.supabase.signOut();
-    } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'errore sconosciuto';
+      console.warn(`[App] logout supabase fallito: ${msg}`);
+    }
     const theme = localStorage.getItem('mm_theme');
     localStorage.clear();
     if (theme) localStorage.setItem('mm_theme', theme);
@@ -145,6 +148,8 @@ export class AppComponent implements OnInit, OnDestroy {
     } else if (Notification.permission !== 'denied') {
       Notification.requestPermission().then(perm => {
         if (perm === 'granted') this.showBrowserNotification(notif);
+      }).catch(err => {
+        console.warn('[App] Notification.requestPermission rifiutata:', err);
       });
     }
   }
@@ -165,6 +170,9 @@ export class AppComponent implements OnInit, OnDestroy {
   private async bootstrapRemoteState(): Promise<void> {
     try {
       await this.identityContext.bootstrap('musician_manager');
-    } catch {}
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'errore sconosciuto';
+      console.error(`[App] bootstrap remote state fallito: ${msg}`);
+    }
   }
 }

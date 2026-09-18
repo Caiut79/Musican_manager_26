@@ -30,6 +30,7 @@ import { PrivacyConsentComponent }  from './features/privacy-consent/privacy-con
 import { ContractsComponent }        from './features/contracts/contracts.component';
 import { ContractViewComponent }     from './features/contract-view/contract-view.component';
 import { InvoicingComponent }       from './features/invoicing/invoicing.component';
+import { GoogleIntegrationComponent } from './shared/google-integration/google-integration.component';
 
 registerLocaleData(localeIt);
 
@@ -90,6 +91,7 @@ const routes: Routes = [
     ReactiveFormsModule,
     RouterModule.forRoot(routes),
     HttpClientModule,
+    GoogleIntegrationComponent,
   ],
   providers: [
     { provide: LOCALE_ID, useValue: 'it-IT' }

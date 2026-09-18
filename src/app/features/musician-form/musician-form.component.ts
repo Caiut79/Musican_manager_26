@@ -6,6 +6,13 @@ import { Musician } from '../../models/musician';
 import { Router } from '@angular/router';
 import { formatItalianAddressLabel, italianAddressTypeScore } from '../../core/italian-geo';
 
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
+
 const INSTRUMENTS = ['Chitarra', 'Basso', 'Batteria', 'Pianoforte', 'Voce', 'Sax', 'Violino', 'Tromba'];
 const LEVELS = ['Principiante', 'Intermedio', 'Avanzato', 'Professionista'];
 const STYLES = ['Rock', 'Pop', 'Jazz', 'Blues', 'Classica', 'Metal', 'Funk', 'Soul', 'R&B', 'Hip Hop', 'Elettronica', 'Folk'];
@@ -744,8 +751,8 @@ export class MusicianFormComponent {
       const mergedSnapshotDraft = this.mergeProfileSnapshot(previousSnapshot, this.form.value);
 
       const m: Musician = {
-        firstName:      v.firstName!,
-        lastName:       v.lastName!,
+        firstName:      v.firstName ?? '',
+        lastName:       v.lastName ?? '',
         phone:          v.phone || undefined,
         birthDate:      v.birthDate || undefined,
         birthPlace:     v.birthPlace || undefined,
@@ -894,7 +901,7 @@ export class MusicianFormComponent {
   goAgenda(): void { this.router.navigateByUrl('/agenda'); }
 
   private computeAnnualInvoicedMusicIncome(): number {
-    const payments = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
+    const payments = safeParse<any[]>(localStorage.getItem('mm_service_payments'), []);
     if (!Array.isArray(payments)) return 0;
     const year = new Date().getFullYear();
     return payments

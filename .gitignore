@@ -37,6 +37,9 @@ yarn-error.log
 testem.log
 /typings
 
+# Google Calendar config locale (evita commit del Client ID vero)
+/src/assets/google.config.json
+
 # System files
 .DS_Store
 Thumbs.db

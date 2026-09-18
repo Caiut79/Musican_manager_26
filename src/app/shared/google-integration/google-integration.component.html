@@ -1,0 +1,386 @@
+<section class="gcal-card">
+  <header class="gcal-head">
+    <div class="gcal-head-left">
+      <div class="gcal-icon" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="38" height="38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Google Calendar">
+          <defs>
+            <linearGradient id="gcalBlue" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#4285F4"/>
+              <stop offset="100%" stop-color="#3367D6"/>
+            </linearGradient>
+            <linearGradient id="gcalRed" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#EA4335"/>
+              <stop offset="100%" stop-color="#D93025"/>
+            </linearGradient>
+          </defs>
+          <rect x="4" y="10" width="40" height="32" rx="5" ry="5" fill="url(#gcalBlue)"/>
+          <rect x="4" y="10" width="40" height="9" fill="url(#gcalRed)" opacity="0.85"/>
+          <rect x="10" y="4" width="4" height="12" rx="2" fill="#fff"/>
+          <rect x="34" y="4" width="4" height="12" rx="2" fill="#fff"/>
+          <text x="24" y="36" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#fff" text-anchor="middle">
+            {{ todayDayNumber }}
+          </text>
+        </svg>
+      </div>
+      <div class="gcal-head-copy">
+        <h2 class="gcal-title">Google Calendar</h2>
+        <div class="gcal-subtitle-row">
+          <span class="gcal-badge" [ngClass]="statusColorClass"></span>
+          <span class="gcal-status">{{ statusLabel }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="gcal-head-actions">
+      <ng-container [ngSwitch]="state">
+        <button
+          *ngSwitchCase="'not_configured'"
+          type="button"
+          class="btn-primary"
+          (click)="toggleInstructions()"
+          [disabled]="false">
+          Configura
+        </button>
+        <button
+          *ngSwitchCase="'disconnected'"
+          type="button"
+          class="btn-primary"
+          (click)="onConnectClick()"
+          [disabled]="false">
+          Connetti Google Calendar
+        </button>
+        <button
+          *ngSwitchCase="'expired'"
+          type="button"
+          class="btn-primary"
+          (click)="onConnectClick()"
+          [disabled]="false">
+          Riconnetti
+        </button>
+        <button
+          *ngSwitchCase="'connected'"
+          type="button"
+          class="btn-danger-outline"
+          (click)="onDisconnectClick()">
+          Disconnetti
+        </button>
+      </ng-container>
+      <button
+        type="button"
+        class="btn-ghost"
+        (click)="toggleInstructions()"
+        *ngIf="showInstructions || state == 'not_configured'">
+        {{ showInstructions ? 'Nascondi istruzioni' : 'Mostra istruzioni' }}
+      </button>
+    </div>
+  </header>
+
+  <div class="gcal-instructions" *ngIf="showInstructions">
+    <h3>Come configurare Google Calendar (5 passaggi)</h3>
+    <ol>
+      <li>
+        Apri la <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a>
+        e crea un nuovo progetto (es. "Musican Manager").
+      </li>
+      <li>
+        Vai in <strong>API e Servizi → Libreria</strong>, cerca
+        <em>"Google Calendar API"</em> e clicca <strong>Abilita</strong>.
+      </li>
+      <li>
+        Vai in <strong>API e Servizi → Schermata consenso OAuth</strong>:
+        seleziona <em>"Esterno"</em> e completa la procedura.
+        Nella sezione <strong>Ambiti</strong> aggiungi
+        <code>https://www.googleapis.com/auth/calendar</code>
+        (permesso completo che include lista calendari e eventi CRUD).
+        Nella sezione <strong>Utenti di prova</strong> aggiungi la tua email Google.
+      </li>
+      <li>
+        Vai in <strong>API e Servizi → Credenziali → Crea credenziali → ID client OAuth 2.0</strong>:
+        come <em>Tipo applicazione</em> scegli <strong>"Applicazione Web"</strong>.
+        In <strong>Autorizza origini JavaScript</strong> inserisci
+        <code>http://localhost:4200</code> e l'URL di produzione.
+      </li>
+      <li>
+        Copia l'<strong>ID client</strong> (formato
+        <code>12345-abc.apps.googleusercontent.com</code>)
+        e <strong>incollalo nella casella sottostante</strong>,
+        poi clicca <strong>Salva</strong>. Non serve più modificare file.
+      </li>
+    </ol>
+  </div>
+
+  <!-- Sezione inserimento Client ID OAuth 2.0 (UI, senza edit file) -->
+  <div class="gcal-body" *ngIf="state !== 'connecting' && state !== 'connected' && state !== 'error'">
+    <div class="gcal-row">
+      <label class="gcal-field-label" for="gcal-clientid">Client ID OAuth 2.0</label>
+      <div class="gcal-field-row">
+        <input
+          id="gcal-clientid"
+          class="gcal-input"
+          type="text"
+          [(ngModel)]="clientIdInput"
+          placeholder="es. 1234567890-abc123.apps.googleusercontent.com"
+          [disabled]="clientIdSaving"
+          autocomplete="off"
+          spellcheck="false">
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="onSaveClientId()"
+          [disabled]="clientIdSaving || !clientIdInput.trim()">
+          {{ clientIdSaving ? 'Salvataggio…' : 'Salva' }}
+        </button>
+      </div>
+      <p class="gcal-field-hint" *ngIf="!clientIdMessage">
+        Inserisci l'ID client creato dalla Google Cloud Console. Le impostazioni
+        vengono salvate direttamente nel browser (nessun file da modificare).
+      </p>
+      <p class="gcal-message"
+         *ngIf="clientIdMessage"
+         [class.is-error]="clientIdMessageIsError">
+        {{ clientIdMessage }}
+      </p>
+    </div>
+  </div>
+
+  <ng-container [ngSwitch]="state">
+    <div *ngSwitchCase="'connected'" class="gcal-body">
+      <div class="gcal-row">
+        <label class="gcal-field-label">Calendario di destinazione</label>
+        <div class="gcal-field-row">
+          <select
+            class="gcal-select"
+            [disabled]="loadingCalendars"
+            [value]="selectedCalendarId"
+            (change)="onCalendarChange($any($event.target).value)">
+            <option value="" *ngIf="!selectedCalendarId">Carica elenco calendari</option>
+            <option *ngFor="let c of calendars" [value]="c.id">
+              {{ c.summary }}
+            </option>
+          </select>
+          <button
+            type="button"
+            class="btn-outline"
+            (click)="loadCalendarsAndAutoPick()"
+            [disabled]="loadingCalendars">
+            Aggiorna elenco
+          </button>
+        </div>
+        <p class="gcal-field-hint" *ngIf="selectedCalendarSummary">
+          Attuale: <strong>{{ selectedCalendarSummary }}</strong>
+        </p>
+        <div class="gcal-warning" *ngIf="!selectedCalendarId">
+          <span class="gcal-warning-icon" aria-hidden="true">⚠️</span>
+          <div class="gcal-warning-text">
+            <strong>Push automatico disattivato!</strong><br/>
+            Seleziona un calendario in elenco per sincronizzare gli eventi che crei nell'app
+            direttamente nel tuo Google Calendar. Senza un calendario selezionato,
+            gli eventi rimarranno solo in locale (non verranno inviati a Google).
+          </div>
+        </div>
+      </div>
+
+      <div class="gcal-row gcal-row-2col">
+        <div class="gcal-col">
+          <div class="gcal-last-sync-label">Ultima sincronizzazione</div>
+          <div class="gcal-last-sync-value">{{ formatSyncAtLabel() }}</div>
+          <div class="gcal-last-sync-report" *ngIf="rptHasAny">
+            <span class="report-chip chip-imported" *ngIf="rptImported">{{ rptImported }} nuovi</span>
+            <span class="report-chip chip-updated" *ngIf="rptUpdated">{{ rptUpdated }} aggiornati</span>
+            <span class="report-chip chip-skipped" *ngIf="rptSkipped">{{ rptSkipped }} saltati</span>
+            <span class="report-chip chip-conflicts" *ngIf="rptConflicts">{{ rptConflicts }} conflitti</span>
+          </div>
+        </div>
+        <div class="gcal-col gcal-col-actions">
+          <button
+            type="button"
+            class="btn-primary"
+            (click)="runSyncFromGoogle()"
+            [disabled]="!canSync">
+            Sincronizza da Google Calendar
+          </button>
+          <div class="gcal-sync-hint" *ngIf="!selectedCalendarId">
+            Scegli un calendario prima di sincronizzare.
+          </div>
+        </div>
+      </div>
+
+      <div class="gcal-message" *ngIf="syncMessage" [class.is-error]="syncHasError">
+        {{ syncMessage }}
+      </div>
+    </div>
+
+    <div *ngSwitchCase="'expired'" class="gcal-body">
+      <div class="gcal-row">
+        <p class="gcal-field-hint">
+          La sessione Google è scaduta. Clicca <strong>Riconnetti</strong> in alto per ripristinare la sincronizzazione.
+        </p>
+      </div>
+    </div>
+  </ng-container>
+
+  <footer class="gcal-foot">
+    <p>
+      Salvataggio prima in locale, poi invio a Google. Import manuale per modifiche da Google.
+    </p>
+  </footer>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       SEZIONE FILTRO: SINCRO DA (cutoff) — Sempre visibile, impostazioni generiche
+       per UTENTE FINALE (distribuzione app)
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="gcal-cutoff-section" aria-label="Filtro data di inizio sincronizzazione con Google Calendar">
+    <header class="gcal-cutoff-head">
+      <div class="gcal-cutoff-icon" aria-hidden="true">
+        <!-- Icona SVG a gradiente (NON emoji!) — Filtro + Calendario (icona professionale) -->
+        <svg viewBox="0 0 48 48" width="38" height="38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Filtro sincronizzazione">
+          <defs>
+            <linearGradient id="cutoffGreenGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#10b981"/>
+              <stop offset="100%" stop-color="#047857"/>
+            </linearGradient>
+            <linearGradient id="cutoffHandleGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fcd34d"/>
+              <stop offset="100%" stop-color="#f59e0b"/>
+            </linearGradient>
+          </defs>
+          <!-- Sfondo calendario -->
+          <rect x="5" y="9" width="38" height="34" rx="5" ry="5" fill="url(#cutoffGreenGrad)" stroke="#064e3b" stroke-width="2"/>
+          <rect x="5" y="9" width="38" height="8" rx="5" ry="5" fill="#ef4444" opacity="0.88"/>
+          <rect x="11" y="4" width="3.6" height="12" rx="1.8" fill="#fff"/>
+          <rect x="34" y="4" width="3.6" height="12" rx="1.8" fill="#fff"/>
+          <!-- Simbolo filtro a imbuto (icona standard UI) -->
+          <path d="M15 25 L33 25 L26 34 L26 40 L22 40 L22 34 Z" fill="url(#cutoffHandleGrad)" stroke="#92400e" stroke-width="1.4" stroke-linejoin="round"/>
+          <!-- Cerchio piccolo su maniglia filtro (simbolo "da/from") -->
+          <circle cx="24" cy="21" r="2.6" fill="#fff" opacity="0.92"/>
+        </svg>
+      </div>
+      <div class="gcal-cutoff-head-copy">
+        <h3 class="gcal-cutoff-title">🎚️  Filtro sincronizzazione</h3>
+        <p class="gcal-cutoff-subtitle">
+          Decidi <strong>da quale data</strong> l'applicazione deve sincronizzare gli eventi con il tuo Google Calendar.
+          <br/>
+          Qualsiasi evento <strong>precedente</strong> alla data scelta verrà <em>ignorato completamente</em>:
+          non verrà importato nel calendario dell'app, e nessuna modifica o cancellazione locale verrà riportata su Google per quelle date.
+        </p>
+      </div>
+    </header>
+
+    <div class="gcal-row">
+      <label class="gcal-field-label" for="gcal-sync-start">
+        🔎  <strong>Sincronizza da:</strong>
+      </label>
+      <div class="gcal-field-row">
+        <input
+          id="gcal-sync-start"
+          class="gcal-input gcal-input-date"
+          type="date"
+          [(ngModel)]="syncStartDateInput"
+          [disabled]="syncStartDateSaving"
+          aria-label="Seleziona la data da cui iniziare la sincronizzazione">
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="onSaveSyncStartDate()"
+          [disabled]="syncStartDateSaving || !syncStartDateInput">
+          {{ syncStartDateSaving ? 'Applicazione…' : '✅  Applica filtro' }}
+        </button>
+        <button
+          type="button"
+          class="btn-outline"
+          (click)="onResetSyncStartDateToToday()"
+          [disabled]="syncStartDateSaving"
+          title="Riporta il filtro alla data odierna (consigliato per nuovi utenti)">
+          📍  Oggi
+        </button>
+      </div>
+      <p class="gcal-field-hint" *ngIf="syncStartDateDisplay && !syncStartDateMessage">
+        ✅  <strong>Attuale:</strong> stai sincronizzando dal
+        <strong>{{ syncStartDateDisplay }}</strong>.
+        &nbsp;
+        <span class="gcal-hint-sep">·</span>&nbsp;
+        💡 <em>Consiglio per i nuovi utenti:</em> se è la prima volta che colleghi il calendario,
+        usa il pulsante <strong>"📍 Oggi"</strong> per evitare di importare tutto lo storico passato.
+      </p>
+      <p class="gcal-message"
+         *ngIf="syncStartDateMessage"
+         [class.is-error]="syncStartDateMessageIsError"
+         style="white-space: pre-line;">
+        {{ syncStartDateMessage }}
+      </p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       SEZIONE PULIZIA PASSATO (solo App, NON Google Calendar!)
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="gcal-wipe-section" aria-label="Pulizia eventi passati dalla applicazione">
+    <header class="gcal-wipe-head">
+      <div class="gcal-wipe-icon" aria-hidden="true">
+        <!-- Icone SVG stilizzate, gradienti, NON emoji (profilo Claudio) -->
+        <svg viewBox="0 0 48 48" width="38" height="38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pulizia">
+          <defs>
+            <linearGradient id="wipeGreenGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#10b981"/>
+              <stop offset="100%" stop-color="#059669"/>
+            </linearGradient>
+            <linearGradient id="wipeHandleGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#78716c"/>
+              <stop offset="100%" stop-color="#44403c"/>
+            </linearGradient>
+          </defs>
+          <path d="M10 30 L20 20 L34 34 L24 44 Z" fill="url(#wipeGreenGrad)" stroke="#064e3b" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M32 28 L40 20" stroke="url(#wipeHandleGrad)" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="42" cy="18" r="3.4" fill="url(#wipeHandleGrad)"/>
+          <path d="M15 35 L18 38" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+          <path d="M20 30 L26 36" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+        </svg>
+      </div>
+      <div class="gcal-wipe-head-copy">
+        <h3 class="gcal-wipe-title">Pulizia passato</h3>
+        <p class="gcal-wipe-subtitle">
+          Elimina concerti / lezioni / DJ set con data <strong>precedente a oggi</strong>
+          — <em><strong>SOLO dalla Musican Manager</strong></em>.
+          Google Calendar <strong>non viene toccato</strong> in nessun modo.
+        </p>
+      </div>
+    </header>
+
+    <div class="gcal-wipe-stats">
+      <div class="gcal-wipe-stat stat-total">
+        <span class="ws-num">{{ wipeStats.beforeTotal }}</span>
+        <span class="ws-label">Eventi TOTALI salvati in App</span>
+      </div>
+      <div class="gcal-wipe-stat stat-past">
+        <span class="ws-num">{{ wipeStats.beforePast }}</span>
+        <span class="ws-label">🗓️  PASSATI (verranno cancellati)</span>
+      </div>
+      <div class="gcal-wipe-stat stat-future">
+        <span class="ws-num">{{ wipeStats.beforeFuture }}</span>
+        <span class="ws-label">🔮 OGGI + FUTURO (restano)</span>
+      </div>
+    </div>
+
+    <div class="gcal-wipe-actions">
+      <button
+        type="button"
+        class="btn-primary btn-wipe-past"
+        (click)="onWipePastEventsClick()"
+        [disabled]="wipeRunning || wipeStats.beforePast === 0">
+        {{ wipeRunning ? 'Pulizia in corso…' : '🧹  Pulisci Passato (Solo dalla App!)' }}
+      </button>
+      <p class="gcal-wipe-hint" *ngIf="wipeStats.beforePast === 0 && !wipeMessage">
+        🎉 Nessun evento passato da pulire. Le liste sono già ordinate da oggi in poi.
+      </p>
+      <p class="gcal-wipe-hint" *ngIf="wipeStats.beforePast > 0 && !wipeMessage">
+        💾 Prima della cancellazione viene creato un <strong>backup completo</strong> degli eventi e pagamenti
+        in una chiave <code>localStorage</code> (si può ripristinare in 30 secondi in caso di ripensamenti).
+      </p>
+    </div>
+
+    <p class="gcal-message"
+       *ngIf="wipeMessage"
+       [class.is-error]="wipeMessageIsError">
+      {{ wipeMessage }}
+    </p>
+  </div>
+</section>

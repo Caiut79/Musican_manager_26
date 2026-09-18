@@ -95,6 +95,9 @@ export class InvoicingComponent implements OnInit {
   error = '';
   ivaOptions = IVA_OPTIONS;
 
+  trackByIdFn = (i: number, x: any) => x?.id ?? i;
+  trackByIndexFn = (i: number) => i;
+
   // Invoice list filter
   filterRole: 'all' | InvoiceRole = 'all';
   filterType: 'all' | CustomerType = 'all';

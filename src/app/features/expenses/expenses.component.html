@@ -1,7 +1,21 @@
-<div class="page-header">
+<div class="page-header page-header-expenses">
   <div>
     <h1>Itinerari &amp; Spese</h1>
     <p class="subtitle">Calcola percorsi, rimborsi chilometrici e costi di trasferta</p>
+  </div>
+  <div class="header-stats">
+    <span class="header-pill">
+      <i class="ti ti-route-2"></i>
+      {{ waypointsArray.length }} tappe
+    </span>
+    <span class="header-pill">
+      <i class="ti ti-receipt-2"></i>
+      {{ extrasArray.length }} extra
+    </span>
+    <span class="header-pill highlight" *ngIf="result">
+      <i class="ti ti-wallet"></i>
+      {{ result.total | currency:'EUR':'symbol':'1.2-2' }}
+    </span>
   </div>
 </div>
 
@@ -10,7 +24,22 @@
   <!-- Left: form -->
   <div class="form-col">
     <section class="card" [formGroup]="form">
+      <div class="card-topline">
+        <span class="card-kicker">Pianificazione viaggio</span>
+        <span class="state-chip" *ngIf="mapWaypointPickMode">
+          <i class="ti ti-crosshair"></i>
+          Selezione mappa attiva
+        </span>
+      </div>
       <h2>Calcola percorso</h2>
+      <p class="card-intro">Compila il tragitto, imposta i consumi e aggiungi eventuali costi accessori per ottenere una stima completa.</p>
+      <p class="calc-note">Il totale include carburante A/R, pedaggio autostradale A/R stimato e spese extra.</p>
+
+      <div class="form-section">
+        <div class="section-header">
+          <span class="section-title">Tragitto</span>
+          <span class="section-note">Percorso principale e tappe intermedie</span>
+        </div>
 
       <div class="field-block">
         <label for="expense-origin">Luogo di partenza *</label>
@@ -33,17 +62,25 @@
       <!-- Waypoints -->
       <div class="waypoints-section">
         <div class="waypoints-header">
-          <span class="waypoints-title">📍 Punti di passaggio <span class="wp-count" *ngIf="waypointsArray.length > 0">({{ waypointsArray.length }}/5)</span></span>
+          <span class="waypoints-title">
+            <i class="ti ti-map-pins"></i>
+            Punti di passaggio
+            <span class="wp-count" *ngIf="waypointsArray.length > 0">({{ waypointsArray.length }}/5)</span>
+          </span>
           <div class="waypoint-actions">
-            <button type="button" class="btn-outline-sm" (click)="addWaypoint()" [disabled]="waypointsArray.length >= 5">+ Aggiungi tappa</button>
+            <button type="button" class="btn-outline-sm" (click)="addWaypoint()" [disabled]="waypointsArray.length >= 5">
+              <i class="ti ti-plus"></i>
+              <span>Aggiungi tappa</span>
+            </button>
             <button type="button" class="btn-outline-sm" [class.active]="mapWaypointPickMode" (click)="toggleMapWaypointPick()" [disabled]="waypointsArray.length >= 5 && !mapWaypointPickMode">
-              {{ mapWaypointPickMode ? 'Annulla selezione mappa' : 'Seleziona su mappa' }}
+              <i class="ti" [ngClass]="mapWaypointPickMode ? 'ti-x' : 'ti-map-pin-search'"></i>
+              <span>{{ mapWaypointPickMode ? 'Annulla selezione mappa' : 'Seleziona su mappa' }}</span>
             </button>
           </div>
         </div>
         <div class="waypoints-list" [formArrayName]="'waypoints'">
           <div class="waypoint-row" *ngFor="let wp of waypointsArray.controls; index as i">
-            <span class="wp-pin">🟠</span>
+            <span class="wp-pin"><i class="ti ti-point-filled"></i></span>
             <div class="address-autocomplete">
               <input type="text" [formControlName]="i" placeholder="es. Cremona, Via Garibaldi 5"
                 autocomplete="off"
@@ -56,7 +93,9 @@
                 </button>
               </div>
             </div>
-            <button type="button" class="btn-remove" (click)="removeWaypoint(i)" title="Rimuovi tappa">✕</button>
+            <button type="button" class="btn-remove" (click)="removeWaypoint(i)" title="Rimuovi tappa" aria-label="Rimuovi tappa">
+              <i class="ti ti-x"></i>
+            </button>
           </div>
         </div>
         <p class="waypoints-hint" *ngIf="waypointsArray.length > 0">Le tappe disabilitano i percorsi alternativi</p>
@@ -81,6 +120,13 @@
           </div>
         </div>
       </div>
+      </div>
+      <div class="form-section">
+        <div class="section-header">
+          <span class="section-title">Veicolo e consumi</span>
+          <span class="section-note">Stima carburante per andata e ritorno</span>
+        </div>
+
       <div class="fuel-row">
         <label>Veicolo
           <input type="text" formControlName="vehicleModel" placeholder="es. Fiat 500 1.2">
@@ -111,124 +157,187 @@
           <input type="number" formControlName="vehicleConsumption" min="0" [step]="consumptionStep" [placeholder]="consumptionPlaceholder">
         </label>
       </div>
+      </div>
       <!-- Extras -->
-      <div class="extras-section">
-        <div class="extras-header">
-          <span class="extras-title">Spese extra</span>
-          <button type="button" class="btn-outline-sm" (click)="addExtra()">+ Aggiungi</button>
+      <div class="form-section extras-section">
+        <div class="section-header">
+          <span class="section-title">Spese extra</span>
+          <button type="button" class="btn-outline-sm" (click)="addExtra()">
+            <i class="ti ti-plus"></i>
+            <span>Aggiungi</span>
+          </button>
         </div>
         <div class="extras-list" [formArrayName]="'extras'">
           <div class="extra-row" *ngFor="let ex of extrasArray.controls; index as i" [formGroupName]="i">
             <input type="text" formControlName="label" placeholder="es. Autostrada, Parcheggio">
             <input type="number" formControlName="amount" min="0" placeholder="€" class="amount-input">
-            <button type="button" class="btn-remove" (click)="removeExtra(i)">✕</button>
+            <button type="button" class="btn-remove" (click)="removeExtra(i)" aria-label="Rimuovi spesa extra">
+              <i class="ti ti-x"></i>
+            </button>
           </div>
         </div>
       </div>
 
       <button type="button" class="btn-primary full-btn" (click)="calculate()" [disabled]="calculating">
-        {{ calculating ? '⏳ Calcolo in corso...' : '🔍 Calcola percorso' }}
+        <i class="ti" [ngClass]="calculating ? 'ti-loader-2' : 'ti-route-2'"></i>
+        <span>{{ calculating ? 'Calcolo in corso...' : 'Calcola percorso' }}</span>
       </button>
 
-      <div class="error-box" *ngIf="calcError">⚠ {{ calcError }}</div>
-    </section>
-
-    <!-- Result -->
-    <section class="card result-card" *ngIf="result">
-      <h2>Risultato</h2>
-
-      <div class="itineraries" *ngIf="itineraryOptions.length > 0">
-        <button
-          type="button"
-          class="itinerary-btn"
-          *ngFor="let itinerary of itineraryOptions"
-          [class.active]="selectedItineraryId === itinerary.id"
-          (click)="selectItinerary(itinerary.id)">
-          <span class="itinerary-title">{{ itinerary.label }}</span>
-          <span class="itinerary-meta">{{ itinerary.distanceKm }} km • {{ durationLabel(itinerary.durationMin) }}</span>
-          <span class="itinerary-meta">Pedaggio stimato locale</span>
-          <span class="itinerary-meta" *ngIf="itinerary.tollOneWay !== null">Pedaggio A/R {{ itinerary.tollRoundTrip | currency:'EUR':'symbol':'1.2-2' }}</span>
-          <span class="itinerary-meta" *ngIf="itinerary.tollOneWay === null">Pedaggio non disponibile</span>
-        </button>
+      <div class="error-box" *ngIf="calcError">
+        <i class="ti ti-alert-triangle"></i>
+        <span>{{ calcError }}</span>
       </div>
-
-      <div class="result-grid">
-        <div class="result-item">
-          <span class="result-label">{{ result.routeLabel }}</span>
-          <span class="result-value">{{ result.distanceKm }} km</span>
-        </div>
-        <div class="result-item">
-          <span class="result-label">Tempo stimato (solo andata)</span>
-          <span class="result-value">{{ durationLabel(result.durationMin) }}</span>
-        </div>
-        <div class="result-item">
-          <span class="result-label">Costo carburante calcolato</span>
-          <span class="result-value">{{ result.fuelCostPerKm | currency:'EUR':'symbol':'1.3-3' }}/km</span>
-        </div>
-        <div class="result-item">
-          <span class="result-label">Carburante totale (A/R)</span>
-          <span class="result-value">{{ result.totalFuel | currency:'EUR':'symbol':'1.2-2' }}</span>
-        </div>
-        <div class="result-item">
-          <span class="result-label">Pedaggio (A/R)</span>
-          <span class="result-value" *ngIf="result.tollRoundTrip !== null">{{ result.tollRoundTrip | currency:'EUR':'symbol':'1.2-2' }}</span>
-          <span class="result-value" *ngIf="result.tollRoundTrip === null">Non disponibile</span>
-        </div>
-        <div class="result-item" *ngIf="result.tollBoothsCount !== null">
-          <span class="result-label">Caselli stimati</span>
-          <span class="result-value">{{ result.tollBoothsCount }}</span>
-        </div>
-        <div class="result-item" *ngIf="result.totalExtras > 0">
-          <span class="result-label">Spese extra</span>
-          <span class="result-value">{{ result.totalExtras | currency:'EUR':'symbol':'1.2-2' }}</span>
-        </div>
-        <div class="result-item total">
-          <span class="result-label">Totale spese</span>
-          <span class="result-value">{{ result.total | currency:'EUR':'symbol':'1.2-2' }}</span>
-        </div>
-      </div>
-
-      <!-- Navigation buttons -->
-      <div class="nav-buttons">
-        <button type="button" class="nav-btn waze"   (click)="openNavigation('waze')">
-          <span>🧭</span> Waze
-        </button>
-        <button type="button" class="nav-btn google" (click)="openNavigation('google')">
-          <span>🗺️</span> Google Maps
-        </button>
-        <button type="button" class="nav-btn apple"  (click)="openNavigation('apple')">
-          <span>🍎</span> Apple Maps
-        </button>
-      </div>
-
-      <button type="button" class="btn-outline full-btn" (click)="openPedaggiPopup()">🛣️ Calcola pedaggi</button>
-
-      <button type="button" class="btn-outline full-btn" (click)="saveExpense()">💾 Salva spesa</button>
-      <button type="button" class="btn-primary full-btn" *ngIf="fromConcertFlow || fromDashboardFlow" (click)="loadExpenseIntoConcert()">Carica in evento</button>
     </section>
   </div>
 
-  <!-- Right: map -->
+  <!-- Right: map + result (horizontal below) -->
   <div class="map-col">
-    <div class="map-toolbar">
-      <label>Stile mappa
-        <select [ngModel]="selectedMapTheme" [ngModelOptions]="{standalone: true}" (ngModelChange)="onMapThemeChange($event)">
-          <option *ngFor="let theme of mapThemeOptions" [ngValue]="theme.id">{{ theme.label }}</option>
-        </select>
-      </label>
-      <label>Colore percorso
-        <select [ngModel]="selectedRouteColor" [ngModelOptions]="{standalone: true}" (ngModelChange)="onRouteColorChange($event)">
-          <option *ngFor="let color of routeColorOptions" [ngValue]="color.id">{{ color.label }}</option>
-        </select>
-      </label>
-    </div>
-    <div class="map-wrapper">
-      <div #mapContainer class="leaflet-map" [class.pick-active]="mapWaypointPickMode"></div>
-      <div class="map-placeholder" *ngIf="!result">
-        <span>🗺️</span>
-        <p>La mappa apparirà dopo il calcolo</p>
+    <section class="card map-panel">
+      <div class="map-panel-head">
+        <div>
+          <span class="card-kicker">Anteprima percorso</span>
+          <h2>Mappa interattiva</h2>
+        </div>
+        <div class="map-status" *ngIf="mapWaypointPickMode">
+          <i class="ti ti-map-pin-search"></i>
+          Tocca la mappa per aggiungere una tappa
+        </div>
       </div>
-    </div>
+      <div class="map-toolbar">
+        <label>Stile mappa
+          <select [ngModel]="selectedMapTheme" [ngModelOptions]="{standalone: true}" (ngModelChange)="onMapThemeChange($event)">
+            <option *ngFor="let theme of mapThemeOptions" [ngValue]="theme.id">{{ theme.label }}</option>
+          </select>
+        </label>
+        <label>Colore percorso
+          <select [ngModel]="selectedRouteColor" [ngModelOptions]="{standalone: true}" (ngModelChange)="onRouteColorChange($event)">
+            <option *ngFor="let color of routeColorOptions" [ngValue]="color.id">{{ color.label }}</option>
+          </select>
+        </label>
+      </div>
+      <div class="map-wrapper">
+        <div #mapContainer class="leaflet-map" [class.pick-active]="mapWaypointPickMode"></div>
+        <div class="map-placeholder" *ngIf="!result">
+          <i class="ti ti-map-search"></i>
+          <p>La mappa si aggiorna dopo il primo calcolo del percorso</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Result — horizontal layout under the map -->
+    <section class="card result-card" *ngIf="result">
+      <div class="card-topline">
+        <span class="card-kicker">Preventivo viaggio</span>
+        <span class="state-chip neutral">
+          <i class="ti ti-map-2"></i>
+          {{ itineraryOptions.length || 1 }} opzione{{ (itineraryOptions.length || 1) > 1 ? 'i' : '' }}
+        </span>
+      </div>
+      <h2>Risultato</h2>
+
+      <div class="result-horizontal">
+
+        <!-- Colonna 1: Hero + itinerari -->
+        <div class="result-col result-col-left">
+          <div class="result-hero">
+            <div class="result-hero-main">
+              <span class="result-hero-label">Totale stimato</span>
+              <strong>{{ result.total | currency:'EUR':'symbol':'1.2-2' }}</strong>
+            </div>
+            <div class="result-hero-side">
+              <span>{{ result.distanceKm }} km</span>
+              <span>{{ durationLabel(result.durationMin) }}</span>
+            </div>
+          </div>
+
+          <div class="itineraries" *ngIf="itineraryOptions.length > 0">
+            <button
+              type="button"
+              class="itinerary-btn"
+              *ngFor="let itinerary of itineraryOptions"
+              [class.active]="selectedItineraryId === itinerary.id"
+              (click)="selectItinerary(itinerary.id)">
+              <span class="itinerary-title">{{ itinerary.label }}</span>
+              <span class="itinerary-meta">{{ itinerary.distanceKm }} km • {{ durationLabel(itinerary.durationMin) }}</span>
+              <span class="itinerary-meta" *ngIf="itinerary.tollOneWay !== null">Pedaggio A/R {{ itinerary.tollRoundTrip | currency:'EUR':'symbol':'1.2-2' }}</span>
+              <span class="itinerary-meta" *ngIf="itinerary.tollOneWay === null">Pedaggio non disponibile</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Colonna 2: Dettagli -->
+        <div class="result-col result-col-center">
+          <div class="result-grid">
+            <div class="result-item">
+              <span class="result-label">{{ result.routeLabel }}</span>
+              <span class="result-value">{{ result.distanceKm }} km</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Tempo stimato (solo andata)</span>
+              <span class="result-value">{{ durationLabel(result.durationMin) }}</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Costo carburante calcolato</span>
+              <span class="result-value">{{ result.fuelCostPerKm | currency:'EUR':'symbol':'1.3-3' }}/km</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Carburante totale (A/R)</span>
+              <span class="result-value">{{ result.totalFuel | currency:'EUR':'symbol':'1.2-2' }}</span>
+            </div>
+            <div class="result-item">
+              <span class="result-label">Pedaggio autostradale (A/R)</span>
+              <span class="result-value" *ngIf="result.tollRoundTrip !== null">{{ result.tollRoundTrip | currency:'EUR':'symbol':'1.2-2' }}</span>
+              <span class="result-value" *ngIf="result.tollRoundTrip === null">Non disponibile</span>
+            </div>
+            <div class="result-item" *ngIf="result.tollBoothsCount !== null">
+              <span class="result-label">Caselli stimati</span>
+              <span class="result-value">{{ result.tollBoothsCount }}</span>
+            </div>
+            <div class="result-item" *ngIf="result.totalExtras > 0">
+              <span class="result-label">Spese extra</span>
+              <span class="result-value">{{ result.totalExtras | currency:'EUR':'symbol':'1.2-2' }}</span>
+            </div>
+            <div class="result-item total">
+              <span class="result-label">Totale incl. pedaggio</span>
+              <span class="result-value">{{ result.total | currency:'EUR':'symbol':'1.2-2' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Colonna 3: Azioni -->
+        <div class="result-col result-col-right">
+          <div class="nav-buttons">
+            <button type="button" class="nav-btn waze"   (click)="openNavigation('waze')">
+              <i class="ti ti-navigation"></i>
+              <span>Waze</span>
+            </button>
+            <button type="button" class="nav-btn google" (click)="openNavigation('google')">
+              <i class="ti ti-map-2"></i>
+              <span>Google Maps</span>
+            </button>
+            <button type="button" class="nav-btn apple"  (click)="openNavigation('apple')">
+              <i class="ti ti-brand-apple"></i>
+              <span>Apple Maps</span>
+            </button>
+          </div>
+
+          <button type="button" class="btn-outline full-btn" (click)="openPedaggiPopup()">
+            <i class="ti ti-road"></i>
+            <span>Calcola pedaggi</span>
+          </button>
+
+          <button type="button" class="btn-outline full-btn" (click)="saveExpense()">
+            <i class="ti ti-device-floppy"></i>
+            <span>Salva spesa</span>
+          </button>
+          <button type="button" class="btn-primary full-btn" *ngIf="fromConcertFlow || fromDashboardFlow" (click)="loadExpenseIntoConcert()">
+            <i class="ti ti-arrow-up-right-circle"></i>
+            <span>Carica in evento</span>
+          </button>
+        </div>
+
+      </div>
+    </section>
   </div>
 
 </div>
@@ -290,9 +399,17 @@
         <strong>{{ ex.totalExpense | currency:'EUR':'symbol':'1.2-2' }}</strong>
       </div>
       <div class="expense-actions">
-        <button type="button" class="btn-outline-sm" (click)="reviewExpenseOnMap(ex)" title="Rivedi percorso">🗺 Rivedi</button>
-        <button type="button" class="btn-outline-sm" (click)="openAssignEventModal(ex)" title="Assegna a evento">🔗 Assegna</button>
-        <button type="button" class="btn-remove" (click)="deleteExpense(ex.id)" title="Elimina">🗑</button>
+        <button type="button" class="btn-outline-sm" (click)="reviewExpenseOnMap(ex)" title="Rivedi percorso">
+          <i class="ti ti-map-2"></i>
+          <span>Rivedi</span>
+        </button>
+        <button type="button" class="btn-outline-sm" (click)="openAssignEventModal(ex)" title="Assegna a evento">
+          <i class="ti ti-link"></i>
+          <span>Assegna</span>
+        </button>
+        <button type="button" class="btn-remove" (click)="deleteExpense(ex.id)" title="Elimina" aria-label="Elimina spesa">
+          <i class="ti ti-trash"></i>
+        </button>
       </div>
     </div>
   </div>

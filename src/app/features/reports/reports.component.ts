@@ -1,5 +1,13 @@
 import { Component, HostListener, OnInit } from '@angular/core';
 import { provinceCodeFromAddressLabel, regionNameFromProvinceCode } from '../../core/italian-geo';
+import { readEventsWithBackfill, readEventsForDisplay } from '../../core/local-storage.service';
+
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,18 +163,18 @@ export class ReportsComponent implements OnInit {
   // ─────────────────────────────────────────────────────────────────────────────
 
   ngOnInit(): void {
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     this.isTeacherProfile = profile?.isTeacher === true;
     this.eventTypeById    = this.buildEventTypeIndex();
 
-    this.contacts = JSON.parse(localStorage.getItem('mm_contacts')           || '[]');
-    this.students = JSON.parse(localStorage.getItem('mm_teaching_students')  || '[]');
-    this.schools  = JSON.parse(localStorage.getItem('mm_teaching_schools')   || '[]');
+    this.contacts = safeParse<any[]>(localStorage.getItem('mm_contacts'), []);
+    this.students = safeParse<any[]>(localStorage.getItem('mm_teaching_students'), []);
+    this.schools  = safeParse<any[]>(localStorage.getItem('mm_teaching_schools'), []);
 
     this.concerts = this.readConcerts();
     this.teaching = this.isTeacherProfile ? this.readTeachingSessions() : [];
     this.expenses = this.readExpenses();
-    this.payments = this.normalizePayments(JSON.parse(localStorage.getItem('mm_service_payments') || '[]'));
+    this.payments = this.normalizePayments(safeParse<any[]>(localStorage.getItem('mm_service_payments'), []));
 
     this.periods       = this.buildPeriods();
     this.selectedPeriod = this.periods[0]?.value || '';
@@ -496,7 +504,7 @@ export class ReportsComponent implements OnInit {
 
     const withDays = this.paymentTimingRows.filter(r => r.daysToFirstPayment !== null);
     this.avgDaysToFirstPayment = withDays.length
-      ? Math.round(withDays.reduce((s, r) => s + r.daysToFirstPayment!, 0) / withDays.length)
+      ? Math.round(withDays.reduce((s, r) => s + (r.daysToFirstPayment ?? 0), 0) / withDays.length)
       : null;
 
     const paidCount        = this.paymentTimingRows.filter(r => r.isPaid).length;
@@ -576,7 +584,7 @@ export class ReportsComponent implements OnInit {
   }
 
   private buildBookingStats(): void {
-    const raw = JSON.parse(localStorage.getItem('mm_booking_link_views') || '[]');
+    const raw = safeParse<any[]>(localStorage.getItem('mm_booking_link_views'), []);
     if (!Array.isArray(raw) || raw.length === 0) {
       this.bookingStats = []; this.totalBookingViews = 0; this.maxBookingViews = 1; return;
     }
@@ -764,7 +772,7 @@ export class ReportsComponent implements OnInit {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       months.push(`${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, '0')}`);
     }
-    const allPay = this.normalizePayments(JSON.parse(localStorage.getItem('mm_service_payments') || '[]'));
+    const allPay = this.normalizePayments(safeParse<any[]>(localStorage.getItem('mm_service_payments'), []));
     const allExp = this.readExpenses();
     return months.map(ym => {
       const received = allPay
@@ -813,7 +821,7 @@ export class ReportsComponent implements OnInit {
   }
 
   private readConcerts(): ConcertRecord[] {
-    const raw = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
+    const raw = safeParse<any[]>(localStorage.getItem('mm_concerts'), []);
     if (!Array.isArray(raw)) return [];
     return raw.map((x: any): ConcertRecord => ({
       id:           `${x?.id || ''}` || crypto.randomUUID(),
@@ -831,7 +839,7 @@ export class ReportsComponent implements OnInit {
   }
 
   private readTeachingSessions(): TeachingSession[] {
-    const raw = JSON.parse(localStorage.getItem('mm_teaching_sessions') || '[]');
+    const raw = safeParse<any[]>(localStorage.getItem('mm_teaching_sessions'), []);
     if (!Array.isArray(raw)) return [];
     return raw.map((x: any): TeachingSession => ({
       id:           `${x?.id || ''}` || crypto.randomUUID(),
@@ -845,7 +853,7 @@ export class ReportsComponent implements OnInit {
   }
 
   private readExpenses(): ExpenseRecord[] {
-    const raw = JSON.parse(localStorage.getItem('mm_expenses') || '[]');
+    const raw = safeParse<any[]>(localStorage.getItem('mm_expenses'), []);
     if (!Array.isArray(raw)) return [];
     return raw.map((x: any): ExpenseRecord => ({
       date:         `${x?.date || ''}`,
@@ -875,7 +883,7 @@ export class ReportsComponent implements OnInit {
 
   private buildEventTypeIndex(): Map<string, 'concert' | 'dj_set' | 'lesson' | 'other'> {
     const map    = new Map<string, 'concert' | 'dj_set' | 'lesson' | 'other'>();
-    const events = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const events = readEventsForDisplay();
     if (!Array.isArray(events)) return map;
     for (const e of events) {
       const id = `${e?.id || ''}`.trim(); if (!id) continue;

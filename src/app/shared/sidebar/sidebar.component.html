@@ -3,6 +3,7 @@
 
 <!-- Sidebar panel -->
 <aside class="sidebar" [class.collapsed]="collapsed" [class.mobile-open]="mobileOpen">
+  <div class="sidebar-glow" aria-hidden="true"></div>
 
   <!-- Header -->
   <div class="sidebar-header">
@@ -12,11 +13,16 @@
     </div>
     <span class="brand-name">
       <strong>Musican Manager</strong>
-      <small>Gestione professionale</small>
+      <small>Regia operativa live</small>
     </span>
     <button *ngIf="!mobileOpen" type="button" class="sidebar-toggle" (click)="sidebarToggle.emit()" aria-label="Apri/chiudi menu">
       <i class="ti ti-menu-2"></i>
     </button>
+  </div>
+
+  <div class="sidebar-status" *ngIf="!collapsed || mobileOpen">
+    <span class="status-dot"></span>
+    <span class="status-text">Workspace attivo</span>
   </div>
 
   <!-- Nav -->

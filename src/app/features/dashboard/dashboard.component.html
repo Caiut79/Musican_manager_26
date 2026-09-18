@@ -1,8 +1,47 @@
-<!-- Page header -->
-<div class="page-header">
-  <h1 *ngIf="musicianName">Ciao, <strong>{{ musicianName }}</strong> 👋</h1>
-  <h1 *ngIf="!musicianName">Benvenuto in Musicista Manager</h1>
-</div>
+<section class="dashboard-hero">
+  <div class="hero-copy">
+    <span class="hero-kicker">Panoramica operativa</span>
+    <div class="page-header" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+      <div>
+        <h1 *ngIf="musicianName">Ciao, <strong>{{ musicianName }}</strong></h1>
+        <h1 *ngIf="!musicianName">Benvenuto in Musican Manager</h1>
+        <p class="hero-subtitle">Tutto quello che ti serve per concerti, lezioni, notifiche e amministrazione in un colpo d'occhio.</p>
+      </div>
+      <button
+        type="button"
+        class="quick-sync-btn"
+        (click)="quickSyncGcal()"
+        [disabled]="gcalState !== 'connected'"
+        title="{{ gcalState === 'connected' ? 'Sincronizza da Google Calendar' : 'Vai nel Profilo per connettere Google Calendar' }}">
+        <span class="qs-icon">↻</span>
+        <span>Sync Google ↓</span>
+      </button>
+    </div>
+    <!-- Messaggio risultato quick sync GCal -->
+    <div *ngIf="gcalQuickMsg" class="form-success" style="margin:8px 0 0; padding:10px 14px; border-radius:10px; background:#eef2ff; color:#3730a3; font-size:13px;">
+      {{ gcalQuickMsg }}
+    </div>
+  </div>
+
+  <section class="hero-stats" aria-label="Riepilogo rapido">
+    <div class="hero-stat">
+      <span class="hero-stat-value">{{ allEvents.length }}</span>
+      <span class="hero-stat-label">Eventi totali</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-stat-value">{{ upcomingEvents.length }}</span>
+      <span class="hero-stat-label">In arrivo</span>
+    </div>
+    <div class="hero-stat">
+      <span class="hero-stat-value">{{ contactsByPriority.length }}</span>
+      <span class="hero-stat-label">Contatti</span>
+    </div>
+    <div class="hero-stat emphasis">
+      <span class="hero-stat-value">{{ unreadCount }}</span>
+      <span class="hero-stat-label">Bozze aperte</span>
+    </div>
+  </section>
+</section>
 
 <div class="overdue-backdrop" *ngIf="showOverduePrompt">
   <div class="overdue-modal" *ngIf="currentOverduePrompt as p" [class.is-monthly]="p.paymentCadence === 'mensile'">
@@ -149,9 +188,9 @@
           <button type="button" class="dcp-close" (click)="closeCreatePicker()">✕</button>
         </div>
         <div class="dcp-actions">
-          <button type="button" class="dcp-btn concert" [class.active]="draft.kind === 'concert'" (click)="chooseCreate('concert')">Concerto</button>
-          <button type="button" class="dcp-btn dj" [class.active]="draft.kind === 'dj_set'" (click)="chooseCreate('dj_set')">DJ Set</button>
-          <button type="button" class="dcp-btn lesson" [class.active]="draft.kind === 'lesson'" (click)="chooseCreate('lesson')">Lezione</button>
+          <button *ngIf="isMusicianProfile" type="button" class="dcp-btn concert" [class.active]="draft.kind === 'concert'" (click)="chooseCreate('concert')">Concerto</button>
+          <button *ngIf="isDjProfile"       type="button" class="dcp-btn dj"      [class.active]="draft.kind === 'dj_set'"  (click)="chooseCreate('dj_set')">DJ Set</button>
+          <button *ngIf="isTeacherProfile"  type="button" class="dcp-btn lesson"  [class.active]="draft.kind === 'lesson'"  (click)="chooseCreate('lesson')">Lezione</button>
         </div>
         <div class="dcp-form">
           <label class="full">Rubrica (ordinata per priorità)

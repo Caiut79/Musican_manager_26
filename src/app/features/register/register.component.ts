@@ -58,7 +58,7 @@ export class RegisterComponent implements OnInit {
     this.loading = true;
     try {
       const email = `${this.form.value.email || ''}`.trim().toLowerCase();
-      const password = this.form.value.password!;
+      const password = (this.form.value.password ?? '');
 
       if (this.isInviteFlow) {
         if (this.inviteStatus === 'idle') {

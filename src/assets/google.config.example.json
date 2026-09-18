@@ -1,0 +1,23 @@
+{
+  "// clientId": "Ottieni un Client ID OAuth 2.0 da https://console.cloud.google.com/",
+  "// guida_breve": [
+    "1) Apri console.cloud.google.com → Crea progetto o seleziona esistente",
+    "2) Menu 'API e servizi' → 'Libreria' → cerca 'Google Calendar API' e abilitala",
+    "3) Menu 'API e servizi' → 'Schermata consenso OAuth'",
+    "   — Tipo utente: 'Esterno' per account Gmail personale, 'Interno' per Workspace",
+    "   — Compila nome app, email supporto, email sviluppatore, SALVA",
+    "   — Ambito (Scope): aggiungi https://www.googleapis.com/auth/calendar",
+    "     (Scope completo: include lista calendari + CRUD eventi; il solo calendar.events NON basta)",
+    "   — Utenti di prova: aggiungi la tua email se l'app è in 'Testing'",
+    "4) Menu 'API e servizi' → 'Credenziali' → Crea credenziali → 'ID client OAuth 2.0'",
+    "   — Tipo applicazione: 'Applicazione Web'",
+    "   — Nome: 'Musican Manager Web'",
+    "   — Origini JavaScript autorizzate: http://localhost:4200 (e dominio produzione Vercel)",
+    "   — URI di reindirizzamento autorizzate: http://localhost:4200 (e dominio produzione)",
+    "   — Crea → Copia l'ID client e incollalo nel campo 'clientId' qui sotto OPPURE direttamente nella UI scheda Google Calendar"
+  ],
+  "clientId": "YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+  "scopes": [
+    "https://www.googleapis.com/auth/calendar"
+  ]
+}

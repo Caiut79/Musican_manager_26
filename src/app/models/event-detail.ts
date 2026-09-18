@@ -19,4 +19,6 @@ export type EventDetail = {
   notes?: string;
   status: 'confirmed' | 'pending' | 'cancelled';
   createdAt: string;
+  updatedAt: string;
+  googleEventId?: string;
 };

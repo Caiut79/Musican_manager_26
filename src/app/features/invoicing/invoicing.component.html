@@ -233,7 +233,7 @@
           <span class="col-total">Totale riga</span>
           <span class="col-del"></span>
         </div>
-        <div class="line-row" *ngFor="let l of draft.lines; index as i">
+        <div class="line-row" *ngFor="let l of draft.lines; index as i; trackBy: trackByIndexFn">
           <input type="text" class="col-desc" [(ngModel)]="l.description"
             (ngModelChange)="onLineChange()" placeholder="Descrizione prestazione">
           <input type="number" class="col-qty" min="0" step="1" [(ngModel)]="l.quantity"
@@ -322,7 +322,7 @@
     </div>
 
     <div class="inv-items" *ngIf="filteredInvoices.length > 0">
-      <div class="inv-item" *ngFor="let inv of filteredInvoices">
+      <div class="inv-item" *ngFor="let inv of filteredInvoices; trackBy: trackByIdFn">
         <div class="inv-badges">
           <span class="type-badge" [class.b2b]="inv.customerType === 'b2b'" [class.privato]="inv.customerType === 'privato'">
             {{ inv.customerType === 'b2b' ? '🏢 B2B' : '👤 Privato' }}

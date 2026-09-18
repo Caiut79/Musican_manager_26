@@ -1,26 +1,51 @@
 <div class="page-header">
   <div class="page-header-left">
     <h1>Agenda</h1>
-    <p class="subtitle">Gestisci lezioni e concerti</p>
+    <p class="subtitle">
+      <ng-container *ngIf="isTeacherProfile && isMusicianProfile && isDjProfile">Gestisci lezioni, concerti e DJ set</ng-container>
+      <ng-container *ngIf="isTeacherProfile && isMusicianProfile && !isDjProfile">Gestisci lezioni e concerti</ng-container>
+      <ng-container *ngIf="isTeacherProfile && !isMusicianProfile && isDjProfile">Gestisci lezioni e DJ set</ng-container>
+      <ng-container *ngIf="!isTeacherProfile && isMusicianProfile && isDjProfile">Gestisci concerti e DJ set</ng-container>
+      <ng-container *ngIf="isTeacherProfile && !isMusicianProfile && !isDjProfile">Gestisci lezioni</ng-container>
+      <ng-container *ngIf="!isTeacherProfile && isMusicianProfile && !isDjProfile">Gestisci concerti</ng-container>
+      <ng-container *ngIf="!isTeacherProfile && !isMusicianProfile && isDjProfile">Gestisci DJ set</ng-container>
+      <ng-container *ngIf="!isTeacherProfile && !isMusicianProfile && !isDjProfile">Gestisci eventi</ng-container>
+    </p>
   </div>
-  <a routerLink="/" class="btn-outline">← Profilo</a>
+  <div class="header-actions" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <button
+      type="button"
+      class="quick-sync-btn"
+      (click)="quickSyncGcal()"
+      [disabled]="gcalState !== 'connected'"
+      title="{{ gcalState === 'connected' ? 'Sincronizza da Google Calendar' : 'Vai nel Profilo per connettere Google Calendar' }}">
+      <span class="qs-icon">↻</span>
+      <span>Sync Google ↓</span>
+    </button>
+    <a routerLink="/" class="btn-outline">← Profilo</a>
+  </div>
 </div>
 
-<!-- Legend -->
+<!-- Messaggio risultato quick sync GCal -->
+<div *ngIf="gcalQuickMsg" class="form-success" style="margin:8px 0 16px; padding:10px 14px; border-radius:10px; background:#eef2ff; color:#3730a3; font-size:13px;">
+  {{ gcalQuickMsg }}
+</div>
+
+<!-- Legend (solo i ruoli attivi) -->
 <div class="legend-bar">
-  <span class="legend-item">
+  <span class="legend-item" *ngIf="isTeacherProfile">
     <span class="legend-dot" [style.background]="lessonColor"></span>
     Lezioni
   </span>
-  <span class="legend-item">
+  <span class="legend-item" *ngIf="isMusicianProfile">
     <span class="legend-dot" [style.background]="concertColor"></span>
     Concerti
   </span>
-  <span class="legend-item">
+  <span class="legend-item" *ngIf="isDjProfile">
     <span class="legend-dot" [style.background]="djColor"></span>
     DJ Set
   </span>
-  <span class="legend-hint">I colori si personalizzano nel profilo</span>
+  <span class="legend-hint" *ngIf="isTeacherProfile || isMusicianProfile || isDjProfile">I colori si personalizzano nel profilo</span>
 </div>
 
 <!-- Add event form -->
@@ -37,13 +62,21 @@
       <label>Ora inizio
         <input type="time" formControlName="timeStart">
       </label>
-      <label>Tipo
-        <select formControlName="type">
-          <option value="lesson">Lezione</option>
-          <option value="concert">Concerto</option>
-          <option value="dj_set">DJ Set</option>
-        </select>
-      </label>
+      <ng-container *ngIf="availableTypes.length > 1">
+        <label>Tipo
+          <select formControlName="type">
+            <option *ngIf="isTeacherProfile" value="lesson">Lezione</option>
+            <option *ngIf="isMusicianProfile" value="concert">Concerto</option>
+            <option *ngIf="isDjProfile" value="dj_set">DJ Set</option>
+          </select>
+        </label>
+      </ng-container>
+      <ng-container *ngIf="availableTypes.length === 1">
+        <label>Tipo
+          <input type="text" readonly
+                 [value]="availableTypes[0] === 'lesson' ? 'Lezione' : availableTypes[0] === 'concert' ? 'Concerto' : 'DJ Set'">
+        </label>
+      </ng-container>
     </div>
     <p class="form-error" *ngIf="formError">{{ formError }}</p>
     <div class="form-actions">

@@ -71,6 +71,8 @@ export class ContactsComponent implements OnInit, OnDestroy {
   private addressSearchAborters: Partial<Record<ContactAddressField, AbortController>> = {};
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
+  trackByIdFn = (i: number, x: any) => x?.id ?? i;
+
   constructor(private supabase: SupabaseService) {}
 
   async ngOnInit(): Promise<void> {
@@ -208,6 +210,8 @@ export class ContactsComponent implements OnInit, OnDestroy {
     navigator.clipboard.writeText(this.consentLink(id)).then(() => {
       this.copiedConsentId = id;
       setTimeout(() => (this.copiedConsentId = null), 1600);
+    }).catch(err => {
+      console.warn('[Contacts] copia consenso fallita:', err);
     });
   }
 

@@ -2,6 +2,14 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormArray, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { SupabaseService } from '../../core/supabase.service';
+import { readEventsWithBackfill, readEventsForDisplay } from '../../core/local-storage.service';
+
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
 
 interface CitySuggestion {
   label: string;
@@ -23,6 +31,8 @@ export class BookingRequestComponent implements OnInit, OnDestroy {
   sent = false;
   sentCount = 0;
   error = '';
+  expectedFeeLabel = '';
+  expectedFeeNotes = '';
   private busySlots: { date: string; timeStart: string }[] = [];
 
   // City autocomplete
@@ -52,9 +62,13 @@ export class BookingRequestComponent implements OnInit, OnDestroy {
     const firstName = localStorage.getItem('mm_firstName') || '';
     const lastName = localStorage.getItem('mm_lastName') || '';
     this.musicianName = `${firstName} ${lastName}`.trim() || 'Musicista';
-    const stored = JSON.parse(localStorage.getItem('mm_settings') || '{}');
+    const stored = safeParse<any>(localStorage.getItem('mm_settings'), {});
     const roleSettings = stored?.roleSettings?.[this.requestedRole] || {};
     this.allowBandInvites = roleSettings.allowBandInvites ?? stored.allowBandInvites ?? true;
+    const minFee = Number(roleSettings.minFee ?? stored.minFee ?? 0);
+    const maxFee = Number(roleSettings.maxFee ?? stored.maxFee ?? 0);
+    this.expectedFeeLabel = this.formatExpectedFee(minFee, maxFee);
+    this.expectedFeeNotes = `${roleSettings.feeNotes ?? stored.feeNotes ?? ''}`.trim();
     this.loadBusySlots();
   }
 
@@ -71,7 +85,9 @@ export class BookingRequestComponent implements OnInit, OnDestroy {
     return this.fb.group({
       eventDate: ['', Validators.required],
       eventTime: ['', Validators.required],
-      eventType: ['Serata privata']
+      eventType: ['Serata privata'],
+      expectedCompensation: [null],
+      expensesIncluded: [false]
     });
   }
 
@@ -205,6 +221,8 @@ export class BookingRequestComponent implements OnInit, OnDestroy {
         eventDate: slot.eventDate,
         eventTime: slot.eventTime,
         eventType: slot.eventType || 'Serata privata',
+        expectedCompensation: Number(slot.expectedCompensation || 0) || null,
+        expensesIncluded: !!slot.expensesIncluded,
         bookingCode: '',
         message: base.message,
         createdAt: new Date().toISOString()
@@ -224,7 +242,13 @@ export class BookingRequestComponent implements OnInit, OnDestroy {
 
     this.form.reset({ customerName: '', bandName: '', customerEmail: '', customerPhone: '', eventCity: '', eventProvince: '', message: '' });
     while (this.dates.length > 1) this.dates.removeAt(1);
-    this.dates.at(0).reset({ eventDate: '', eventTime: '', eventType: 'Serata privata' });
+    this.dates.at(0).reset({
+      eventDate: '',
+      eventTime: '',
+      eventType: 'Serata privata',
+      expectedCompensation: null,
+      expensesIncluded: false
+    });
   }
 
   roleLabel(): string {
@@ -234,7 +258,7 @@ export class BookingRequestComponent implements OnInit, OnDestroy {
   }
 
   private loadBusySlots(): void {
-    const events = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const events = readEventsForDisplay();
     if (!Array.isArray(events)) return;
     this.busySlots = events
       .filter((e: any) => `${e?.status || ''}` !== 'cancelled')
@@ -242,7 +266,7 @@ export class BookingRequestComponent implements OnInit, OnDestroy {
   }
 
   private logCommunicationRequest(request: any): void {
-    const logs = JSON.parse(localStorage.getItem('mm_communication_history') || '[]');
+    const logs = safeParse<any[]>(localStorage.getItem('mm_communication_history'), []);
     const list = Array.isArray(logs) ? logs : [];
     list.unshift({
       id: crypto.randomUUID(),
@@ -254,10 +278,19 @@ export class BookingRequestComponent implements OnInit, OnDestroy {
         sourceType: request.sourceType,
         date: request.eventDate,
         eventTime: request.eventTime,
-        eventCity: request.eventCity
+        eventCity: request.eventCity,
+        expectedCompensation: request.expectedCompensation,
+        expensesIncluded: request.expensesIncluded
       },
       createdAt: new Date().toISOString()
     });
     localStorage.setItem('mm_communication_history', JSON.stringify(list.slice(0, 300)));
+  }
+
+  private formatExpectedFee(min: number, max: number): string {
+    if (min > 0 && max > 0) return `${min}€ – ${max}€`;
+    if (min > 0) return `Da ${min}€`;
+    if (max > 0) return `Fino a ${max}€`;
+    return '';
   }
 }

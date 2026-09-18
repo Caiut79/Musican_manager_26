@@ -1,40 +1,69 @@
-<div class="auth-card">
-  <h1>{{ isInviteFlow ? 'Attiva account musicista' : 'Accedi' }}</h1>
-  <p class="subtitle" *ngIf="licenseRef">Ref licenza: <strong>{{ licenseRef }}</strong></p>
-  <p class="subtitle" *ngIf="isInviteFlow; else loginSubtitle">
-    Questo link arriva dal super admin Band Manager. Completa l’attivazione con email e password.
-  </p>
-  <ng-template #loginSubtitle>
-    <p class="subtitle">L’attivazione account demo/licenza viene gestita dal super admin. Qui puoi accedere solo con un account già abilitato.</p>
-  </ng-template>
-  <p class="subtitle invite-ok" *ngIf="isInviteFlow && inviteStatus === 'valid'">{{ inviteInfo }}</p>
-  <p class="subtitle invite-warn" *ngIf="isInviteFlow && inviteStatus === 'checking'">Verifica link licenza in corso…</p>
-  <div class="invite-mode" *ngIf="isInviteFlow && inviteStatus === 'valid'">
-    <button type="button" class="mode-btn" [class.active]="inviteMode === 'signup'" (click)="switchInviteMode('signup')">Nuovo account</button>
-    <button type="button" class="mode-btn" [class.active]="inviteMode === 'login'" (click)="switchInviteMode('login')">Hai già un account? Accedi</button>
+<section class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-intro">
+      <div class="brand-pill">
+        <img src="assets/mm-logo.svg" alt="">
+        <span>Musican Manager</span>
+      </div>
+      <h1>{{ isInviteFlow ? 'Attiva account musicista' : 'Accedi al tuo workspace' }}</h1>
+      <p class="subtitle" *ngIf="licenseRef">Ref licenza: <strong>{{ licenseRef }}</strong></p>
+      <p class="subtitle" *ngIf="isInviteFlow; else loginSubtitle">
+        Questo link arriva dal super admin Band Manager. Completa l’attivazione con email e password.
+      </p>
+      <ng-template #loginSubtitle>
+        <p class="subtitle">L’attivazione account demo o licenza viene gestita dal super admin. Qui puoi entrare solo con un account già abilitato.</p>
+      </ng-template>
+      <p class="subtitle invite-ok" *ngIf="isInviteFlow && inviteStatus === 'valid'">{{ inviteInfo }}</p>
+      <p class="subtitle invite-warn" *ngIf="isInviteFlow && inviteStatus === 'checking'">Verifica link licenza in corso…</p>
+    </div>
+
+    <div class="invite-mode" *ngIf="isInviteFlow && inviteStatus === 'valid'">
+      <button type="button" class="mode-btn" [class.active]="inviteMode === 'signup'" (click)="switchInviteMode('signup')">Nuovo account</button>
+      <button type="button" class="mode-btn" [class.active]="inviteMode === 'login'" (click)="switchInviteMode('login')">Hai già un account? Accedi</button>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <label>Email
+        <input type="email" formControlName="email" placeholder="nome@email.com" autocomplete="email" [readonly]="isInviteFlow && !!inviteEmail">
+      </label>
+
+      <label>Password
+        <input type="password" formControlName="password" placeholder="Minimo 6 caratteri" autocomplete="current-password">
+      </label>
+
+      <button type="submit" class="btn-primary" [disabled]="loading || (isInviteFlow && inviteStatus === 'invalid')">
+        {{ loading ? 'Attendere…' : (isInviteFlow ? (inviteMode === 'login' ? 'Accedi e attiva licenza' : 'Attiva account e continua') : 'Accedi e continua') }}
+      </button>
+    </form>
+
+    <div class="request-box" *ngIf="!isInviteFlow">
+      <strong>Non hai ancora l’accesso?</strong>
+      <p>Invia la richiesta al super admin e fai attivare la tua demo o licenza. Il testo viene copiato negli appunti così puoi inoltrarlo subito.</p>
+      <button type="button" class="btn-link" (click)="copyActivationRequest()">
+        {{ requestCopied ? 'Richiesta copiata' : 'Copia richiesta attivazione' }}
+      </button>
+    </div>
+
+    <p class="error" *ngIf="error">{{ error }}</p>
   </div>
 
-  <form [formGroup]="form" (ngSubmit)="submit()">
-    <label>Email
-      <input type="email" formControlName="email" placeholder="nome@email.com" autocomplete="email" [readonly]="isInviteFlow && !!inviteEmail">
-    </label>
-
-    <label>Password
-      <input type="password" formControlName="password" placeholder="Minimo 6 caratteri" autocomplete="current-password">
-    </label>
-
-    <button type="submit" class="btn-primary" [disabled]="loading || (isInviteFlow && inviteStatus === 'invalid')">
-      {{ loading ? 'Attendere…' : (isInviteFlow ? (inviteMode === 'login' ? 'Accedi e attiva licenza' : 'Attiva account e continua') : 'Accedi e continua') }}
-    </button>
-  </form>
-
-  <div class="request-box" *ngIf="!isInviteFlow">
-    <strong>Non hai ancora l’accesso?</strong>
-    <p>Invia la richiesta al super admin e fai attivare la tua demo/licenza. Il testo viene copiato negli appunti così puoi inoltrarlo subito.</p>
-    <button type="button" class="btn-link" (click)="copyActivationRequest()">
-      {{ requestCopied ? 'Richiesta copiata' : 'Copia richiesta attivazione' }}
-    </button>
-  </div>
-
-  <p class="error" *ngIf="error">{{ error }}</p>
-</div>
+  <aside class="auth-side-panel" aria-label="Vantaggi della piattaforma">
+    <div class="side-badge">Musica live, lezioni, contratti</div>
+    <h2>Una cabina di regia unica per la tua attivita'</h2>
+    <p>Organizza concerti, contatti, incassi e documenti con una vista piu' chiara e immediata fin dal primo accesso.</p>
+    <div class="side-highlights">
+      <div class="highlight-card">
+        <i class="ti ti-calendar-event"></i>
+        <span>Agenda e calendario eventi</span>
+      </div>
+      <div class="highlight-card">
+        <i class="ti ti-address-book"></i>
+        <span>Rubrica con priorita' e compensi</span>
+      </div>
+      <div class="highlight-card">
+        <i class="ti ti-receipt-euro"></i>
+        <span>Pagamenti, fatture e contratti</span>
+      </div>
+    </div>
+  </aside>
+</section>

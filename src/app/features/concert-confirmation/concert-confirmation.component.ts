@@ -2,6 +2,13 @@ import { AfterViewInit, Component, ElementRef, ViewChild, OnInit } from '@angula
 import { ActivatedRoute } from '@angular/router';
 import { provinceCodeFromAddressLabel } from '../../core/italian-geo';
 
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
+
 type ConcertRecord = {
   id: string;
   title: string;
@@ -59,9 +66,9 @@ export class ConcertConfirmationComponent implements OnInit, AfterViewInit {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id') || '';
-    const list: ConcertRecord[] = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
+    const list: ConcertRecord[] = safeParse<any[]>(localStorage.getItem('mm_concerts'), []);
     this.concert = list.find(x => x.id === id) || null;
-    this.profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    this.profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     const storedSig = `${localStorage.getItem('mm_signature') || ''}`.trim();
     this.signatureDataUrl = storedSig || `${this.profile.signatureData || ''}`.trim();
     this.editingSignature = !this.signatureDataUrl;
@@ -190,7 +197,7 @@ export class ConcertConfirmationComponent implements OnInit, AfterViewInit {
     const dataUrl = canvas.toDataURL('image/png');
     if (!dataUrl) return;
     localStorage.setItem('mm_signature', dataUrl);
-    const snapshot = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const snapshot = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     localStorage.setItem('mm_profile_snapshot', JSON.stringify({ ...snapshot, signatureData: dataUrl }));
     this.signatureDataUrl = dataUrl;
     this.signatureSaved = true;

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "mcp__Claude_Preview__preview_start",
-      "Bash(npm install leaflet @types/leaflet --save)"
+      "Bash(npm install leaflet @types/leaflet --save)",
+      "Bash(npx ng:*)"
     ]
   }
 }

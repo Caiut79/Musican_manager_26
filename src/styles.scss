@@ -11,6 +11,8 @@
   --clr-primary-hover:  #6d28d9;
   --clr-primary-light:  #ede9fe;
   --clr-primary-ring:   rgba(167,139,250,0.18);
+  --clr-secondary:      #2563eb;
+  --clr-secondary-light:#dbeafe;
 
   --clr-success:       #059669;
   --clr-success-light: #ecfdf5;
@@ -20,25 +22,28 @@
   --clr-danger-light: #fef2f2;
   --clr-danger-ring:  rgba(220,38,38,0.12);
 
-  --bg:           #edf2f8;
-  --surface:      #fbfdff;
-  --surface-2:    #f3f6fb;
-  --border:       #dbe7f5;
+  --bg:           #eef4fb;
+  --surface:      rgba(255, 255, 255, 0.92);
+  --surface-2:    #f5f8fd;
+  --surface-3:    #edf3fb;
+  --border:       #d9e4f2;
   --border-focus: #a78bfa;
   --input-bg:     #ffffff;
   --cal-cell-bg:  #ffffff;
   --cal-out-bg:   #f9fafc;
+  --hero-gradient: linear-gradient(135deg, #312e81 0%, #6d28d9 48%, #2563eb 100%);
 
   --text:       #111827;
   --text-muted: #6b7280;
   --text-light: #9ca3af;
 
-  --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
-  --shadow:    0 6px 14px -6px rgba(15,23,42,0.14), 0 2px 5px rgba(15,23,42,0.06);
-  --shadow-md: 0 16px 32px -12px rgba(15,23,42,0.22);
+  --shadow-sm: 0 2px 10px rgba(15,23,42,0.05);
+  --shadow:    0 14px 36px -18px rgba(15,23,42,0.28), 0 6px 14px rgba(15,23,42,0.07);
+  --shadow-md: 0 24px 56px -24px rgba(15,23,42,0.34);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 
-  --radius:    12px;
-  --radius-sm: 8px;
+  --radius:    18px;
+  --radius-sm: 12px;
   --transition: 0.15s ease;
 }
 
@@ -47,13 +52,15 @@
 ════════════════════════════════════════ */
 [data-theme="dark"] {
   --bg:           #0f1117;
-  --surface:      #1a1d27;
+  --surface:      rgba(26, 29, 39, 0.92);
   --surface-2:    #141720;
+  --surface-3:    #10131b;
   --border:       #2e3347;
   --border-focus: #7c3aed;
   --input-bg:     #22263a;
   --cal-cell-bg:  #1a1d27;
   --cal-out-bg:   #13151f;
+  --hero-gradient: linear-gradient(135deg, #111827 0%, #312e81 48%, #1d4ed8 100%);
 
   --text:       #e2e8f0;
   --text-muted: #8892a8;
@@ -61,9 +68,10 @@
 
   --clr-primary-light: rgba(124,58,237,0.18);
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.35);
-  --shadow:    0 6px 18px rgba(0,0,0,0.4);
-  --shadow-md: 0 16px 40px rgba(0,0,0,0.5);
+  --shadow-sm: 0 4px 12px rgba(0,0,0,0.28);
+  --shadow:    0 18px 34px rgba(0,0,0,0.32);
+  --shadow-md: 0 28px 50px rgba(0,0,0,0.46);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 /* ════════════════════════════════════════
@@ -71,13 +79,15 @@
 ════════════════════════════════════════ */
 [data-theme="amoled"] {
   --bg:           #000000;
-  --surface:      #0d0d0d;
+  --surface:      rgba(13, 13, 13, 0.96);
   --surface-2:    #080808;
+  --surface-3:    #050505;
   --border:       #1e1e1e;
   --border-focus: #7c3aed;
   --input-bg:     #111111;
   --cal-cell-bg:  #0d0d0d;
   --cal-out-bg:   #050505;
+  --hero-gradient: linear-gradient(135deg, #050505 0%, #220f4d 48%, #0f172a 100%);
 
   --text:       #ffffff;
   --text-muted: #888888;
@@ -86,8 +96,9 @@
   --clr-primary-light: rgba(124,58,237,0.20);
 
   --shadow-sm: none;
-  --shadow:    0 4px 16px rgba(0,0,0,0.8);
-  --shadow-md: 0 12px 36px rgba(0,0,0,0.9);
+  --shadow:    0 8px 20px rgba(0,0,0,0.8);
+  --shadow-md: 0 18px 42px rgba(0,0,0,0.92);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.01);
 }
 
 *,
@@ -102,9 +113,34 @@ body {
   font-size: 14px;
   line-height: 1.5;
   color: var(--text);
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top left, rgba(124, 58, 237, 0.08), transparent 28%),
+    radial-gradient(circle at right 10%, rgba(37, 99, 235, 0.08), transparent 24%),
+    var(--bg);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  color-scheme: light;
+}
+
+[data-theme="dark"] body,
+[data-theme="amoled"] body {
+  color-scheme: dark;
+}
+
+::selection {
+  background: rgba(124, 58, 237, 0.18);
+  color: var(--text);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
 }
 
 h1,
@@ -387,6 +423,31 @@ textarea {
     min-height: 42px;
   }
 }
+
+/* ─── Pulsante quick-sync Google Calendar (globale per Agenda/Dashboard) ── */
+.quick-sync-btn {
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  background: #ffffff;
+  border: 1.5px solid #c7d2fe;
+  color: #3730a3;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.08s ease, box-shadow 0.15s ease;
+  text-decoration: none;
+}
+.quick-sync-btn:hover:not(:disabled) {
+  background: #eef2ff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(55, 48, 163, 0.14);
+}
+.quick-sync-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.quick-sync-btn .qs-icon { font-size: 16px; }
 
 @media (min-width: 768px) and (max-width: 1024px) {
   .g-page-header {

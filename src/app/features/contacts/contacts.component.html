@@ -162,7 +162,7 @@
 <section class="card">
   <h2>Contatti salvati ({{ filteredContacts.length }})</h2>
   <div class="list">
-    <div class="item" *ngFor="let c of filteredContacts">
+    <div class="item" *ngFor="let c of filteredContacts; trackBy: trackByIdFn">
       <div>
         <strong>{{ c.displayName }}</strong>
         <div class="meta">{{ typeLabel(c.type) }} • Priorità {{ c.priority }} • Medio {{ c.averageFee | currency:'EUR':'symbol':'1.0-0' }}</div>

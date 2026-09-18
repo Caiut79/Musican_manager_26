@@ -4,6 +4,13 @@
       <div class="role-badge">{{ roleLabel() }}</div>
       <h1>Richiedi disponibilità</h1>
       <p class="subtitle">Stai richiedendo disponibilità per <strong>{{ musicianName }}</strong></p>
+      <div class="info-strip" *ngIf="expectedFeeLabel || expectedFeeNotes">
+        <div class="info-pill" *ngIf="expectedFeeLabel">
+          <span class="info-pill-label">Cachet indicativo</span>
+          <strong>{{ expectedFeeLabel }}</strong>
+        </div>
+        <div class="info-note" *ngIf="expectedFeeNotes">{{ expectedFeeNotes }}</div>
+      </div>
     </div>
 
     <form [formGroup]="form" (ngSubmit)="submit()">
@@ -61,9 +68,18 @@
                 <input type="time" formControlName="eventTime">
               </label>
             </div>
-            <label>Tipo evento
-              <input type="text" formControlName="eventType" placeholder="Serata privata, matrimonio, festa...">
-            </label>
+            <div class="event-offer-row">
+              <label class="event-type-field">Tipo evento
+                <input type="text" formControlName="eventType" placeholder="Serata privata, matrimonio, festa...">
+              </label>
+              <label class="compensation-field">Compenso previsto
+                <input type="number" formControlName="expectedCompensation" min="0" step="50" placeholder="es. 500">
+              </label>
+              <label class="expenses-flag">
+                <input type="checkbox" formControlName="expensesIncluded">
+                <span>Spese comprese</span>
+              </label>
+            </div>
           </div>
         </div>
         <div class="date-busy-warn" *ngIf="isDateBusy(0) && !isSlotBusy(0)">⚠ Ci sono già impegni in questa data</div>
@@ -84,6 +100,11 @@
                 <input type="date" formControlName="eventDate" class="compact-input">
                 <input type="time" formControlName="eventTime" class="compact-input">
                 <input type="text" formControlName="eventType" class="compact-input type-input" placeholder="Tipo evento">
+                <input type="number" formControlName="expectedCompensation" class="compact-input compensation-input" min="0" step="50" placeholder="Compenso €">
+                <label class="compact-check">
+                  <input type="checkbox" formControlName="expensesIncluded">
+                  <span>Spese comprese</span>
+                </label>
               </div>
               <button type="button" class="remove-date-btn" (click)="removeDateSlot(i)" title="Rimuovi">✕</button>
             </div>

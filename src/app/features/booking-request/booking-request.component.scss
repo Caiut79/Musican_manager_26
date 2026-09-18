@@ -53,6 +53,38 @@ h1 {
   }
 }
 
+.info-strip {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.info-pill {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 auto;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  color: #4c1d95;
+}
+
+.info-pill-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7c3aed;
+}
+
+.info-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
 // ─── Form ────────────────────────────────────────────────────────────────────
 
 form { display: flex; flex-direction: column; gap: 0; }
@@ -118,6 +150,44 @@ textarea {
 
 .single-date-row { display: flex; flex-direction: column; gap: 12px; }
 
+.event-offer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(150px, 0.8fr) auto;
+  gap: 12px;
+  align-items: end;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
+
+.event-type-field,
+.compensation-field {
+  min-width: 0;
+}
+
+.expenses-flag {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 2px 2px;
+  white-space: nowrap;
+
+  input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--clr-primary);
+  }
+
+  @media (max-width: 720px) {
+    min-height: 0;
+    padding: 0;
+  }
+}
+
 // ─── Multi date rows ─────────────────────────────────────────────────────────
 
 .dates-list { display: flex; flex-direction: column; gap: 8px; }
@@ -152,6 +222,28 @@ textarea {
 .type-input {
   flex: 1; min-width: 100px;
   &::placeholder { color: var(--text-light); font-size: 12px; }
+}
+.compensation-input { width: 120px; }
+.compact-check {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  min-height: 38px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+
+  input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--clr-primary);
+  }
 }
 .remove-date-btn {
   border: 1px solid var(--border); background: var(--surface);
@@ -277,8 +369,15 @@ textarea {
     min-width: 0;
   }
 
-  .type-input {
+  .type-input,
+  .compensation-input {
     grid-column: 1 / -1;
+  }
+
+  .compact-check {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .remove-date-btn {

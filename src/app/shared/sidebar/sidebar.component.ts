@@ -1,6 +1,13 @@
 import { Component, Input, Output, EventEmitter, HostListener } from '@angular/core';
 import { ThemeService, Theme } from '../../services/theme.service';
 
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
+
 export type NavItem = {
   label: string;
   icon: string;
@@ -49,7 +56,7 @@ export class SidebarComponent {
   ];
 
   get navItems(): NavItem[] {
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     const isTeacher = profile?.isTeacher === true;
     let items = this.baseNavItems;
     if (!isTeacher) items = items.filter(item => item.route !== '/teaching');

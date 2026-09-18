@@ -1,4 +1,10 @@
 <ng-container *ngIf="!isPublicRoute(); else registerLayout">
+  <div class="app-shell-backdrop" aria-hidden="true">
+    <span class="app-shell-orb orb-a"></span>
+    <span class="app-shell-orb orb-b"></span>
+    <span class="app-shell-grid"></span>
+  </div>
+
   <app-sidebar
     [collapsed]="sidebarCollapsed"
     [mobileOpen]="mobileMenuOpen"
@@ -13,7 +19,13 @@
       <button *ngIf="!mobileMenuOpen" type="button" class="hamburger" (click)="toggleSidebar()" aria-label="Menu">
         <span></span><span></span><span></span>
       </button>
-      <span class="mobile-brand">𝅘𝅥𝅮 Musican Manager</span>
+      <span class="mobile-brand">
+        <img class="mobile-brand-logo" src="assets/mm-logo.svg" alt="">
+        <span class="mobile-brand-text">
+          <strong>Musican Manager</strong>
+          <small>Agenda live</small>
+        </span>
+      </span>
       <button type="button" class="mobile-notifications" (click)="openNotifications()" aria-label="Notifiche">
         <span class="mobile-notifications-icon">🔔</span>
         <span class="mobile-notifications-badge" *ngIf="unreadNotifications > 0">{{ unreadNotifications }}</span>
@@ -41,6 +53,10 @@
 
 <ng-template #registerLayout>
   <section class="register-shell" aria-label="Registrazione musicista">
+    <div class="register-shell-backdrop" aria-hidden="true">
+      <span class="register-orb register-orb-a"></span>
+      <span class="register-orb register-orb-b"></span>
+    </div>
     <router-outlet></router-outlet>
   </section>
 </ng-template>

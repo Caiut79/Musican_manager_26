@@ -2,6 +2,13 @@ import { Component, OnInit } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
+
 type ContractType = 'musicista' | 'dj' | 'insegnante';
 type ContractStatus = 'draft' | 'sent' | 'signed' | 'archived';
 
@@ -107,12 +114,12 @@ export class ContractsComponent implements OnInit {
   }
 
   get workerType(): string {
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     return profile.workerType || '';
   }
 
   get taxRegime(): string {
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     return profile.taxRegime || 'ordinario';
   }
 
@@ -152,12 +159,12 @@ export class ContractsComponent implements OnInit {
     const contract: Contract = {
       id,
       contractType: v.contractType as ContractType,
-      customerName: v.customerName!,
-      customerEmail: v.customerEmail!,
+      customerName: v.customerName ?? '',
+      customerEmail: v.customerEmail ?? '',
       customerPhone: v.customerPhone || '',
       responsibleName: v.responsibleName || v.customerName || '',
-      eventTitle: v.eventTitle!,
-      eventDate: v.eventDate!,
+      eventTitle: v.eventTitle ?? '',
+      eventDate: v.eventDate ?? '',
       eventLocation: v.eventLocation || '',
       agreedFee: Number(v.agreedFee) || 0,
       billingMode: v.billingMode as 'in_fattura' | 'fuori_fattura',
@@ -190,6 +197,8 @@ export class ContractsComponent implements OnInit {
     navigator.clipboard.writeText(contract.uniqueLink).then(() => {
       this.copiedId = id;
       setTimeout(() => this.copiedId = null, 1800);
+    }).catch(err => {
+      console.warn('[Contracts] copia link contratto fallita:', err);
     });
   }
 

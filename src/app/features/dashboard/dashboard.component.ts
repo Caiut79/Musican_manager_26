@@ -1,9 +1,20 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import { EventDetail } from '../../models/event-detail';
 import { AppNotification } from '../../models/notification';
 import { SupabaseService } from '../../core/supabase.service';
 import { formatItalianAddressLabel, italianAddressTypeScore } from '../../core/italian-geo';
+import { readEventsWithBackfill, persistEventsWithSync, runMigration_MarkPastEventsPaidZero, runMigration_WipePastEventsFromAppOnly, readEventsForDisplay } from '../../core/local-storage.service';
+import { GoogleCalendarService } from '../../core/google-calendar.service';
+
+// Helper parsing JSON sicuro da localStorage (pattern condiviso)
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
 
 type CalendarCell = {
   date: string;
@@ -124,7 +135,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   notifications: AppNotification[] = [];
   unreadCount = 0;
   today = this.toLocalIsoDate(new Date());
+  isMusicianProfile = true;
   isTeacherProfile = false;
+  isDjProfile = false;
   addressSuggestions: string[] = [];
   addressFocused = false;
   overduePrompts: OverduePrompt[] = [];
@@ -134,6 +147,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   overdueEventOutcome: 'effettuato' | 'annullato' | 'rimborsato' | 'da_fare' = 'effettuato';
   overduePaymentAmount = 0;
   overdueMonthlyKind: 'acconto' | 'bonifico' | 'contanti' = 'acconto';
+  gcalQuickMsg = '';
+  gcalState: 'not_configured' | 'disconnected' | 'connecting' | 'connected' | 'expired' | 'error' = 'disconnected';
+
+  /** Pulisci sottoscrizioni (eventsChanged$, ecc.) al cambio view */
+  private readonly _destroy$ = new Subject<void>();
+
   private refundedConcertIds = new Set<string>();
   private overduePromptStateKey = 'mm_overdue_prompt_state_v3';
   private overduePromptProcessedKey = 'mm_overdue_prompt_processed_v1';
@@ -143,41 +162,122 @@ export class DashboardComponent implements OnInit, OnDestroy {
   dayHeaders = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
 
   private baseQuickLinks = [
-    { label: 'Nuovo Concerto', icon: 'ti-music',      route: '/concerts',  sub: 'Aggiungi serata' },
-    { label: 'Nuova Lezione',  icon: 'ti-school',     route: '/teaching',  sub: 'Agenda lezioni' },
-    { label: 'Itinerari & Spese', icon: 'ti-map-pin', route: '/expenses',  sub: 'Percorsi e rimborsi' },
-    { label: 'Report',         icon: 'ti-chart-bar',  route: '/reports',   sub: 'Statistiche' },
-    { label: 'Rubrica',        icon: 'ti-address-book', route: '/contacts', sub: 'Band e singoli' },
-    { label: 'Archivio',       icon: 'ti-archive',    route: '/archive',   sub: 'Documenti' },
-    { label: 'Contratti',     icon: 'ti-file-text',  route: '/contracts', sub: 'Preventivi e contratti' }
+    { label: 'Nuovo Concerto', icon: 'ti-music',      route: '/concerts',  sub: 'Aggiungi serata', role: 'musician' as const },
+    { label: 'Nuova Lezione',  icon: 'ti-school',     route: '/teaching',  sub: 'Agenda lezioni',  role: 'teacher'  as const },
+    { label: 'Itinerari & Spese', icon: 'ti-map-pin', route: '/expenses',  sub: 'Percorsi e rimborsi', role: null as null },
+    { label: 'Report',         icon: 'ti-chart-bar',  route: '/reports',   sub: 'Statistiche',     role: null as null },
+    { label: 'Rubrica',        icon: 'ti-address-book', route: '/contacts', sub: 'Band e singoli',  role: null as null },
+    { label: 'Archivio',       icon: 'ti-archive',    route: '/archive',   sub: 'Documenti',       role: null as null },
+    { label: 'Contratti',     icon: 'ti-file-text',  route: '/contracts', sub: 'Preventivi e contratti', role: null as null }
   ];
 
-  constructor(private router: Router, private supabase: SupabaseService) {}
+  constructor(
+    private router: Router,
+    private supabase: SupabaseService,
+    private gcal: GoogleCalendarService
+  ) {}
+
+  /** Tipi QuickCreate abilitati in base ai ruoli del profilo */
+  private get activeQuickCreateKinds(): QuickCreateKind[] {
+    const out: QuickCreateKind[] = [];
+    if (this.isTeacherProfile) out.push('lesson');
+    if (this.isMusicianProfile) out.push('concert');
+    if (this.isDjProfile) out.push('dj_set');
+    return out.length > 0 ? out : ['concert'];
+  }
+
+  private defaultQuickCreateKind(): QuickCreateKind {
+    return this.activeQuickCreateKinds[0];
+  }
+
+  /** Filtra una lista eventi in base ai ruoli attivi (mostra solo gli eventi coerenti col profilo)
+   *  + EVENTI IMPORTATI DA GOOGLE NON CATEGORIZZATI (type='other') NON vengono scartati,
+   *    perché corrispondono a concerti/lezioni che non abbiamo ancora classificato. */
+  private filterEventsByRoles<T extends { type: string }>(events: T[]): T[] {
+    const accept = new Set<string>(this.activeQuickCreateKinds);
+    return events.filter(e => accept.has(e.type) || e.type === 'other');
+  }
 
   ngOnInit() {
+    // Stato connessione GCal (snapshot iniziale)
+    this.gcalState = this.gcal.connectionStateSnapshot;
+
+    // Quando GCal importa eventi remoti → ricarica subito tutti gli array in memoria
+    this.gcal.eventsChanged$.pipe(takeUntil(this._destroy$)).subscribe(() => {
+      this._reloadEventsFromStorage();
+      this.buildCalendar();
+    });
+
     const firstName = localStorage.getItem('mm_firstName') || '';
     const lastName  = localStorage.getItem('mm_lastName') || '';
     this.musicianName = [firstName, lastName].filter(Boolean).join(' ');
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
-    this.isTeacherProfile = profile?.isTeacher === true;
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
+    this.isMusicianProfile = profile?.isMusician !== false;
+    this.isTeacherProfile  = profile?.isTeacher  === true;
+    this.isDjProfile       = profile?.isDj       === true;
 
-    const storedEvents: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    // Se il draft iniziale 'concert' non è valido, si allinea al ruolo corretto
+    if (!this.activeQuickCreateKinds.includes(this.draft.kind)) {
+      this.draft = this.createDefaultDraft(this.defaultQuickCreateKind());
+    }
+
+    const storedEvents: EventDetail[] = readEventsForDisplay();
     const withSignedContracts = this.ensureSignedContractsInEvents(storedEvents);
     const cleanedEvents = this.cleanupDashboardDraftEvents(withSignedContracts);
     const normalizedImported = this.ensureBandLabelOnConcertEvents(cleanedEvents);
-    this.allEvents = [...normalizedImported].sort((a, b) => a.date.localeCompare(b.date));
+    const roleScoped = this.filterEventsByRoles(normalizedImported);
+    this.allEvents = [...roleScoped].sort((a, b) => a.date.localeCompare(b.date));
     const now = this.today;
-    this.todayEvents    = cleanedEvents.filter(e => e.date === now);
-    this.upcomingEvents = cleanedEvents
+    this.todayEvents    = roleScoped.filter(e => e.date === now);
+    this.upcomingEvents = roleScoped
       .filter(e => e.date > now)
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 5);
     this.buildCalendar();
     this.refreshRefundedConcertIds();
     this.contacts = this.readContacts();
+
+    // 🧹 MIGRAZIONE 1/2 "PULIZIA PASSATOIO DI PRIMAVERA
+    // TUTTI gli eventi con DATA < OGGI vengono rimossi SOLAMENTE dalla app
+    // (NON viene inviata nessuna DELETE a Google Calendar — 🔒)
+    // PRIMA di ogni altra migrazione cos' (incluso pagamenti zero).
+    // BACKUP AUTOMATICO creato in chiave "mm_backup_pre_wipe_past_{data}
+    // PRIMA di cancellare; in caso di ripensamenti si ripristina facilmente.
+    try {
+      const nWiped = runMigration_WipePastEventsFromAppOnly();
+      if (nWiped > 0) {
+        console.info(`[Dashboard] ✅ Pulizia completata: ${nWiped} eventi passati rimossi dalla app (Google Calendar intatto!)`);
+        // Dopo la migrazione di wipe dobbiamo RILEGGERE gli eventi RIMASTI
+        // e RICREARE gli array della DASHBOARD perché quelli calcolati sopra
+        // sono vecchi e contengono eventi ormai cancellati!
+        let reloaded: EventDetail[] = readEventsForDisplay();
+        reloaded = this.ensureSignedContractsInEvents(reloaded);
+        reloaded = this.cleanupDashboardDraftEvents(reloaded);
+        reloaded = this.ensureBandLabelOnConcertEvents(reloaded);
+        const rs2 = this.filterEventsByRoles(reloaded);
+        this.allEvents = [...rs2].sort((a, b) => a.date.localeCompare(b.date));
+        this.todayEvents    = rs2.filter((e: EventDetail) => e.date === now);
+        this.upcomingEvents = rs2.filter((e: EventDetail) => e.date > now).sort((a: EventDetail, b: EventDetail) => a.date.localeCompare(b.date)).slice(0,5);
+        this.refreshRefundedConcertIds();
+        this.buildCalendar();
+      }
+    } catch (err) {
+      console.warn('[Dashboard] Pulizia eventi passati fallita (non bloccante):', err);
+    }
+
+    // 🚀 MIGRAZIONE STORICA 2/2: eventi PASSATI (eventuali NUOVI (se c'erano residui o bug)
+    // vengono marcati PAGATI 0€ UNA SOLA VOLTA per popup non ne appaiano.
+    try {
+      const nMigrated = runMigration_MarkPastEventsPaidZero();
+      if (nMigrated > 0) {
+        console.info(`[Dashboard] Migrazione completata: ${nMigrated} eventi del passato marcati pagati a 0€`);
+      }
+    } catch (err) {
+      console.warn('[Dashboard] Migrazione pagamenti storica fallita (non bloccante):', err);
+    }
     this.initOverdueConcertPopup();
 
-    const storedNotifications: AppNotification[] = JSON.parse(localStorage.getItem('mm_notifications') || '[]');
+    const storedNotifications: AppNotification[] = safeParse<AppNotification[]>(localStorage.getItem('mm_notifications'), []);
     this.notifications = storedNotifications.slice(0, 5);
     this.unreadCount   = storedNotifications.filter(n => !n.read).length;
     this.applyExpenseReturnContext();
@@ -186,11 +286,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.addressTimer) clearTimeout(this.addressTimer);
     this.addressAborter?.abort();
+    this._destroy$.next();
+    this._destroy$.complete();
   }
 
   get quickLinks() {
-    if (this.isTeacherProfile) return this.baseQuickLinks;
-    return this.baseQuickLinks.filter(link => link.route !== '/teaching');
+    return this.baseQuickLinks.filter(link => {
+      if (link.role === 'musician') return this.isMusicianProfile;
+      if (link.role === 'teacher')  return this.isTeacherProfile;
+      return true;
+    });
   }
 
   markAllRead() {
@@ -217,7 +322,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.quickCreateDone = false;
     this.quickCreateLabel = '';
     this.quickCreateError = '';
-    this.draft = this.createDefaultDraft('concert');
+    this.draft = this.createDefaultDraft(this.defaultQuickCreateKind());
   }
 
   closeCreatePicker(): void {
@@ -394,7 +499,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       compensoType: billing.compensoType,
       notes: this.draft.notes || '',
       status: 'pending',
-      createdAt: now
+      createdAt: now,
+      updatedAt: now
     };
     const selected = this.contacts.find(x => x.id === this.draft.contactId);
     if (selected) {
@@ -408,9 +514,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (billing.note) {
       event.notes = `${event.notes ? `${event.notes} • ` : ''}${billing.note}`;
     }
-    const all: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const all: EventDetail[] = readEventsWithBackfill();
     all.push(event);
-    localStorage.setItem('mm_events', JSON.stringify(all));
+    persistEventsWithSync(all);
     void this.syncSupabaseEvents();
     this.refreshEventCollections(all);
     this.buildCalendar();
@@ -428,9 +534,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   deleteEventFromDashboard(eventId: string): void {
-    const all = JSON.parse(localStorage.getItem('mm_events') || '[]') as EventDetail[];
+    const all = readEventsWithBackfill();
     const filtered = all.filter(e => e.id !== eventId);
-    localStorage.setItem('mm_events', JSON.stringify(filtered));
+    persistEventsWithSync(filtered);
     void this.syncSupabaseEvents();
     this.refreshEventCollections(filtered);
     this.buildCalendar();
@@ -484,7 +590,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return { ...ev, band: [{ name: extracted }] };
     });
     if (changed) {
-      localStorage.setItem('mm_events', JSON.stringify(next));
+      persistEventsWithSync(next);
       void this.syncSupabaseEvents();
     }
     return next;
@@ -574,7 +680,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private refreshEventCollections(storedEvents: EventDetail[]): void {
     this.refreshRefundedConcertIds();
-    const sorted = [...storedEvents].sort((a, b) => a.date.localeCompare(b.date));
+    const roleScoped = this.filterEventsByRoles(storedEvents);
+    const sorted = [...roleScoped].sort((a, b) => a.date.localeCompare(b.date));
     this.allEvents = sorted;
     this.todayEvents = sorted.filter(e => e.date === this.today);
     this.upcomingEvents = sorted
@@ -982,7 +1089,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private applyOverdueOutcome(eventId: string, outcome: 'effettuato' | 'annullato' | 'rimborsato' | 'da_fare'): void {
-    const events = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const events = readEventsWithBackfill();
     if (Array.isArray(events)) {
       const mappedStatus = outcome === 'annullato'
         ? 'cancelled'
@@ -992,7 +1099,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           ? { ...event, status: mappedStatus }
           : event
       );
-      localStorage.setItem('mm_events', JSON.stringify(nextEvents));
+      persistEventsWithSync(nextEvents);
       this.allEvents = [...nextEvents].sort((a, b) => `${a?.date || ''}`.localeCompare(`${b?.date || ''}`));
       const now = this.today;
       this.todayEvents = this.allEvents.filter(e => e.date === now);
@@ -1123,6 +1230,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const eventType: EventDetail['type'] = contract.contractType === 'insegnante'
         ? 'lesson'
         : (contract.contractType === 'dj' ? 'dj_set' : 'concert');
+      const now = new Date().toISOString();
       merged.push({
         id: crypto.randomUUID(),
         title: `${contract.eventTitle || (eventType === 'lesson' ? 'Lezione da contratto' : (eventType === 'dj_set' ? 'DJ Set da contratto' : 'Concerto da contratto'))}`,
@@ -1138,12 +1246,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
         compensoType: contract.billingMode,
         notes: `${contract.notes ? contract.notes + ' · ' : ''}${marker}`,
         status: 'pending',
-        createdAt: new Date().toISOString()
+        createdAt: now,
+        updatedAt: now
       });
       changed = true;
     }
     if (changed) {
-      localStorage.setItem('mm_events', JSON.stringify(merged));
+      persistEventsWithSync(merged);
       void this.syncSupabaseEvents();
     }
     return merged;
@@ -1158,7 +1267,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return !(isDashboardDraftTitle || isDraftNote);
     });
     if (filtered.length !== events.length) {
-      localStorage.setItem('mm_events', JSON.stringify(filtered));
+      persistEventsWithSync(filtered);
       void this.syncSupabaseEvents();
     }
     return filtered;
@@ -1171,5 +1280,61 @@ export class DashboardComponent implements OnInit, OnDestroy {
     try {
       await this.supabase.syncEventsFromLocalStorage(musicianId);
     } catch {}
+  }
+
+  /** Sync manuale rapido da Google Calendar (header pulsante) */
+  async quickSyncGcal(): Promise<void> {
+    this.gcalQuickMsg = '';
+    if (this.gcalState !== 'connected') {
+      this.gcalQuickMsg = 'Connetti Google Calendar dal Profilo per sincronizzare';
+      return;
+    }
+    try {
+      this.gcalQuickMsg = 'Sincronizzazione in corso…';
+      const report = await this.gcal.importGoogleEvents();
+      if (report) {
+        const msg = [
+          report.imported ? `${report.imported} nuovi` : null,
+          report.updated ? `${report.updated} aggiornati` : null,
+          report.skipped ? `${report.skipped} invariati` : null,
+          report.conflicts ? `${report.conflicts} conflitti` : null
+        ].filter(Boolean).join(' · ');
+        this.gcalQuickMsg = msg ? `Sync completato: ${msg}` : 'Sync completato, nessuna modifica';
+        // Ricarica eventi dashboard dopo import
+        this._reloadEventsFromStorage();
+      } else {
+        this.gcalQuickMsg = 'Nessun report restituito';
+      }
+    } catch (err) {
+      console.error('Dashboard quickSyncGcal fallito:', err);
+      this.gcalQuickMsg = 'Errore durante la sincronizzazione (vedi console)';
+    }
+  }
+
+  /** Ricarica le liste eventi (today/upcoming/all + calendario) dopo una sync */
+  private _reloadEventsFromStorage(): void {
+    const storedEvents: EventDetail[] = readEventsForDisplay();
+    const withSignedContracts = this.ensureSignedContractsInEvents(storedEvents);
+    const cleanedEvents = this.cleanupDashboardDraftEvents(withSignedContracts);
+    const normalizedImported = this.ensureBandLabelOnConcertEvents(cleanedEvents);
+    const roleScoped = this.filterEventsByRoles(normalizedImported);
+    this.allEvents = [...roleScoped].sort((a, b) => a.date.localeCompare(b.date));
+    const now = this.today;
+    this.todayEvents    = roleScoped.filter(e => e.date === now);
+    this.upcomingEvents = roleScoped
+      .filter(e => e.date > now)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 5);
+    // Debug distribuzione eventi caricati (DevTools)
+    const tot = roleScoped.length;
+    const passati = roleScoped.filter(e => e.date < now).length;
+    const oggi = this.todayEvents.length;
+    const futuri = roleScoped.filter(e => e.date > now).length;
+    console.info('[Dashboard] eventi caricati dopo reload: ',
+      `totali=${tot} (ruolo:${this.activeQuickCreateKinds.join(',')})`,
+      `passati=${passati} oggi=${oggi} futuri=${futuri}`,
+      `raw=${normalizedImported.length} eventi in storage`);
+    void tot; void passati; void oggi; void futuri;
+    this.buildCalendar();
   }
 }

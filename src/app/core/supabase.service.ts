@@ -44,6 +44,12 @@ export interface ArchiveEntity {
   entity_code: string;
   display_name: string | null;
   linked_code: string | null;
+  profile_bio?: string | null;
+  profile_experience?: string | null;
+  profile_role_label?: string | null;
+  expected_fee_min?: number | null;
+  expected_fee_max?: number | null;
+  expected_fee_notes?: string | null;
   created_at?: string;
 }
 
@@ -328,6 +334,7 @@ export class SupabaseService {
 
   async syncMusicianFromLocalStorage(musicianId: string): Promise<void> {
     const profile = this.ls.getProfile();
+    const settings = this.ls.getSettings();
     const firstName = profile['firstName'] || this.ls.getString(LS.FIRST_NAME) || '';
     const lastName  = profile['lastName']  || this.ls.getString(LS.LAST_NAME)  || '';
     if (!firstName || !lastName) return;
@@ -354,6 +361,9 @@ export class SupabaseService {
         tiktok:    profile['tiktok']    || undefined,
         website:   profile['website']   || undefined,
       },
+      roleSettings: settings?.['roleSettings'] && typeof settings['roleSettings'] === 'object'
+        ? settings['roleSettings']
+        : undefined,
     };
     await this.saveMusician(musician, musicianId);
   }
@@ -600,6 +610,7 @@ export class SupabaseService {
     }
 
     const rows = Array.isArray(data) ? data : [];
+    const fallbackTs = new Date().toISOString();
     return rows.map((row: any): EventDetail => ({
       id: `${row?.source_id || row?.id || crypto.randomUUID()}`,
       title: `${row?.title || 'Evento'}`,
@@ -619,7 +630,8 @@ export class SupabaseService {
       compensoType: row?.compens_type === 'in_fattura' ? 'in_fattura' : 'fuori_fattura',
       notes: `${row?.notes || ''}`,
       status: row?.status === 'confirmed' || row?.status === 'cancelled' ? row.status : 'pending',
-      createdAt: `${row?.created_at || new Date().toISOString()}`
+      createdAt: `${row?.created_at || fallbackTs}`,
+      updatedAt: `${row?.updated_at || row?.created_at || fallbackTs}`
     }));
   }
 
@@ -1755,11 +1767,18 @@ export class SupabaseService {
       if (!code) return;
       const source = `${row.metadata?.['appSource'] || ''}`.trim().toLowerCase();
       if (source && source !== 'musician_manager') return;
+      const presentation = this.extractArchivePresentation(row.metadata);
       out.push({
         entity_type:  'musician',
         entity_code:  code,
         display_name: `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Musicista',
         linked_code:  row.metadata?.['bandRegistryCode'] || null,
+        profile_bio: presentation.bio,
+        profile_experience: presentation.experience,
+        profile_role_label: presentation.roleLabel,
+        expected_fee_min: presentation.minFee,
+        expected_fee_max: presentation.maxFee,
+        expected_fee_notes: presentation.feeNotes,
         created_at:   row.created_at,
       });
     });
@@ -1838,6 +1857,46 @@ export class SupabaseService {
       djCode:                  m.djCode                  ?? null,
       signatureData:           m.signatureData           ?? null,
     };
+  }
+
+  private extractArchivePresentation(metadata: any): {
+    bio: string | null;
+    experience: string | null;
+    roleLabel: string | null;
+    minFee: number | null;
+    maxFee: number | null;
+    feeNotes: string | null;
+  } {
+    const roleSettings = metadata?.roleSettings || {};
+    const orderedRoles = [
+      { key: 'musician', label: 'Musicista', data: roleSettings?.musician },
+      { key: 'dj', label: 'DJ', data: roleSettings?.dj },
+      { key: 'teacher', label: 'Insegnante', data: roleSettings?.teacher }
+    ];
+    for (const role of orderedRoles) {
+      const roleData = role.data || {};
+      const minFee = this.parseArchiveFee(roleData?.minFee);
+      const maxFee = this.parseArchiveFee(roleData?.maxFee);
+      const feeNotes = this.firstNonEmptyString(roleData?.feeNotes);
+      const bio = this.firstNonEmptyString(roleData?.profileBio);
+      const experience = this.firstNonEmptyString(roleData?.profileExperience);
+      if (bio || experience || minFee !== null || maxFee !== null || feeNotes) {
+        return {
+          bio: bio || null,
+          experience: experience || null,
+          roleLabel: role.label,
+          minFee,
+          maxFee,
+          feeNotes: feeNotes || null
+        };
+      }
+    }
+    return { bio: null, experience: null, roleLabel: null, minFee: null, maxFee: null, feeNotes: null };
+  }
+
+  private parseArchiveFee(value: unknown): number | null {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   }
 
   private mapRegistryRowToProfile(row: any): Record<string, any> {

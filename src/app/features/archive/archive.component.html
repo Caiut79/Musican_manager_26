@@ -1,13 +1,13 @@
 <div class="page-header">
   <h1>Archivio</h1>
-  <p class="subtitle">Sincronizza codici tra app Musicista e Band Manager</p>
+  <p class="subtitle">Consulta profili, band collegate e informazioni utili per valutare collaborazioni e richieste</p>
 </div>
 <div class="result error" *ngIf="!archiveRemoteAvailable">
   Archivio remoto non disponibile su Supabase. Attiva la migrazione archivio o usa modalità locale temporanea.
 </div>
 
-<div class="archive-grid">
-  <section class="card">
+<div class="archive-top-grid">
+  <section class="card sync-card">
     <h2>Sincronizzazione codici</h2>
     <div class="code-box">
       <span>Codice musicista</span>
@@ -27,39 +27,110 @@
     <div class="result error" *ngIf="syncError">{{ syncError }}</div>
   </section>
 
-  <section class="card">
-    <h2>Ricerca musicisti</h2>
-    <input type="text" [(ngModel)]="musicianQuery" (ngModelChange)="refreshLists()" placeholder="Cerca per nome o codice">
-    <div class="list">
-      <div class="item" *ngFor="let m of musicians">
-        <div class="item-top">
-          <strong>{{ m.display_name || 'Musicista' }}</strong>
-          <span class="code-chip">{{ m.entity_code }}</span>
-        </div>
-        <span class="item-line">Band collegata: <strong>{{ m.linked_code || '—' }}</strong></span>
-        <small>Aggiornato: {{ formatCreatedAt(m.created_at) }}</small>
+</div>
+
+<div class="archive-workspace">
+  <section class="card results-card">
+    <div class="results-head">
+      <div>
+        <h2>Profili archivio</h2>
+        <p class="results-subtitle">Apri una scheda completa per capire chi sono, cosa fanno e il loro posizionamento</p>
       </div>
-      <div class="empty" *ngIf="!musicians.length">Nessun musicista trovato</div>
+      <div class="category-switch">
+        <button type="button" class="category-btn" [class.active]="activeCategory === 'musician'" (click)="setCategory('musician')">
+          Musicisti <span>{{ musicians.length }}</span>
+        </button>
+        <button type="button" class="category-btn" [class.active]="activeCategory === 'band'" (click)="setCategory('band')">
+          Band <span>{{ bands.length }}</span>
+        </button>
+      </div>
+    </div>
+
+    <input
+      *ngIf="activeCategory === 'musician'; else bandSearch"
+      type="text"
+      [(ngModel)]="musicianQuery"
+      (ngModelChange)="refreshLists()"
+      placeholder="Cerca musicisti per nome o codice">
+    <ng-template #bandSearch>
+      <input
+        type="text"
+        [(ngModel)]="bandQuery"
+        (ngModelChange)="refreshLists()"
+        placeholder="Cerca band per codice o nome">
+    </ng-template>
+
+    <div class="list professional-list">
+      <button type="button" class="item item-action" [class.selected]="isSelected(item)" *ngFor="let item of currentResults" (click)="openEntity(item)">
+        <span class="item-top">
+          <strong>{{ item.display_name || (item.entity_type === 'band' ? 'Band' : 'Musicista') }}</strong>
+          <span class="code-chip">{{ item.entity_code }}</span>
+        </span>
+        <span class="item-line" *ngIf="item.entity_type === 'musician'">Band collegata: <strong>{{ item.linked_code || '—' }}</strong></span>
+        <span class="item-line" *ngIf="item.entity_type === 'band'">Musicista collegato: <strong>{{ item.linked_code || '—' }}</strong></span>
+        <span class="item-tags">
+          <span class="mini-chip" *ngIf="archiveRoleLabel(item)">{{ archiveRoleLabel(item) }}</span>
+          <span class="mini-chip" *ngIf="archiveFeePreview(item)">Cachet {{ archiveFeePreview(item) }}</span>
+        </span>
+        <span class="item-copy" *ngIf="archiveBio(item)">{{ archiveBio(item) }}</span>
+        <small>Aggiornato: {{ formatCreatedAt(item.created_at) }}</small>
+      </button>
+      <div class="empty" *ngIf="!currentResults.length && activeCategory === 'musician'">Nessun musicista trovato</div>
+      <div class="empty" *ngIf="!currentResults.length && activeCategory === 'band'">Nessuna band trovata</div>
     </div>
   </section>
 
-  <section class="card">
-    <h2>Ricerca band</h2>
-    <input type="text" [(ngModel)]="bandQuery" (ngModelChange)="refreshLists()" placeholder="Cerca per codice band">
-    <div class="list">
-      <div class="item" *ngFor="let b of bands">
-        <div class="item-top">
-          <strong>{{ b.display_name || 'Band' }}</strong>
-          <span class="code-chip">{{ b.entity_code }}</span>
-        </div>
-        <span class="item-line">Musicista collegato: <strong>{{ b.linked_code || '—' }}</strong></span>
-        <small>{{ linkedMusicianName(b.linked_code) }}</small>
-        <small>Aggiornato: {{ formatCreatedAt(b.created_at) }}</small>
+  <section class="card detail-card" *ngIf="selectedDetailEntity as entity; else emptyDetail">
+    <div class="detail-hero">
+      <div>
+        <div class="detail-eyebrow">{{ entity.entity_type === 'band' ? 'Scheda band' : 'Scheda musicista' }}</div>
+        <h2>{{ selectedHeadline() }}</h2>
+        <p class="detail-subtitle" *ngIf="entity.entity_type === 'musician'">Codice musicista {{ entity.entity_code }}</p>
+        <p class="detail-subtitle" *ngIf="entity.entity_type === 'band'">Codice band {{ entity.entity_code }}</p>
       </div>
-      <div class="empty" *ngIf="!bands.length">Nessuna band trovata</div>
-      <div class="empty" *ngIf="!bands.length && musicians.length">
-        Prova prima a sincronizzare un codice band con il pulsante "Sincronizza codici".
+      <span class="detail-code">{{ entity.entity_code }}</span>
+    </div>
+
+    <div class="detail-kpis">
+      <div class="detail-kpi">
+        <span class="detail-kpi-label">{{ entity.entity_type === 'band' ? 'Musicista collegato' : 'Band collegata' }}</span>
+        <strong>{{ selectedLinkedLabel() }}</strong>
+      </div>
+      <div class="detail-kpi" *ngIf="archiveRoleLabel(entity)">
+        <span class="detail-kpi-label">Categoria</span>
+        <strong>{{ archiveRoleLabel(entity) }}</strong>
+      </div>
+      <div class="detail-kpi" *ngIf="archiveFeePreview(entity)">
+        <span class="detail-kpi-label">Cachet indicativo</span>
+        <strong>{{ archiveFeePreview(entity) }}</strong>
       </div>
     </div>
+
+    <div class="detail-section" *ngIf="archiveBio(entity)">
+      <h3>Biografia</h3>
+      <p>{{ archiveBio(entity) }}</p>
+    </div>
+
+    <div class="detail-section" *ngIf="archiveExperience(entity)">
+      <h3>Esperienze</h3>
+      <p>{{ archiveExperience(entity) }}</p>
+    </div>
+
+    <div class="detail-section" *ngIf="archiveFeeNotes(entity)">
+      <h3>Nota cachet</h3>
+      <p>{{ archiveFeeNotes(entity) }}</p>
+    </div>
+
+    <div class="detail-footer">
+      <span>Aggiornato: {{ formatCreatedAt(entity.created_at) }}</span>
+      <span *ngIf="entity.entity_type === 'band' && entity.linked_code">Profilo connesso: {{ linkedMusicianName(entity.linked_code) }}</span>
+    </div>
   </section>
+
+  <ng-template #emptyDetail>
+    <section class="card detail-card detail-card-empty">
+      <h2>Seleziona un profilo</h2>
+      <p>Apri un musicista o una band dall’elenco per vedere biografia, esperienze e informazioni utili.</p>
+    </section>
+  </ng-template>
 </div>

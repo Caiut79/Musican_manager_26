@@ -847,6 +847,53 @@ textarea { resize: vertical; min-height: 64px; }
 .pay-due     { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
 .pay-partial { background: #ffedd5; color: #9a3412; border: 1px solid #fdba74; }
 
+/* Pulsante modifica pagamento (sempre visibile sulla barra pagamento) */
+.btn-edit-payment {
+  min-height: 46px;
+  padding: 0 16px;
+  background: transparent;
+  color: var(--clr-success, #16a34a);
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: all var(--transition);
+  box-sizing: border-box;
+  text-decoration: none;
+
+  &:hover {
+    background: var(--clr-success-light, #dcfce7);
+    border-color: var(--clr-success, #16a34a);
+    color: #166534;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.15);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+[data-theme="dark"] .btn-edit-payment,
+[data-theme="amoled"] .btn-edit-payment {
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.35);
+  background: rgba(22, 163, 74, 0.08);
+
+  &:hover {
+    background: rgba(22, 163, 74, 0.20);
+    border-color: #86efac;
+    color: #bbf7d0;
+  }
+}
+
 .expense-chip {
   display: inline-flex;
   align-items: center;

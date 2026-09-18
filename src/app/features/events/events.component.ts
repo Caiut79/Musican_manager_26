@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms';
 import { EventDetail, BandMember } from '../../models/event-detail';
+import { readEventsWithBackfill, persistEventsWithSync, readEventsForDisplay } from '../../core/local-storage.service';
 
 @Component({
   selector: 'app-events',
@@ -41,7 +42,7 @@ export class EventsComponent implements OnInit {
   }
 
   private loadEvents() {
-    this.events = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    this.events = readEventsForDisplay();
   }
 
   private initForm() {
@@ -82,6 +83,7 @@ export class EventsComponent implements OnInit {
       window.alert('Slot già occupato in agenda: data e orario non disponibili');
       return;
     }
+    const now = new Date().toISOString();
     const newEvent: EventDetail = {
       id:           crypto.randomUUID(),
       title:        v.title,
@@ -96,7 +98,8 @@ export class EventsComponent implements OnInit {
       status:       v.status,
       notes:        v.notes || '',
       band:         (v.band as BandMember[]).filter(m => m.name),
-      createdAt:    new Date().toISOString(),
+      createdAt:    now,
+      updatedAt:    now,
     };
 
     this.events.push(newEvent);
@@ -112,7 +115,7 @@ export class EventsComponent implements OnInit {
   }
 
   private saveEvents() {
-    localStorage.setItem('mm_events', JSON.stringify(this.events));
+    this.events = persistEventsWithSync(this.events);
   }
 
   get filteredEvents(): EventDetail[] {

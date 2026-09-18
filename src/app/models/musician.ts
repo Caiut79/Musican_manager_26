@@ -14,6 +14,8 @@ export type InpsExemption = {
 
 export type RoleTaxSetup = {
   code?: string;
+  profileBio?: string;
+  profileExperience?: string;
   fiscalMode?: 'cooperativa' | 'piva' | 'associazione';
   supportEntity?: string;
   vatNumber?: string;

@@ -1,6 +1,14 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { SupabaseService } from '../../core/supabase.service';
+import { readEventsWithBackfill, persistEventsWithSync, readEventsForDisplay } from '../../core/local-storage.service';
+
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
 
 type CommRole = 'musician' | 'dj' | 'teacher';
 type RequestStatus = 'new' | 'confirmed' | 'receipt_sent' | 'declined';
@@ -24,6 +32,8 @@ type BookingRequestEntry = {
   eventDate: string;
   eventTime: string;
   eventType: string;
+  expectedCompensation: number | null;
+  expensesIncluded: boolean;
   bookingCode: string;
   message: string;
   createdAt: string;
@@ -96,7 +106,7 @@ export class CommunicationComponent implements OnInit {
   constructor(private fb: FormBuilder, private supabase: SupabaseService) {}
 
   ngOnInit(): void {
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     this.roleEnabled = {
       musician: profile?.isMusician !== false,
       dj: profile?.isDj === true,
@@ -108,9 +118,19 @@ export class CommunicationComponent implements OnInit {
     this.musicianName = `${firstName} ${lastName}`.trim();
     this.bookingSlug = this.slugify(`${firstName}-${lastName}`);
 
-    const stored = JSON.parse(localStorage.getItem('mm_settings') || '{}');
+    const stored = safeParse<any>(localStorage.getItem('mm_settings'), {});
+    const mergedStored: any = {
+      ...stored,
+      roleSettings: {
+        ...(profile?.roleSettings || {}),
+        ...(stored?.roleSettings || {})
+      }
+    };
+    if (JSON.stringify(mergedStored) !== JSON.stringify(stored)) {
+      localStorage.setItem('mm_settings', JSON.stringify(mergedStored));
+    }
     this.affiliationCode =
-      stored.affiliationCode ||
+      mergedStored.affiliationCode ||
       localStorage.getItem('mm_affiliation_code') ||
       localStorage.getItem('musicianCode') ||
       '';
@@ -126,12 +146,14 @@ export class CommunicationComponent implements OnInit {
       availTimeTo: [stored.availTimeTo || '23:59'],
       showInstrument: [stored.showInstrument !== false],
       showStyles: [stored.showStyles !== false],
-      customMessage: [stored.customMessage || ''],
-      departureCity: [stored.departureCity || ''],
-      departureRegion: [stored.departureRegion || ''],
-      searchRadiusKm: [stored.searchRadiusKm || 100]
+      customMessage: [mergedStored.customMessage || ''],
+      departureCity: [mergedStored.departureCity || ''],
+      departureRegion: [mergedStored.departureRegion || ''],
+      searchRadiusKm: [mergedStored.searchRadiusKm || 100],
+      profileBio: [''],
+      profileExperience: ['']
     });
-    this.loadRoleSettings(this.activeRole, stored);
+    this.loadRoleSettings(this.activeRole, mergedStored);
     this.loadHistory();
     void this.syncBookingRequestsHistory();
   }
@@ -142,6 +164,19 @@ export class CommunicationComponent implements OnInit {
 
   get roleLabel(): string {
     return this.roleLabelFor(this.activeRole);
+  }
+
+  get expectedFeePreview(): string {
+    const min = Number(this.settingsForm.get('minFee')?.value || 0);
+    const max = Number(this.settingsForm.get('maxFee')?.value || 0);
+    if (min > 0 && max > 0) return `${min}€ – ${max}€`;
+    if (min > 0) return `Da ${min}€`;
+    if (max > 0) return `Fino a ${max}€`;
+    return 'Da concordare';
+  }
+
+  get feeNotesPreview(): string {
+    return `${this.settingsForm.get('feeNotes')?.value || ''}`.trim();
   }
 
   get canManageArchiveHistory(): boolean {
@@ -247,28 +282,35 @@ export class CommunicationComponent implements OnInit {
       this.copied = true;
       setTimeout(() => this.copied = false, 2000);
       this.logCommunication('copy_link', { role: this.activeRole, link: this.bookingLink });
+    }).catch(err => {
+      console.warn('[Communication] copia booking link fallita:', err);
     });
   }
 
   shareWhatsApp(): void {
-    const msg = `Ciao! Puoi richiedere la mia disponibilità come ${this.roleLabel} qui: ${this.bookingLink}`;
+    const fee = this.expectedFeePreview;
+    const msg = `Ciao! Puoi richiedere la mia disponibilità come ${this.roleLabel}${fee !== 'Da concordare' ? ` · cachet indicativo ${fee}` : ''} qui: ${this.bookingLink}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
     this.logCommunication('share_whatsapp', { role: this.activeRole, link: this.bookingLink });
   }
 
   shareNative(): void {
     if (navigator.share) {
-      navigator.share({ title: `Musican Manager · ${this.roleLabel}`, text: `Richiedi disponibilità ${this.roleLabel}`, url: this.bookingLink });
+      navigator.share({
+        title: `Musican Manager · ${this.roleLabel}`,
+        text: `Richiedi disponibilità ${this.roleLabel}${this.expectedFeePreview !== 'Da concordare' ? ` · cachet indicativo ${this.expectedFeePreview}` : ''}`,
+        url: this.bookingLink
+      });
       this.logCommunication('share_native', { role: this.activeRole, link: this.bookingLink });
     } else {
       this.copyLink();
     }
   }
 
-  saveSettings(): void {
+  async saveSettings(): Promise<void> {
     this.persistActiveRoleSettings();
     const settings = this.settingsForm.value;
-    const stored = JSON.parse(localStorage.getItem('mm_settings') || '{}');
+    const stored = safeParse<any>(localStorage.getItem('mm_settings'), {});
     const roleSettings = { ...(stored.roleSettings || {}), [this.activeRole]: settings };
     localStorage.setItem('mm_settings', JSON.stringify({
       ...stored,
@@ -280,6 +322,15 @@ export class CommunicationComponent implements OnInit {
       roleSettings
     }));
     localStorage.setItem('mm_band_invites_enabled', settings.allowBandInvites ? 'true' : 'false');
+    const musicianId = localStorage.getItem('musicianId') || '';
+    if (musicianId) {
+      try {
+        await this.supabase.syncMusicianFromLocalStorage(musicianId);
+        await this.supabase.syncStateSnapshotFromLocalStorage(musicianId);
+      } catch (error) {
+        console.warn('[CommunicationComponent] sync profile presentation failed', error);
+      }
+    }
     this.saved = true;
     setTimeout(() => this.saved = false, 2500);
     this.logCommunication('save_settings', { role: this.activeRole });
@@ -292,6 +343,8 @@ export class CommunicationComponent implements OnInit {
       this.codeCopied = true;
       setTimeout(() => this.codeCopied = false, 1800);
       this.logCommunication('copy_code', { role: this.activeRole, code: value });
+    }).catch(err => {
+      console.warn('[Communication] copia codice affiliazione fallita:', err);
     });
   }
 
@@ -416,7 +469,7 @@ export class CommunicationComponent implements OnInit {
       this.patchRequest(request.id, { contactId: existing.id });
       return;
     }
-    const raw = JSON.parse(localStorage.getItem('mm_contacts') || '[]');
+    const raw = safeParse<any[]>(localStorage.getItem('mm_contacts'), []);
     const list = Array.isArray(raw) ? raw : [];
     const now = new Date().toISOString();
     const created = {
@@ -596,7 +649,7 @@ export class CommunicationComponent implements OnInit {
   }
 
   private loadRoleSettings(role: CommRole, source?: any): void {
-    const stored = source || JSON.parse(localStorage.getItem('mm_settings') || '{}');
+    const stored = source || safeParse<any>(localStorage.getItem('mm_settings'), {});
     const byRole = stored?.roleSettings?.[role] || {};
     const fallback = stored || {};
     this.settingsForm.patchValue({
@@ -613,12 +666,14 @@ export class CommunicationComponent implements OnInit {
       customMessage: byRole.customMessage ?? fallback.customMessage ?? '',
       departureCity: byRole.departureCity ?? fallback.departureCity ?? '',
       departureRegion: byRole.departureRegion ?? fallback.departureRegion ?? '',
-      searchRadiusKm: byRole.searchRadiusKm ?? fallback.searchRadiusKm ?? 100
+      searchRadiusKm: byRole.searchRadiusKm ?? fallback.searchRadiusKm ?? 100,
+      profileBio: byRole.profileBio ?? '',
+      profileExperience: byRole.profileExperience ?? ''
     }, { emitEvent: false });
   }
 
   private persistActiveRoleSettings(): void {
-    const stored = JSON.parse(localStorage.getItem('mm_settings') || '{}');
+    const stored = safeParse<any>(localStorage.getItem('mm_settings'), {});
     const roleSettings = { ...(stored.roleSettings || {}), [this.activeRole]: this.settingsForm.value };
     localStorage.setItem('mm_settings', JSON.stringify({
       ...stored,
@@ -649,9 +704,9 @@ export class CommunicationComponent implements OnInit {
   }
 
   private loadHistory(): void {
-    const rawRequests = JSON.parse(localStorage.getItem('mm_booking_requests') || '[]');
-    const rawContacts = JSON.parse(localStorage.getItem('mm_contacts') || '[]');
-    const rawLogs = JSON.parse(localStorage.getItem('mm_communication_history') || '[]');
+    const rawRequests = safeParse<any[]>(localStorage.getItem('mm_booking_requests'), []);
+    const rawContacts = safeParse<any[]>(localStorage.getItem('mm_contacts'), []);
+    const rawLogs = safeParse<any[]>(localStorage.getItem('mm_communication_history'), []);
 
     const requests = Array.isArray(rawRequests) ? rawRequests.map(item => this.normalizeBookingRequest(item)) : [];
     const contacts = Array.isArray(rawContacts) ? rawContacts : [];
@@ -687,6 +742,8 @@ export class CommunicationComponent implements OnInit {
       eventDate: `${item?.eventDate || item?.date || ''}`.trim(),
       eventTime: `${item?.eventTime || ''}`.trim(),
       eventType: `${item?.eventType || ''}`.trim(),
+      expectedCompensation: Number(item?.expectedCompensation || 0) || null,
+      expensesIncluded: !!item?.expensesIncluded,
       bookingCode: `${item?.bookingCode || ''}`.trim(),
       message: `${item?.message || ''}`.trim(),
       createdAt: `${item?.createdAt || new Date().toISOString()}`,
@@ -832,10 +889,11 @@ export class CommunicationComponent implements OnInit {
   }
 
   private addToAgenda(request: BookingRequestEntry): void {
-    const events = JSON.parse(localStorage.getItem('mm_events') || '[]');
-    const list = Array.isArray(events) ? events : [];
-    // Avoid duplicates by requestId
+    const list = readEventsWithBackfill();
+    // Evita duplicati per requestId
     if (list.some((e: any) => `${e?.sourceRequestId || ''}` === request.id)) return;
+    const now = new Date().toISOString();
+    const venueFull = request.eventCity ? `${request.eventCity}${request.eventProvince ? ' (' + request.eventProvince + ')' : ''}` : '';
     list.push({
       id: crypto.randomUUID(),
       sourceRequestId: request.id,
@@ -843,25 +901,32 @@ export class CommunicationComponent implements OnInit {
       date: request.eventDate,
       timeStart: request.eventTime,
       timeEnd: '',
-      location: request.eventCity ? `${request.eventCity}${request.eventProvince ? ' (' + request.eventProvince + ')' : ''}` : '',
-      city: request.eventCity,
-      province: request.eventProvince,
+      venue: venueFull,
+      address: venueFull,
+      type: 'other',
+      band: [],
+      grossFee: 0,
+      netFee: 0,
       status: 'confirmed',
       notes: request.message || '',
-      createdAt: new Date().toISOString()
-    });
-    localStorage.setItem('mm_events', JSON.stringify(list));
+      createdAt: now,
+      updatedAt: now,
+      location: venueFull,
+      city: request.eventCity,
+      province: request.eventProvince
+    } as any);
+    persistEventsWithSync(list);
   }
 
   private removeFromAgenda(request: BookingRequestEntry): void {
-    const events = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const events = readEventsWithBackfill();
     if (!Array.isArray(events)) return;
     const filtered = events.filter((e: any) => `${e?.sourceRequestId || ''}` !== request.id);
-    localStorage.setItem('mm_events', JSON.stringify(filtered));
+    persistEventsWithSync(filtered);
   }
 
   private logCommunication(type: string, data: Record<string, unknown>): void {
-    const logs = JSON.parse(localStorage.getItem('mm_communication_history') || '[]');
+    const logs = safeParse<any[]>(localStorage.getItem('mm_communication_history'), []);
     const list = Array.isArray(logs) ? logs : [];
     list.unshift({
       id: crypto.randomUUID(),
@@ -874,7 +939,7 @@ export class CommunicationComponent implements OnInit {
   }
 
   private async syncSupabaseContacts(): Promise<void> {
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     const musicianId = `${profile.id || localStorage.getItem('musicianId') || ''}`.trim();
     if (!musicianId) return;
     try {

@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { EventDetail } from '../../models/event-detail';
+import { readEventsWithBackfill, readEventsForDisplay } from '../../core/local-storage.service';
 
 @Component({
   selector: 'app-history',
@@ -21,7 +22,7 @@ export class HistoryComponent implements OnInit {
   ];
 
   ngOnInit() {
-    const stored: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const stored: EventDetail[] = readEventsForDisplay();
     this.allEvents = stored.filter(e => e.date < this.today)
       .sort((a, b) => b.date.localeCompare(a.date));
   }

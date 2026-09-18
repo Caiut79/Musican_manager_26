@@ -17,8 +17,11 @@ export class ArchiveComponent implements OnInit {
   bandQuery = '';
   musicians: ArchiveEntity[] = [];
   bands: ArchiveEntity[] = [];
+  activeCategory: 'musician' | 'band' = 'musician';
+  selectedEntity: ArchiveEntity | null = null;
   archiveRemoteAvailable = true;
   private musicianNameByCode = new Map<string, string>();
+  private musicianByCode = new Map<string, ArchiveEntity>();
 
   form = this.fb.group({
     bandCode: ['', Validators.required]
@@ -46,6 +49,9 @@ export class ArchiveComponent implements OnInit {
     this.musicianNameByCode = new Map(
       allMusicians.map(row => [row.entity_code.toUpperCase(), row.display_name || 'Musicista'])
     );
+    this.musicianByCode = new Map(
+      allMusicians.map(row => [row.entity_code.toUpperCase(), row])
+    );
     this.musicians = musicianRows;
     const remoteBands = await this.supabase.searchArchiveEntities(this.bandQuery, 'band');
     if (remoteBands.length) {
@@ -57,6 +63,7 @@ export class ArchiveComponent implements OnInit {
       this.bands = this.deriveBandsFromMusicians(sourceMusicians, this.bandQuery);
     }
     this.archiveRemoteAvailable = this.supabase.isArchiveRemoteAvailable();
+    this.reconcileSelection();
   }
 
   async syncCodes(): Promise<void> {
@@ -114,5 +121,105 @@ export class ArchiveComponent implements OnInit {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return 'Data non disponibile';
     return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+
+  archiveBio(entity: ArchiveEntity): string | null {
+    return this.cleanText(entity.profile_bio)
+      || this.cleanText(this.linkedMusicianEntity(entity)?.profile_bio)
+      || null;
+  }
+
+  archiveExperience(entity: ArchiveEntity): string | null {
+    return this.cleanText(entity.profile_experience)
+      || this.cleanText(this.linkedMusicianEntity(entity)?.profile_experience)
+      || null;
+  }
+
+  archiveFeePreview(entity: ArchiveEntity): string | null {
+    const source = entity.entity_type === 'musician' ? entity : this.linkedMusicianEntity(entity);
+    const min = Number(source?.expected_fee_min || 0);
+    const max = Number(source?.expected_fee_max || 0);
+    if (min > 0 && max > 0) return `${min}€ – ${max}€`;
+    if (min > 0) return `Da ${min}€`;
+    if (max > 0) return `Fino a ${max}€`;
+    return null;
+  }
+
+  archiveFeeNotes(entity: ArchiveEntity): string | null {
+    return this.cleanText(entity.expected_fee_notes)
+      || this.cleanText(this.linkedMusicianEntity(entity)?.expected_fee_notes)
+      || null;
+  }
+
+  archiveRoleLabel(entity: ArchiveEntity): string | null {
+    return this.cleanText(entity.profile_role_label)
+      || this.cleanText(this.linkedMusicianEntity(entity)?.profile_role_label)
+      || null;
+  }
+
+  get currentResults(): ArchiveEntity[] {
+    return this.activeCategory === 'musician' ? this.musicians : this.bands;
+  }
+
+  get selectedDetailEntity(): ArchiveEntity | null {
+    return this.selectedEntity;
+  }
+
+  get selectedProfileSource(): ArchiveEntity | null {
+    if (!this.selectedEntity) return null;
+    return this.selectedEntity.entity_type === 'musician'
+      ? this.selectedEntity
+      : this.linkedMusicianEntity(this.selectedEntity);
+  }
+
+  setCategory(category: 'musician' | 'band'): void {
+    if (this.activeCategory === category) return;
+    this.activeCategory = category;
+    this.reconcileSelection();
+  }
+
+  openEntity(entity: ArchiveEntity): void {
+    this.selectedEntity = entity;
+  }
+
+  isSelected(entity: ArchiveEntity): boolean {
+    return !!this.selectedEntity
+      && this.selectedEntity.entity_type === entity.entity_type
+      && this.selectedEntity.entity_code === entity.entity_code;
+  }
+
+  selectedHeadline(): string {
+    return this.selectedEntity?.display_name || (this.selectedEntity?.entity_type === 'band' ? 'Band' : 'Musicista');
+  }
+
+  selectedLinkedLabel(): string {
+    if (!this.selectedEntity) return '—';
+    return this.selectedEntity.entity_type === 'band'
+      ? this.linkedMusicianName(this.selectedEntity.linked_code)
+      : (this.selectedEntity.linked_code || '—');
+  }
+
+  private linkedMusicianEntity(entity: ArchiveEntity): ArchiveEntity | null {
+    const code = `${entity.linked_code || ''}`.trim().toUpperCase();
+    return code ? this.musicianByCode.get(code) || null : null;
+  }
+
+  private cleanText(value: string | null | undefined): string | null {
+    const normalized = `${value || ''}`.trim();
+    return normalized ? normalized : null;
+  }
+
+  private reconcileSelection(): void {
+    const current = this.currentResults;
+    if (!current.length) {
+      this.selectedEntity = null;
+      return;
+    }
+    if (!this.selectedEntity || this.selectedEntity.entity_type !== this.activeCategory) {
+      this.selectedEntity = current[0];
+      return;
+    }
+    const match = current.find(item => item.entity_code === this.selectedEntity?.entity_code);
+    this.selectedEntity = match || current[0];
   }
 }

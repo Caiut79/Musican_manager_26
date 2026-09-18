@@ -12,7 +12,7 @@
     <div class="cv-card">
       <div class="cv-icon">✅</div>
       <h1>Contratto già firmato</h1>
-      <p>Questo contratto risulta già sottoscritto in data <strong>{{ formatDate(contract.signedAt!) }}</strong>.</p>
+      <p>Questo contratto risulta già sottoscritto in data <strong>{{ formatDate(contract?.signedAt ?? '') }}</strong>.</p>
       <div class="cv-signed-preview" *ngIf="contract.signatureData">
         <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" [src]="contract.signatureData" alt="Firma" class="sig-img" (error)="$any($event.target).style.display='none'">
       </div>

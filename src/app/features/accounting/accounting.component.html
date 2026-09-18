@@ -63,7 +63,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let e of filteredEvents">
+        <tr *ngFor="let e of filteredEvents; trackBy: trackByEventFn">
           <td class="date-cell">{{ formatDate(e.date) }}</td>
           <td>{{ e.title }}</td>
           <td class="amount">{{ e.grossFee | currency:'EUR':'symbol':'1.0-0' }}</td>
@@ -91,7 +91,7 @@
         <tr><th>Data</th><th>Percorso</th><th>Totale</th></tr>
       </thead>
       <tbody>
-        <tr *ngFor="let ex of filteredExpenses">
+        <tr *ngFor="let ex of filteredExpenses; trackBy: trackByEventFn">
           <td class="date-cell">{{ formatDate(ex.date) }}</td>
           <td class="route-cell">{{ ex.origin }} → {{ ex.destination }}</td>
           <td class="amount expense-cell">{{ ex.totalExpense | currency:'EUR':'symbol':'1.2-2' }}</td>
@@ -197,24 +197,57 @@
     </div>
     <div class="band-cadence-check">
       <div class="bcc-col">
-        <div class="bcc-title">Band a prestazione (saldo immediato)</div>
+        <div class="bcc-title-row">
+          <div class="bcc-title">Band a prestazione (saldo immediato)</div>
+          <span class="bcc-count">{{ immediateBandNamesFull.length }} totali</span>
+        </div>
         <div class="bcc-list" *ngIf="immediateBandNames.length; else noImmediateBands">
           <span class="bcc-chip" *ngFor="let b of immediateBandNames">{{ b }}</span>
         </div>
+        <button type="button" class="bcc-toggle" *ngIf="hiddenImmediateBandsCount > 0"
+                (click)="toggleImmediateShowAll()">
+          ▼ Altre {{ hiddenImmediateBandsCount }} band
+        </button>
+        <button type="button" class="bcc-toggle bcc-toggle-collapse" *ngIf="showAllImmediateBands && immediateBandNamesFull.length > MAX_BAND_CHIPS_DEFAULT"
+                (click)="toggleImmediateShowAll()">
+          ▲ Nascondi
+        </button>
         <ng-template #noImmediateBands><div class="bcc-empty">Nessuna band in saldo immediato</div></ng-template>
       </div>
       <div class="bcc-col">
-        <div class="bcc-title">Band mensili · Acconto</div>
+        <div class="bcc-title-row">
+          <div class="bcc-title">Band mensili · Acconto</div>
+          <span class="bcc-count">{{ monthlyAccontoBandNamesFull.length }} totali</span>
+        </div>
         <div class="bcc-list" *ngIf="monthlyAccontoBandNames.length; else noMonthlyAccontoBands">
           <span class="bcc-chip monthly" *ngFor="let b of monthlyAccontoBandNames">{{ b }}</span>
         </div>
+        <button type="button" class="bcc-toggle" *ngIf="hiddenMonthlyAccontoBandsCount > 0"
+                (click)="toggleMonthlyAccontoShowAll()">
+          ▼ Altre {{ hiddenMonthlyAccontoBandsCount }} band
+        </button>
+        <button type="button" class="bcc-toggle bcc-toggle-collapse" *ngIf="showAllMonthlyAccontoBands && monthlyAccontoBandNamesFull.length > MAX_BAND_CHIPS_DEFAULT"
+                (click)="toggleMonthlyAccontoShowAll()">
+          ▲ Nascondi
+        </button>
         <ng-template #noMonthlyAccontoBands><div class="bcc-empty">Nessuna band mensile con acconto</div></ng-template>
       </div>
       <div class="bcc-col">
-        <div class="bcc-title">Band mensili · Bonifico</div>
+        <div class="bcc-title-row">
+          <div class="bcc-title">Band mensili · Bonifico</div>
+          <span class="bcc-count">{{ monthlyBonificoBandNamesFull.length }} totali</span>
+        </div>
         <div class="bcc-list" *ngIf="monthlyBonificoBandNames.length; else noMonthlyBonificoBands">
           <span class="bcc-chip monthly" *ngFor="let b of monthlyBonificoBandNames">{{ b }}</span>
         </div>
+        <button type="button" class="bcc-toggle" *ngIf="hiddenMonthlyBonificoBandsCount > 0"
+                (click)="toggleMonthlyBonificoShowAll()">
+          ▼ Altre {{ hiddenMonthlyBonificoBandsCount }} band
+        </button>
+        <button type="button" class="bcc-toggle bcc-toggle-collapse" *ngIf="showAllMonthlyBonificoBands && monthlyBonificoBandNamesFull.length > MAX_BAND_CHIPS_DEFAULT"
+                (click)="toggleMonthlyBonificoShowAll()">
+          ▲ Nascondi
+        </button>
         <ng-template #noMonthlyBonificoBands><div class="bcc-empty">Nessuna band mensile con bonifico</div></ng-template>
       </div>
     </div>
@@ -249,7 +282,7 @@
     </div>
 
     <div class="pay-band-groups" *ngIf="concertViewMode === 'band'">
-      <div class="pay-band-card" *ngFor="let g of concertBandGroups">
+      <div class="pay-band-card" *ngFor="let g of concertBandGroups; trackBy: trackByGroupFn">
         <button type="button" class="pay-band-btn" (click)="toggleConcertBandExpanded(g.key)">
           <span class="pbb-left">
             <span class="pbb-name">{{ g.name }}</span>

@@ -2,6 +2,14 @@ import { Component, OnInit } from '@angular/core';
 import { EventDetail } from '../../models/event-detail';
 import { Expense } from '../../models/expense';
 import { ActivatedRoute } from '@angular/router';
+import { readEventsWithBackfill, readEventsForDisplay } from '../../core/local-storage.service';
+
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
 
 type Period = { value: string; label: string };
 
@@ -137,6 +145,11 @@ export class AccountingComponent implements OnInit {
   expandedConcertBandKey: string | null = null;
   miniTaxEventId = '';
   miniTaxDraft: MiniTaxDraft = this.emptyMiniTaxDraft();
+  // Toggle visualizzazione chip "Band a prestazione" per evitare liste infinite
+  showAllImmediateBands = false;
+  showAllMonthlyAccontoBands = false;
+  showAllMonthlyBonificoBands = false;
+  readonly MAX_BAND_CHIPS_DEFAULT = 12;
   serataTaxInput: SerataTaxInput = {
     imponibile: 150,
     componentCount: 1,
@@ -149,14 +162,17 @@ export class AccountingComponent implements OnInit {
     regionalMunicipalRate: 0
   };
 
+  trackByEventFn = (i: number, x: any) => x?.id ?? i;
+  trackByGroupFn = (i: number, x: any) => x?.name ?? String(i);
+
   constructor(private route: ActivatedRoute) {}
 
   ngOnInit() {
-    this.events   = JSON.parse(localStorage.getItem('mm_events')   || '[]');
-    this.expenses = JSON.parse(localStorage.getItem('mm_expenses') || '[]');
-    this.payments = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
+    this.events   = readEventsForDisplay();
+    this.expenses = safeParse<any[]>(localStorage.getItem('mm_expenses'), []);
+    this.payments = safeParse<any[]>(localStorage.getItem('mm_service_payments'), []);
 
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     this.profileSnapshot = profile || {};
     this.isTeacher = profile?.isTeacher === true;
     this.enpalsExemptProfile = this.resolveEnpalsExemptionByRole(profile);
@@ -253,10 +269,31 @@ export class AccountingComponent implements OnInit {
     return [...unique].filter(Boolean).sort((a, b) => a.localeCompare(b));
   }
 
-  get immediateBandNames(): string[] {
+  /**
+   * Lista COMPLETA (senza limite) band in saldo immediato — usata per il conteggio
+   * e per quando l'utente clicca "Mostra tutte le band".
+   * Applicato il filtro: SALTA eventi PIÙ VECCHI di 12 MESI con pagamento €0
+   * (non interessano più nella legenda, Claudio li ha già marcati pagati tutti).
+   */
+  get immediateBandNamesFull(): string[] {
     const set = new Set<string>();
-    for (const event of this.immediateConcertEvents) set.add(this.eventBandLabel(event));
+    for (const event of this.immediateConcertEvents) {
+      if (this.isHistoricZeroEvent(event)) continue;
+      set.add(this.eventBandLabel(event));
+    }
     return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }
+
+  /** Lista chip VISIBILE (max 12) se non è stato attivato il toggle "Mostra tutte" */
+  get immediateBandNames(): string[] {
+    const full = this.immediateBandNamesFull;
+    return this.showAllImmediateBands ? full : full.slice(0, this.MAX_BAND_CHIPS_DEFAULT);
+  }
+
+  /** Numero di band nascoste dal limite (per pulsante toggle) */
+  get hiddenImmediateBandsCount(): number {
+    const total = this.immediateBandNamesFull.length;
+    return this.showAllImmediateBands ? 0 : Math.max(0, total - this.MAX_BAND_CHIPS_DEFAULT);
   }
 
   get monthlyBandNames(): string[] {
@@ -265,20 +302,40 @@ export class AccountingComponent implements OnInit {
     return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
   }
 
-  get monthlyAccontoBandNames(): string[] {
+  // ─── Mensili Acconto ──────────────────────────────────────────────────────
+  get monthlyAccontoBandNamesFull(): string[] {
     const set = new Set<string>();
     for (const event of this.monthlyConcertEvents) {
+      if (this.isHistoricZeroEvent(event)) continue;
       if (this.monthlySettlementForEvent(event.id) === 'acconto') set.add(this.eventBandLabel(event));
     }
     return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
   }
+  get monthlyAccontoBandNames(): string[] {
+    const full = this.monthlyAccontoBandNamesFull;
+    return this.showAllMonthlyAccontoBands ? full : full.slice(0, this.MAX_BAND_CHIPS_DEFAULT);
+  }
+  get hiddenMonthlyAccontoBandsCount(): number {
+    const total = this.monthlyAccontoBandNamesFull.length;
+    return this.showAllMonthlyAccontoBands ? 0 : Math.max(0, total - this.MAX_BAND_CHIPS_DEFAULT);
+  }
 
-  get monthlyBonificoBandNames(): string[] {
+  // ─── Mensili Bonifico ──────────────────────────────────────────────────────
+  get monthlyBonificoBandNamesFull(): string[] {
     const set = new Set<string>();
     for (const event of this.monthlyConcertEvents) {
+      if (this.isHistoricZeroEvent(event)) continue;
       if (this.monthlySettlementForEvent(event.id) === 'bonifico') set.add(this.eventBandLabel(event));
     }
     return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }
+  get monthlyBonificoBandNames(): string[] {
+    const full = this.monthlyBonificoBandNamesFull;
+    return this.showAllMonthlyBonificoBands ? full : full.slice(0, this.MAX_BAND_CHIPS_DEFAULT);
+  }
+  get hiddenMonthlyBonificoBandsCount(): number {
+    const total = this.monthlyBonificoBandNamesFull.length;
+    return this.showAllMonthlyBonificoBands ? 0 : Math.max(0, total - this.MAX_BAND_CHIPS_DEFAULT);
   }
 
   get immediateConcertEvents(): EventDetail[] {
@@ -770,7 +827,147 @@ export class AccountingComponent implements OnInit {
     const match = notes.match(/\[Rubrica:([^\]]+)\]/i);
     if (match?.[1]) return match[1].trim();
     if (event.venue) return event.venue;
-    return event.title;
+    // Se arriviamo al titolo: PULIAMOLO per estrarre solo il vero nome band
+    // invece di avere 150 chip diversi tipo "L.R. Aquarius Sant'Andrea Pd"
+    return this.smartCleanTitleForBandLabel(event.title);
+  }
+
+  /**
+   * Pulisce un titolo evento importato da Google Calendar (scritto grezzo su iPhone/Mac)
+   * ed estrae solo il nome VEROSIMILE della band/locale.
+   * Elimina: comune, provincia (2 lettere maiuscole finali), orari tipo 16;45,
+   * "pom XX", "sera", "mattina", parole geografiche tipo "via", "piazza", ecc.
+   */
+  private smartCleanTitleForBandLabel(rawTitle: string): string {
+    let t = `${rawTitle || ''}`.trim();
+    if (!t) return '';
+
+    // ── 1. Pattern spazzatura: orari (16;45 ..) + parole controllo/prova ──────
+    if (this.looksLikeGarbageTitle(t)) return 'Eventi senza band';
+
+    // ── 2. Rimuovi orari tipo "16;45", "18.30", "h21", "ore 20", "pom 15" ────
+    t = t.replace(/\b(?:ore|h)\s*\d{1,2}(?:[:.;,]\d{1,2})?\b/gi, ' ');
+    t = t.replace(/\b\d{1,2}[:.;,]\d{2}\b/g, ' ');
+    t = t.replace(/\b(?:pomeriggio|pom|sera|mattina|notte|mattutino)\b/gi, ' ');
+
+    // ── 3. Rimuovi provincia alla fine (2 lettere maiuscole isolate) ─────────
+    t = t.replace(/\s[A-Z]{2}\s*$/, '');
+
+    // ── 4. Rimuovi pattern geografici/comuni noti (via/piazza/città + suffissi)
+    const geoStopWords = [
+      'via','piazza','piazzale','corso','viale','largo','localita','località',
+      'frazione','borgo','paese','citta','città','comune','provincia',
+      'di','sul','al','alla','alle','del','della','dei','delle','da','in','su','per','tra','fra'
+    ];
+    // Split in token, scorri dal fondo e rimuovi finché trovi parole geo/comuni/province
+    const tokens = t.split(/\s+/).filter(Boolean);
+    // Taglia finale: scarta token che ASSOMIGLIANO a comuni/province/indirizzi
+    // (parole corte <4 lettere o suffissi tipici italiani: -ano, -ena, -esco, -ella, -etto, ecc.)
+    let cutIndex = tokens.length;
+    const provinceIt = new Set([
+      'AG','AL','AN','AO','AP','AQ','AR','AS','AT','AV','BA','BG','BI','BL','BN','BO','BR','BS','BT','BV','CA','CB','CE','CH','CI','CL','CN','CO','CR','CS','CT','CZ','EN','FC','FE','FG','FI','FM','FR','GE','GO','GR','IM','IS','KR','LC','LE','LI','LO','LT','LU','MB','MC','ME','MI','MN','MO','MS','MT','NA','NO','NU','OG','OR','OT','PA','PC','PD','PE','PG','PI','PN','PO','PR','PT','PU','PV','PZ','RA','RC','RE','RG','RI','RM','RN','RO','SA','SI','SO','SP','SR','SS','SU','SV','TA','TE','TN','TO','TP','TR','TS','TV','UD','VA','VB','VC','VE','VI','VR','VS','VT','VV'
+    ]);
+    for (let i = tokens.length - 1; i >= Math.max(1, Math.floor(tokens.length / 2)); i--) {
+      const tok = tokens[i];
+      const up = tok.toUpperCase().replace(/[^A-Z]/g,'');
+      // È una provincia o comune? stop
+      if (up.length === 2 && provinceIt.has(up)) { cutIndex = i; continue; }
+      // Parola "VI", "PD", "UD", "BL", "TV", ecc. o token con accento finale tipo città (-tà, -ù, -à)
+      if (tok.length <= 3 && /^[A-ZÀÈÉÌÒÙa-zàèéìòù']{1,4}$/.test(tok)) { cutIndex = i; continue; }
+      if (geoStopWords.includes(tok.toLowerCase())) { cutIndex = i; continue; }
+      // Sembra un numero civico?
+      if (/^\d+$/.test(tok)) { cutIndex = i; continue; }
+      break;
+    }
+    let cleaned = tokens.slice(0, cutIndex).join(' ').trim();
+
+    // ── 5. Se finisce con prefisso conosciuto, tronca ulteriormente ───────────
+    // Es. "Fonico Anni Ruggenti Mortegliano" → "Fonico Anni Ruggenti"
+    // "Bruno e i Belli dentro Calalzo" → "Bruno e i Belli dentro"
+    const bandPrefixes = [
+      /\bL\.R\.\s+.+$/i,          // L.R. ...  (Locale Rock)
+      /\bFonico\s+.+$/i,          // Fonico ...
+      /\bAnni\s+ruggenti\b.*$/i,  // Anni ruggenti ...
+      /\bBruno\s+e\s+i\s+Belli\s+dentro\b.*$/i,
+      /\bBand\s+.+$/i,
+      /\bGruppo\s+.+$/i,
+      /\bMusica\s+.+$/i,
+      /\bLive\s+.+$/i,
+      /\bConcerto\s+.*$/i,
+    ];
+    for (const re of bandPrefixes) {
+      const m = cleaned.match(re);
+      if (m) {
+        // Prendi il primo match ma taglia parole finali che assomigliano a città
+        let sub = m[0].trim();
+        const st = sub.split(/\s+/);
+        if (st.length > 2) {
+          let subCut = st.length;
+          for (let i = st.length - 1; i >= 2; i--) {
+            const tok = st[i];
+            const up = tok.toUpperCase().replace(/[^A-Z]/g,'');
+            if (up.length === 2 && provinceIt.has(up)) { subCut = i; continue; }
+            if (geoStopWords.includes(tok.toLowerCase())) { subCut = i; continue; }
+            if (tok.length <= 3 && /^[A-Za-zÀ-ÿ']{1,4}$/.test(tok)) { subCut = i; continue; }
+            break;
+          }
+          sub = st.slice(0, subCut).join(' ').trim();
+        }
+        // Verifica lunghezza minima
+        if (sub.length >= 3) cleaned = sub;
+        break;
+      }
+    }
+
+    // ── 6. Pulizia finale spazi/punteggiatura superflua ───────────────────────
+    cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/^[,\s]+|[,\s]+$/g, '').trim();
+
+    // Se dopo la pulizia è troppo corto o è rimasta spazzatura, accorpa
+    if (cleaned.length < 3 || this.looksLikeGarbageTitle(cleaned)) return 'Eventi senza band';
+
+    // Massimo 5 parole per un nome band (altrimenti è ancora un indirizzo!)
+    const finalTokens = cleaned.split(/\s+/);
+    if (finalTokens.length > 6) return finalTokens.slice(0, 4).join(' ') + ' …';
+
+    return cleaned;
+  }
+
+  /**
+   * Riconosce titoli che NON sono nomi band: orari, controlli, "prova", "controllo Betty",
+   * date generiche, indirizzi puri ecc.
+   */
+  private looksLikeGarbageTitle(title: string): boolean {
+    const t = `${title || ''}`.trim().toLowerCase();
+    if (!t) return true;
+    // Orario all'inizio tipo "16;45 ..." o "ore 20:30 ..."
+    if (/^\s*\d{1,2}[:.;,]\d{2}\b/.test(title)) return true;
+    const garbageKeywords = [
+      'controllo','controlli','prova','prove sound','sound check','soundcheck',
+      'ripasso','meeting','riunione','cena dei musicisti','pranzo','party privato',
+      'compleanno','matrimonio','cena','prova generale','setup','allestimento'
+    ];
+    for (const kw of garbageKeywords) {
+      if (t.includes(kw)) return true;
+    }
+    // Titolo fatto solo di numeri + brevi token tipo indirizzo
+    const tokens = t.split(/\s+/);
+    if (tokens.length <= 2 && /\d/.test(t)) return true;
+    return false;
+  }
+
+  /**
+   * Evento da considerare "troppo vecchio" per comparire nell'elenco CHIP band
+   * (non viene rimosso dai gruppi dettaglio, solo dalla legenda a chip).
+   * Condizione: data > 12 mesi fa E importo ricevuto === 0
+   */
+  private isHistoricZeroEvent(ev: EventDetail): boolean {
+    const now = new Date();
+    const cutoff = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+    const evDate = new Date(`${ev.date || '1900-01-01'}T00:00:00`);
+    if (evDate > cutoff) return false;
+    // Calcola importo ricevuto (solo pagamenti confermati?)
+    const totalReceived = Number(this.totalReceivedForEvent(ev.id) || 0);
+    return totalReceived <= 0;
   }
 
   eventExtraExpensesOutsideInvoice(event: EventDetail): boolean {
@@ -835,7 +1032,7 @@ export class AccountingComponent implements OnInit {
     const amount = Number(this.bandMonthlyAmount || 0);
     if (!bandName) return;
     if (!Number.isFinite(amount) || amount <= 0) return;
-    const raw = JSON.parse(localStorage.getItem('mm_band_credits') || '[]');
+    const raw = safeParse<any[]>(localStorage.getItem('mm_band_credits'), []);
     const list = Array.isArray(raw) ? raw : [];
     list.unshift({
       id: crypto.randomUUID(),
@@ -933,7 +1130,7 @@ export class AccountingComponent implements OnInit {
     this.contactCadenceByBandName.clear();
     this.contactMonthlySettlementByBandName.clear();
 
-    const contacts = JSON.parse(localStorage.getItem('mm_contacts') || '[]');
+    const contacts = safeParse<any[]>(localStorage.getItem('mm_contacts'), []);
     if (Array.isArray(contacts)) {
       for (const contact of contacts) {
         if (`${contact?.type || ''}` !== 'band') continue;
@@ -947,7 +1144,7 @@ export class AccountingComponent implements OnInit {
       }
     }
 
-    const concerts = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
+    const concerts = safeParse<any[]>(localStorage.getItem('mm_concerts'), []);
     if (!Array.isArray(concerts)) return;
     for (const concert of concerts) {
       const id = `${concert?.id || ''}`.trim();
@@ -983,6 +1180,17 @@ export class AccountingComponent implements OnInit {
 
   private normalizeBandKey(value: string): string {
     return `${value || ''}`.toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  // ─── Toggle visualizzazione lista chip band (Mostra tutte / Nascondi) ───
+  toggleImmediateShowAll(): void {
+    this.showAllImmediateBands = !this.showAllImmediateBands;
+  }
+  toggleMonthlyAccontoShowAll(): void {
+    this.showAllMonthlyAccontoBands = !this.showAllMonthlyAccontoBands;
+  }
+  toggleMonthlyBonificoShowAll(): void {
+    this.showAllMonthlyBonificoBands = !this.showAllMonthlyBonificoBands;
   }
 
   private resolveEnpalsExemptionByRole(profile: any): boolean {

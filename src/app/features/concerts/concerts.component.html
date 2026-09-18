@@ -490,6 +490,12 @@
         <span class="pb-label">Residuo</span>
         <span class="pb-amount pending">{{ concertResidualAmountForDisplay(c) | currency:'EUR':'symbol':'1.0-0' }}</span>
       </div>
+      <div class="pb-right">
+        <button type="button" class="btn-edit-payment" title="Modifica importi dovuto / ricevuto (apri fatturazione)"
+                (click)="goToAccountingForConcert(c)">
+          ✎ Modifica
+        </button>
+      </div>
     </div>
 
     <!-- Note -->

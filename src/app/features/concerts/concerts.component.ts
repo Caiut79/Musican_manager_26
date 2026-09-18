@@ -4,6 +4,14 @@ import { EventDetail } from '../../models/event-detail';
 import { SupabaseService } from '../../core/supabase.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { formatItalianAddressLabel, italianAddressTypeScore } from '../../core/italian-geo';
+import { readEventsWithBackfill, persistEventsWithSync, resolveSyncStartDateCutoff, applySyncStartDateFilter, readEventsForDisplay } from '../../core/local-storage.service';
+
+// Helper per parsing JSON sicuro da localStorage
+function safeParse<T = any>(raw: string | null | undefined, fallback: T): T {
+  if (!raw) return fallback;
+  try { return JSON.parse(raw) as T; }
+  catch { return fallback; }
+}
 
 type ConcertRecord = {
   id: string;
@@ -170,25 +178,29 @@ export class ConcertsComponent implements OnInit, OnDestroy {
   bandGroups: BandGroup[] = [];
 
   ngOnInit(): void {
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     this.inpsExemptProfile = profile?.inpsExempt === true;
     if (typeof window !== 'undefined' && window.innerWidth <= 767) {
       this.showFilters = false;
     }
     this.syncDemoDataOnMobileIfNeeded().then(() => {
       this.concerts = this.readConcerts();
-      this.servicePayments = JSON.parse(localStorage.getItem('mm_service_payments') || '[]');
+      this.servicePayments = safeParse<any[]>(localStorage.getItem('mm_service_payments'), []);
       this.bandCredits = this.readBandCredits();
       this.contacts = this.readContacts();
       this.concerts = this.mergeConcertsFromAgenda(this.concerts);
       this.concerts = this.applyBandPaymentProfile(this.concerts);
       this.concerts = this.applyAverageFeeFromContacts(this.concerts);
+      // --- FILTRO CUTOFF DATA INIZIO SINCRO: mostro solo concerti >= data filtro ---
+      this.concerts = applySyncStartDateFilter(this.concerts);
       this.persistConcerts();
       this.rebuildMonthlyCreditAllocations();
       this.filterExecutionStatus = 'da_fare';
       this.applyFilters();
       this.applyRouteContext();
       this.applyExpenseReturnContext();
+    }).catch(err => {
+      console.error('[Concerts] init/syncDemofailed:', err);
     });
   }
 
@@ -472,12 +484,15 @@ export class ConcertsComponent implements OnInit, OnDestroy {
     navigator.clipboard.writeText(url).then(() => {
       this.copiedId = id;
       setTimeout(() => this.copiedId = null, 1800);
+    }).catch(err => {
+      console.warn('[Concerts] copia link conferma fallita:', err);
     });
   }
 
   private appendToAgenda(record: ConcertRecord): void {
-    const events: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const events: EventDetail[] = readEventsWithBackfill();
     const bandNames = record.bands.length ? record.bands : record.musicians;
+    const now = new Date().toISOString();
     const event: EventDetail = {
       id: record.id,
       title: record.title,
@@ -492,21 +507,22 @@ export class ConcertsComponent implements OnInit, OnDestroy {
       band: bandNames.map(name => ({ name })),
       status: 'pending',
       notes: `${record.notes || ''}${record.contactId ? ` • [Rubrica:${this.contactName(record.contactId)}]` : ''}${record.paymentCadence === 'mensile' ? ` • [Pagamento mensile: ${record.monthlySettlement}]` : ' • [Pagamento a prestazione: saldo immediato]'} • [Spese extra:${record.extraExpensesOutsideInvoice ? 'fuori_fattura' : 'in_fattura'}]`,
-      createdAt: record.createdAt
+      createdAt: record.createdAt,
+      updatedAt: now
     };
     const deduped = events.filter(e => e.id !== event.id);
     deduped.push(event);
-    localStorage.setItem('mm_events', JSON.stringify(deduped));
+    persistEventsWithSync(deduped);
   }
 
   private hasDjConflictOnDate(date: string): boolean {
     if (!date) return false;
-    const events: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const events: EventDetail[] = readEventsWithBackfill();
     return events.some(event => event.status !== 'cancelled' && event.type === 'dj_set' && event.date === date);
   }
 
   private async syncSupabaseEvents(): Promise<void> {
-    const profile = JSON.parse(localStorage.getItem('mm_profile_snapshot') || '{}');
+    const profile = safeParse<any>(localStorage.getItem('mm_profile_snapshot'), {});
     const musicianId = `${profile.id || localStorage.getItem('musicianId') || ''}`.trim();
     if (!musicianId) return;
     try {
@@ -601,7 +617,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
   saveInlineContact(): void {
     const name = `${this.newContact.displayName || ''}`.trim();
     if (!name) return;
-    const all = JSON.parse(localStorage.getItem('mm_contacts') || '[]');
+    const all = safeParse<any[]>(localStorage.getItem('mm_contacts'), []);
     const created = {
       id: crypto.randomUUID(),
       type: this.newContact.type,
@@ -960,8 +976,8 @@ export class ConcertsComponent implements OnInit, OnDestroy {
   }
 
   private syncConcertToAgenda(concert: ConcertRecord): void {
-    const events: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
-    const mappedStatus = concert.executionStatus === 'annullato'
+    const events: EventDetail[] = readEventsWithBackfill();
+    const mappedStatus: EventDetail['status'] = concert.executionStatus === 'annullato'
       ? 'cancelled'
       : (concert.executionStatus === 'da_fare' ? 'pending' : 'confirmed');
     const grossFee = concert.executionStatus === 'rimborsato' && concert.reimbursedAmount > 0
@@ -973,7 +989,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
       grossFee,
       netFee: grossFee + Number(concert.reimbursement || 0)
     } : event);
-    localStorage.setItem('mm_events', JSON.stringify(next));
+    persistEventsWithSync(next);
     void this.syncSupabaseEvents();
   }
 
@@ -1075,9 +1091,9 @@ export class ConcertsComponent implements OnInit, OnDestroy {
     if (typeof window === 'undefined') return;
     const musicianId = `${localStorage.getItem('musicianId') || ''}`.trim();
     if (!musicianId) return;
-    const localEvents = JSON.parse(localStorage.getItem('mm_events') || '[]');
-    const localContacts = JSON.parse(localStorage.getItem('mm_contacts') || '[]');
-    const localConcerts = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
+    const localEvents = readEventsWithBackfill();
+    const localContacts = safeParse<any[]>(localStorage.getItem('mm_contacts'), []);
+    const localConcerts = safeParse<any[]>(localStorage.getItem('mm_concerts'), []);
     const needsHydration = !Array.isArray(localEvents) || !localEvents.length || !Array.isArray(localConcerts) || !localConcerts.length;
     if (!needsHydration) return;
     try {
@@ -1087,10 +1103,10 @@ export class ConcertsComponent implements OnInit, OnDestroy {
         this.supabase.loadExpensesFromSupabase(musicianId)
       ]);
       if (remoteEvents.length && (!Array.isArray(localEvents) || !localEvents.length)) {
-        localStorage.setItem('mm_events', JSON.stringify(remoteEvents));
+        persistEventsWithSync(remoteEvents as EventDetail[]);
       }
       if (remoteExpenses.length) {
-        const currentExpenses = JSON.parse(localStorage.getItem('mm_expenses') || '[]');
+        const currentExpenses = safeParse<any[]>(localStorage.getItem('mm_expenses'), []);
         if (!Array.isArray(currentExpenses) || !currentExpenses.length) {
           localStorage.setItem('mm_expenses', JSON.stringify(remoteExpenses));
         }
@@ -1439,7 +1455,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
   }
 
   private ensureImportedBandContacts(): boolean {
-    const existing = JSON.parse(localStorage.getItem('mm_contacts') || '[]');
+    const existing = safeParse<any[]>(localStorage.getItem('mm_contacts'), []);
     const list = Array.isArray(existing) ? existing : [];
     const byKey = new Map<string, any>();
     for (const item of list) {
@@ -1499,7 +1515,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
   }
 
   private readConcerts(): ConcertRecord[] {
-    const parsed = JSON.parse(localStorage.getItem('mm_concerts') || '[]');
+    const parsed = safeParse<any[]>(localStorage.getItem('mm_concerts'), []);
     if (!Array.isArray(parsed)) return [];
     return parsed.map((x: any): ConcertRecord => ({
       id: `${x.id || crypto.randomUUID()}`,
@@ -1581,7 +1597,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
   }
 
   private mergeConcertsFromAgenda(current: ConcertRecord[]): ConcertRecord[] {
-    const events: EventDetail[] = JSON.parse(localStorage.getItem('mm_events') || '[]');
+    const events: EventDetail[] = readEventsForDisplay();
     const concertsFromEvents = events.filter(e => e.type !== 'lesson');
     const byId = new Map(current.map(c => [c.id, c]));
     concertsFromEvents.forEach(event => {
@@ -1761,7 +1777,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
   }
 
   private readBandCredits(): BandCreditEntry[] {
-    const raw = JSON.parse(localStorage.getItem('mm_band_credits') || '[]');
+    const raw = safeParse<any[]>(localStorage.getItem('mm_band_credits'), []);
     if (!Array.isArray(raw)) return [];
     return raw.map((x: any): BandCreditEntry => ({
       id: `${x?.id || crypto.randomUUID()}`,
@@ -1783,7 +1799,7 @@ export class ConcertsComponent implements OnInit, OnDestroy {
   }
 
   private readContacts(): ContactEntry[] {
-    const parsed = JSON.parse(localStorage.getItem('mm_contacts') || '[]');
+    const parsed = safeParse<any[]>(localStorage.getItem('mm_contacts'), []);
     if (!Array.isArray(parsed)) return [];
     return parsed
       .map((x: any): ContactEntry => ({

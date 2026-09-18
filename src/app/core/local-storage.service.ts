@@ -1446,3 +1446,172 @@ export function runMigration_DeduplicateEvents(): {
   return { removedCount, groupsCleaned, backupKey, beforeCount, afterCount };
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+ *  🚨 RESET COMPLETO LOCALE PER NUOVO CALENDARIO GOOGLE
+ *  Claudio ha creato un NUOVO calendario Google PULITO con 8-9 date.
+ *  Questa migrazione:
+ *  ✅ 1. Fa BACKUP TOTALE di TUTTE le chiavi mm_* (tranne migrazioni)
+ *  ❌ 2. SVUOTA i dati di lavoro (eventi + pagamenti + stati popup)
+ *  🔒 3. NON TOCCA MAI Google Calendar (né vecchio né nuovo)
+ *  🪪 4. CONSERVA profile, OAuth Google, GcalSettings, ClientID, cutoff
+ *  Dopo il reset, Claudio deve: (a) selezionare dalla UI il NUOVO
+ *  calendario nella tendina, (b) cliccare Sincronizza → importa 8-9
+ *  eventi PULITI senza duplicati, storici o errori passati.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+/** Chiavi LS che vanno SVUOTATE (dati di lavoro correlati a eventi). */
+const _FULL_RESET_CLEAR_KEYS = [
+  'mm_events',
+  'mm_service_payments',
+  'mm_overdue_payments_v3',
+  'mm_event_payments_state_v3',
+  'mm_dashboard_overdue_seen_state',
+  'mm_booking_requests',
+];
+
+/** Chiavi LS che NON devono MAI essere toccate (config, auth, profile).
+ *  Le elenchiamo per sicurezza nel backup e nel report. */
+const _FULL_RESET_PRESERVE_KEYS_HINT = [
+  'mm_user_profile',
+  'mm_musician',
+  'mm_gcal_settings',
+  'mm_supabase_settings',
+  'mm_migration_',
+  'mm_backup_',
+];
+
+/** 🚨 Esegue il reset completo locale per partire con nuovo calendario.
+ *  BACKUP PRIMA di TUTTO (tutte le chiavi mm_* presenti in LS). */
+export function runMigration_WipeAllLocalForNewCalendar(): {
+  backupKey: string;
+  eventsCleared: number;
+  paymentsCleared: number;
+  keysWiped: string[];
+  preserved: string[];
+} {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = `${today.getMonth() + 1}`.padStart(2, '0');
+  const d = `${today.getDate()}`.padStart(2, '0');
+  const backupKey = `mm_backup_FULL_RESET_${y}${m}${d}_${Math.floor(today.getTime() / 1000)}`;
+
+  // 1️⃣ BACKUP TOTALE di TUTTE le chiavi LS che iniziano con mm_
+  const fullSnapshot: Record<string, any> = {};
+  const keysPreserved: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || !k.startsWith('mm_')) continue;
+    try {
+      fullSnapshot[k] = localStorage.getItem(k);
+      if (
+        k.startsWith('mm_user_profile') ||
+        k.startsWith('mm_musician') ||
+        k.startsWith('mm_gcal_settings') ||
+        k.startsWith('mm_supabase') ||
+        k.startsWith('mm_migration_') ||
+        k.startsWith('mm_backup_')
+      ) {
+        keysPreserved.push(k);
+      }
+    } catch { /* ignora */ }
+  }
+  try {
+    localStorage.setItem(backupKey, JSON.stringify({
+      createdAt: new Date().toISOString(),
+      description:
+        'BACKUP COMPLETO pre-RESET CALENDARIO NUOVO. ' +
+        'Per RIPRISTINARE TUTTO (prima del reset), copiare il seguente snippet in Console Chrome:\n' +
+        '  const b=JSON.parse(localStorage.getItem("' + backupKey + '")); ' +
+        'Object.entries(b.snapshot||{}).forEach(([k,v])=>localStorage.setItem(k,v)); location.reload();',
+      preservedKeysHint: _FULL_RESET_PRESERVE_KEYS_HINT,
+      clearedKeysHint: _FULL_RESET_CLEAR_KEYS,
+      snapshot: fullSnapshot,
+    }));
+    console.info(
+      `%c[LS Reset] 💾 BACKUP TOTALE creato LS "${backupKey}" (${Object.keys(fullSnapshot).length} chiavi)`,
+      'font-weight:bold; color:#c2410c; background:#fff7ed; padding:2px 8px; border-radius:4px;'
+    );
+  } catch (err) {
+    console.error('[LS Reset] ❌ BACKUP FALLITO — INTERROMPO RESET per sicurezza.', err);
+    return { backupKey: '', eventsCleared: 0, paymentsCleared: 0, keysWiped: [], preserved: [] };
+  }
+
+  // 2️⃣ Conta quanti dati ci sono PRIMA della cancellazione (per report)
+  let eventsCleared = 0;
+  let paymentsCleared = 0;
+  try {
+    const rawEv = localStorage.getItem('mm_events');
+    if (rawEv) {
+      const arr = JSON.parse(rawEv);
+      eventsCleared = Array.isArray(arr) ? arr.length : 0;
+    }
+    const rawPay = localStorage.getItem('mm_service_payments');
+    if (rawPay) {
+      const arr = JSON.parse(rawPay);
+      paymentsCleared = Array.isArray(arr) ? arr.length : 0;
+    }
+  } catch { /* ignora */ }
+
+  // 3️⃣ CANCELLA le chiavi di lavoro (imposta a [] / {} o rimuovi)
+  const wipedKeys: string[] = [];
+  for (const k of _FULL_RESET_CLEAR_KEYS) {
+    try {
+      if (k === 'mm_events' || k === 'mm_service_payments') {
+        localStorage.setItem(k, '[]');
+      } else if (k.includes('state') || k.includes('overdue')) {
+        localStorage.setItem(k, '{}');
+      } else {
+        localStorage.removeItem(k);
+      }
+      wipedKeys.push(k);
+    } catch { /* ignora */ }
+  }
+
+  // 4️⃣ Report console VISIVO
+  const title =
+    `\n%c╔══════════════════════════════════════════════╗\n` +
+    `%c║  🚨  RESET COMPLETO PER NUOVO CALENDARIO!    ║\n` +
+    `%c╚══════════════════════════════════════════════╝\n`;
+  const body =
+    `%c  📦 Chiavi BACKUP totali:    ${Object.keys(fullSnapshot).length}\n` +
+    `%c  🏷️  Backup Key LS:           ${backupKey}\n` +
+    `%c  ❌ Eventi cancellati:       ${eventsCleared}\n` +
+    `%c  ❌ Pagamenti cancellati:    ${paymentsCleared}\n` +
+    `%c  🗝️  Chiavi LS svuotate:      ${wipedKeys.length}\n` +
+    `%c  🪪 Chiavi CONSERVATE:       profile + OAuth + Gcal + ClientID\n` +
+    `%c  🔒 Google Calendar (VECCHIO & NUOVO): NON TOCCATO\n\n` +
+    `%c  👉 PROSSIMI PASSI:\n` +
+    `%c     1. F5 ricarica la pagina\n` +
+    `%c     2. Vai Profilo → card Google → tendina "Calendario da usare"\n` +
+    `%c        → SELEZIONA il NUOVO calendario pulito (non il vecchio!)\n` +
+    `%c     3. Imposta 🎚️ Filtro "Sincronizza da:" = OGGI o IERI\n` +
+    `%c     4. Clicca 🔄 Sincronizza Google Calendar → importa 8-9 eventi\n` +
+    `%c     5. Fatto! Lista Concerti/Dashboard = solo le date giuste ✅\n`;
+  console.log(
+    title + body,
+    '', 'background:#ea580c;color:#fff;font-weight:bold;font-size:13px;', '',
+    'color:#c2410c;font-weight:700;',
+    'color:#7c3aed;font-weight:700;',
+    'color:#be123c;font-weight:700;',
+    'color:#be123c;font-weight:700;',
+    'color:#0369a1;font-weight:700;',
+    'color:#15803d;font-weight:700;',
+    'color:#9333ea;font-weight:700;',
+    '',
+    'color:#0ea5e9;font-weight:700;',
+    'color:#0ea5e9;font-weight:600;',
+    'color:#f59e0b;font-weight:700;',
+    'color:#f59e0b;font-weight:600;',
+    'color:#10b981;font-weight:700;',
+    'color:#10b981;font-weight:600;'
+  );
+
+  return {
+    backupKey,
+    eventsCleared,
+    paymentsCleared,
+    keysWiped: wipedKeys,
+    preserved: keysPreserved,
+  };
+}
+

@@ -8,7 +8,8 @@ import {
 import {
   runMigration_WipePastEventsFromAppOnly,
   analyzeDuplicateStats,
-  runMigration_DeduplicateEvents
+  runMigration_DeduplicateEvents,
+  runMigration_WipeAllLocalForNewCalendar
 } from '../../core/local-storage.service';
 import { Subject, takeUntil } from 'rxjs';
 
@@ -132,6 +133,7 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     this.syncStartDateDisplay = this._formatSyncStartDateIta(initialCutoff);
     this._computeWipeStats();
     this._refreshDedupStats(); // ★ Statistiche deduplica live
+    this._refreshResetStats(); // ★ Statistiche reset completo
     this.gcal.connectionState$
       .pipe(takeUntil(this._destroy$))
       .subscribe((s) => {
@@ -504,6 +506,120 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
       this.gDedupMessageIsError = true;
     } finally {
       this.gDedupRunning = false;
+    }
+  }
+
+  // --- Campi per RESET COMPLETO (Nuovo Calendario Google) ---
+  resetRunning = false;
+  resetMessage = '';
+  resetMessageIsError = false;
+  resetStats = {
+    eventsBefore: 0,
+    paymentsBefore: 0,
+    backupKey: '',
+    keysWiped: 0,
+  };
+  private _refreshResetStats(): void {
+    try {
+      const rawEv = localStorage.getItem('mm_events');
+      if (rawEv) {
+        const arr = JSON.parse(rawEv);
+        this.resetStats.eventsBefore = Array.isArray(arr) ? arr.length : 0;
+      } else this.resetStats.eventsBefore = 0;
+
+      const rawPay = localStorage.getItem('mm_service_payments');
+      if (rawPay) {
+        const arr = JSON.parse(rawPay);
+        this.resetStats.paymentsBefore = Array.isArray(arr) ? arr.length : 0;
+      } else this.resetStats.paymentsBefore = 0;
+    } catch { /* ignora */ }
+  }
+
+  /** 🚨 Handler UI: RESET COMPLETO LOCALE per nuovo calendario Google (3 conferme!) */
+  public async onResetForNewCalendarClick(): Promise<void> {
+    if (this.resetRunning) return;
+    this.resetRunning = true;
+    this.resetMessage = '';
+    this.resetMessageIsError = false;
+    this._refreshResetStats();
+
+    const totEv = this.resetStats.eventsBefore;
+    const totPay = this.resetStats.paymentsBefore;
+
+    // CONFERMA 1: riassunto cosa facciamo
+    const msg1 =
+      `🚨 AZIONE DEFINITIVA (1/3): RESET COMPLETO LOCALE\n\n` +
+      `Stai per RIPULIRE TUTTA la memoria locale della App per partire\n` +
+      `dal NUOVO calendario Google che hai creato (quello pulito con 8-9 date).\n\n` +
+      `📦 Cosa verrà CANCELLATO in APP (solo locale!):\n` +
+      `   ❌ ${totEv} eventi/concerti/lezioni in mm_events\n` +
+      `   ❌ ${totPay} pagamenti storici in mm_service_payments\n` +
+      `   ❌ Stati popup pagamenti non pagati, richieste booking, ecc.\n\n` +
+      `🪪 Cosa verrà CONSERVATO (non dovrai reinserire nulla):\n` +
+      `   ✅ Profilo musicista Nome/Ruoli/Studio\n` +
+      `   ✅ Sessione Google OAuth + Email connessa + Client ID\n` +
+      `   ✅ 🎚️ Filtro "Sincronizza da:" cutoff date\n` +
+      `   ✅ Impostazioni Supabase/Tema scuro/ecc.\n\n` +
+      `🔒 NESSUNO dei tuoi calendari Google (né vecchio, né nuovo!) verrà MAI toccato.\n\n` +
+      `💾 Verrà creato BACKUP TOTALE di TUTTO (tutte le chiavi LS mm_*).\n\n` +
+      `👉 Se NON hai ancora creato il nuovo calendario su Google, ANNULLA ORA.\n\n` +
+      `Confermi reset LOCALE (1/3)?`;
+    const ok1 = window.confirm(msg1);
+    if (!ok1) { this.resetRunning = false; return; }
+
+    // CONFERMA 2: controllo selezione calendario
+    const selectedName = this.selectedCalendarSummary || '(nessuno selezionato)';
+    const msg2 =
+      `⚠️  CONTROLLO IMPORTANTE (2/3):\n\n` +
+      `Dopo questo reset sarai guidato a:\n` +
+      `  1. Selezionare il NUOVO calendario pulito nella tendina.\n` +
+      `  2. Cliccare Sincronizza → importi 8-9 eventi PULITI.\n\n` +
+      `Calendario SELEZIONATO ORA nella tendina:\n` +
+      `     📅 "${selectedName}"\n\n` +
+      `⚠️  Assicurati che il NUOVO calendario compaia nella lista (altrimenti\n` +
+      `   prima clicca "🔄 Ricarica lista calendari" nella card in alto).\n\n` +
+      `Confermi di essere pronto per il reset (2/3)?`;
+    const ok2 = window.confirm(msg2);
+    if (!ok2) { this.resetRunning = false; return; }
+
+    // CONFERMA 3: estrema sicurezza
+    const msg3 =
+      `🚨 ULTIMA CONFERMA (3/3):\n\n` +
+      `Dopo aver cliccato OK non c'è più ritorno (se non tramite backup).\n\n` +
+      `Cancellare TUTTI gli eventi e pagamenti LOCALI per\niniziare da capo col NUOVO calendario Google pulito?\n\n` +
+      `👉 Scrivi mentalmente "SI SONO SICURO" e clicca OK.`;
+    const ok3 = window.confirm(msg3);
+    if (!ok3) { this.resetRunning = false; return; }
+
+    try {
+      const r = runMigration_WipeAllLocalForNewCalendar();
+      if (!r.backupKey) {
+        this.resetMessage = '❌ Reset ANNULLATO: BACKUP FALLITO per sicurezza. Contatta supporto.';
+        this.resetMessageIsError = true;
+        this.resetRunning = false;
+        return;
+      }
+      this.resetStats.backupKey = r.backupKey;
+      this.resetStats.keysWiped = r.keysWiped.length;
+      this._refreshResetStats();
+      this._computeWipeStats();
+      this._refreshDedupStats();
+      void this._refreshGDedupStats();
+
+      const eventsAfter = r.eventsCleared - r.eventsCleared; // = 0
+      this.resetMessage =
+        `✅ RESET COMPLETO ESEGUITO con successo! ` +
+        `❌ Eventi cancellati: ${r.eventsCleared}. ` +
+        `❌ Pagamenti cancellati: ${r.paymentsCleared}. ` +
+        `🗝️ Chiavi LS svuotate: ${r.keysWiped.length}. ` +
+        `💾 Backup totale LS: ${r.backupKey.slice(0, 55)}... ` +
+        `⚡ F5 ADESSO! Poi: seleziona NUOVO calendario → imposta cutoff → clicca Sincronizza → importi 8-9 eventi puliti ✅`;
+    } catch (err) {
+      console.error('[UI Reset] errore:', err);
+      this.resetMessage = `❌ Errore durante reset: ${String(err)}`;
+      this.resetMessageIsError = true;
+    } finally {
+      this.resetRunning = false;
     }
   }
 

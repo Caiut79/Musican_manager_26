@@ -554,4 +554,128 @@
       </p>
     </div>
   </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       SEZIONE RESET COMPLETO LOCALE (per NUOVO CALENDARIO GOOGLE)
+       Claudio ha creato un nuovo calendario pulito con 8-9 date →
+       svuota eventi e pagamenti in APP, parte da zero con import pulito.
+       ════════════════════════════════════════════════════════════════════════ -->
+  <div class="gcal-reset-section" aria-label="Reset completo locale per nuovo calendario">
+    <header class="gcal-reset-head">
+      <div class="gcal-reset-icon" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="38" height="38" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Reset completo">
+          <defs>
+            <linearGradient id="resetOrangeGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#fb923c"/>
+              <stop offset="55%" stop-color="#f97316"/>
+              <stop offset="100%" stop-color="#ea580c"/>
+            </linearGradient>
+            <linearGradient id="resetAlertGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#facc15"/>
+              <stop offset="100%" stop-color="#ca8a04"/>
+            </linearGradient>
+          </defs>
+          <!-- Calendario grande (base) -->
+          <rect x="6" y="10" width="36" height="30" rx="5" fill="#fff7ed" stroke="#fb923c" stroke-width="2"/>
+          <rect x="6" y="10" width="36" height="8" rx="5" fill="url(#resetOrangeGrad)"/>
+          <!-- 2 graffette in alto -->
+          <rect x="13" y="6" width="3" height="8" rx="1.5" fill="#9a3412"/>
+          <rect x="32" y="6" width="3" height="8" rx="1.5" fill="#9a3412"/>
+          <!-- Linee tabella calendario base -->
+          <rect x="10" y="22" width="28" height="2" rx="1" fill="#fed7aa" opacity="0.9"/>
+          <rect x="10" y="28" width="28" height="2" rx="1" fill="#fed7aa" opacity="0.7"/>
+          <rect x="10" y="34" width="28" height="2" rx="1" fill="#fed7aa" opacity="0.5"/>
+          <!-- Simbolo DIVIETO / TRASH (rosso arancio) per indicare reset -->
+          <g transform="translate(24 28)">
+            <circle r="12" fill="#fff7ed" stroke="#ea580c" stroke-width="2.4"/>
+            <path d="M -8 8 L 8 -8 M -8 -8 L 8 8" stroke="#dc2626" stroke-width="3.2" stroke-linecap="round"/>
+            <!-- Trash can piccolo dentro -->
+            <path d="M-5 -3 L5 -3 L4 6 L-4 6 Z" fill="#dc2626" opacity="0.9"/>
+            <rect x="-6" y="-5" width="12" height="2.2" rx="1" fill="#dc2626"/>
+          </g>
+          <!-- Triangolo ALLERT giallo (angolo in alto a sx calendario) -->
+          <g transform="translate(11 16)">
+            <path d="M0 0 L8 14 L-8 14 Z" fill="url(#resetAlertGrad)" stroke="#b45309" stroke-width="1.6"/>
+            <rect x="-1.3" y="5" width="2.6" height="5" rx="1.3" fill="#78350f"/>
+            <circle cx="0" cy="4" r="1.4" fill="#78350f"/>
+          </g>
+        </svg>
+      </div>
+      <div class="gcal-reset-head-copy">
+        <h3 class="gcal-reset-title">🚨 Reset Completo (Nuovo Calendario)</h3>
+        <p class="gcal-reset-subtitle">
+          Ideale se hai creato un <strong>nuovo calendario Google già pulito</strong> con
+          solo 8-9 date corrette. <strong>Cancella TUTTI gli eventi e pagamenti LOCALI</strong>
+          (memoria browser) e ti permette di ricominciare con un <strong>import PULITO</strong>
+          senza duplicati o errori storici.
+        </p>
+      </div>
+    </header>
+
+    <!-- Stats 3 colonne arancio -->
+    <div class="gcal-reset-stats">
+      <div class="gcal-reset-stat stat-events">
+        <span class="rs-num">{{ resetStats.eventsBefore }}</span>
+        <span class="rs-label">📦 Eventi locali ATTUALI</span>
+      </div>
+      <div class="gcal-reset-stat stat-pay">
+        <span class="rs-num">{{ resetStats.paymentsBefore }}</span>
+        <span class="rs-label">💶 Pagamenti (storici)</span>
+      </div>
+      <div class="gcal-reset-stat stat-zero">
+        <span class="rs-num">0</span>
+        <span class="rs-label">✅ Dopo reset (Obiettivo)</span>
+      </div>
+    </div>
+
+    <!-- Griglia COSA CANCELLA / COSA CONSERVA (2 colonne guida) -->
+    <div class="gcal-reset-grid">
+      <div class="gcal-reset-card gcal-reset-card-bad">
+        <h5>❌ CANCELLA in APP (solo locale!)</h5>
+        <ul>
+          <li>Tutti i concerti / lezioni / eventi in <code>mm_events</code></li>
+          <li>Tutti i pagamenti storici in <code>mm_service_payments</code></li>
+          <li>Stati popup pagamenti e richieste booking</li>
+        </ul>
+      </div>
+      <div class="gcal-reset-card gcal-reset-card-good">
+        <h5>🪪 CONSERVA (non devi reinserire!)</h5>
+        <ul>
+          <li>✅ Profilo musicista (nome, ruoli, studio)</li>
+          <li>✅ Sessione Google OAuth + Client ID + email connessa</li>
+          <li>✅ 🎚️ Filtro &quot;Sincronizza da:&quot; e lista calendari</li>
+          <li>✅ Impostazioni tema e backup storici</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="gcal-reset-actions">
+      <button
+        type="button"
+        class="btn-primary btn-reset-calendar"
+        (click)="onResetForNewCalendarClick()"
+        [disabled]="resetRunning">
+        <span *ngIf="!resetRunning">
+          🚨 Svuota TUTTA l'App &amp; parti da Nuovo Calendario Google
+        </span>
+        <span *ngIf="resetRunning">
+          ⏳ Backup in corso + Reset… attendere
+        </span>
+      </button>
+      <p class="gcal-reset-hint">
+        🔒 <strong>Google Calendar (VECCHIO E NUOVO): NON VIENE MAI TOCATO.</strong>&nbsp;
+        💾 Prima della cancellazione viene creato un <strong>BACKUP TOTALE</strong> in
+        <code>localStorage</code> chiave <code>mm_backup_FULL_RESET_*</code>
+        (ripristinabile in 1 clic da Console DevTools, istruzioni incluse nel backup).
+        &nbsp;⚠️&nbsp; Sono necessarie <strong>3 conferme</strong> per procedere.
+      </p>
+    </div>
+
+    <p class="gcal-message"
+       *ngIf="resetMessage"
+       [class.is-error]="resetMessageIsError"
+       style="white-space: pre-line;">
+      {{ resetMessage }}
+    </p>
+  </div>
 </section>

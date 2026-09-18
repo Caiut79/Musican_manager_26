@@ -908,10 +908,25 @@ export function normalizeTitleForDedup(title: string | null | undefined): string
     .replace(/[\s\-_.,;:'"!?()\[\]{}]/g, '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
-/** Chiave composita per dedup (data ISO YYYY-MM-DD + titolo normalizzato). */
+/** Chiave composita SEMPLICE per dedup (data + titolo normalizzato).
+ *  Usata per tombstone cross-match (non sappiamo il type sempre, vedi eventi creati su Google
+ *  prima di import). */
 export function eventDateTitleDedupKey(date: string | null | undefined, title: string | null | undefined): string {
   const d = (date && typeof date === 'string') ? date : '';
   return `${d}|${normalizeTitleForDedup(title)}`;
+}
+/** 🆕 Chiave composita COMPLETA CON TYPE (3 parti): data | titolo norm | type.
+ *  USATA da: analyzeDuplicateStats, runMigration_DeduplicateEvents,
+ *           GCal seenDedupKeys (intra-loop anti-dup), dedup finale fine ciclo.
+ *  Per cross-match: aggiungiamo SEMPRE entrambe le chiavi al tombstone. */
+export function eventFullDedupKey(
+  date: string | null | undefined,
+  title: string | null | undefined,
+  type: string | null | undefined
+): string {
+  const d = (date && typeof date === 'string') ? date : '';
+  const t = (type && typeof type === 'string') ? type : 'other';
+  return `${d}|${normalizeTitleForDedup(title)}|${t}`;
 }
 
 /** Carica TOMBSTONE ID Google dal LS come Set<string> (helper condiviso). */
@@ -960,21 +975,40 @@ function _tombstoneTDPersistKeys(set: Set<string>): void {
   try { localStorage.setItem(GCAL_TOMBSTONE_KEY_TITLEDATE, JSON.stringify(Array.from(set))); }
   catch { /* ignora */ }
 }
-/** Aggiungi chiave `${date}|${norm(title)}` ai tombstone compositi x eventi no gId. */
-export function tombstoneAddDeletedTitleDate(date: string | null | undefined, title: string | null | undefined): boolean {
-  const k = eventDateTitleDedupKey(date, title);
-  if (!k || k.length < 12) return false; // almeno data (10char) + 2 char titolo
+/** 🧟 Aggiungi evento cancellato ai tombstone compositi (x eventi SENZA googleEventId).
+ *  ⭐ CROSS-MATCH IMPORTANTE: scrive 2 chiavi nel set:
+ *    (A) data|title_norm               → match tombstone semplice (Google senza type)
+ *    (B) data|title_norm|type          → match dedup completo (locale)
+ *  Perché: in cancellazione locale conosciamo il type, in import Google no. */
+export function tombstoneAddDeletedTitleDate(
+  date: string | null | undefined,
+  title: string | null | undefined,
+  type?: string | null | undefined
+): boolean {
+  const kSimple = eventDateTitleDedupKey(date, title);
+  const kFull = eventFullDedupKey(date, title, type);
+  if (!kSimple || kSimple.length < 12) return false; // data(10) + 2 chars titolo
   const set = _tombstoneTDLoadKeys();
-  if (set.has(k)) return false;
-  set.add(k);
-  _tombstoneTDPersistKeys(set);
-  return true;
+  let added = false;
+  if (kSimple && !set.has(kSimple)) { set.add(kSimple); added = true; }
+  if (kFull && !set.has(kFull)) { set.add(kFull); added = true; }
+  if (added) _tombstoneTDPersistKeys(set);
+  return added;
 }
-/** Skip tassativo import: chiave data|titolo_norm è marcata cancellata? */
-export function tombstoneHasDeletedTitleDate(date: string | null | undefined, title: string | null | undefined): boolean {
-  const k = eventDateTitleDedupKey(date, title);
-  if (!k) return false;
-  return _tombstoneTDLoadKeys().has(k);
+/** 🧟 Skip tassativo import: match tombstone composito?
+ *  Check OR logico → match SIA chiave semplice SIA chiave completa. */
+export function tombstoneHasDeletedTitleDate(
+  date: string | null | undefined,
+  title: string | null | undefined,
+  type?: string | null | undefined
+): boolean {
+  const set = _tombstoneTDLoadKeys();
+  if (set.size === 0) return false;
+  const kSimple = eventDateTitleDedupKey(date, title);
+  if (kSimple && set.has(kSimple)) return true;
+  const kFull = eventFullDedupKey(date, title, type);
+  if (kFull && set.has(kFull)) return true;
+  return false;
 }
 
 /**
@@ -1024,12 +1058,12 @@ export function persistEventsWithSync(events: EventDetail[]): EventDetail[] {
       // 🆕 Sempre, ANCHE (soprattutto!) SE NON C'È googleEventId
       //     → (evento importato da Google, creato manualmente sul calendario,
       //        o esisteva prima dell'integrazione).
-      //     Chiave data|titolo_norm.
-      const addedTD = tombstoneAddDeletedTitleDate(prevEv.date, prevEv.title);
+      //     Cross-match 2 chiavi: data|title e data|title|type.
+      const addedTD = tombstoneAddDeletedTitleDate(prevEv.date, prevEv.title, prevEv.type);
       if (addedTD) tombTDCount++;
     }
     if (tombIdCount + tombTDCount > 0) {
-      console.info(`%c[persistEventsWithSync] 🧟 ${tombIdCount} ID Google + ${tombTDCount} date/title aggiunti a TOMBSTONE (cancellazioni utente)`,
+      console.info(`%c[persistEventsWithSync] 🧟 ${tombIdCount} ID Google + ${tombTDCount} date/title chiavi aggiunti a TOMBSTONE (cancellazioni utente)`,
         'background:#7c3aed;color:#fff;padding:2px 8px;border-radius:4px;');
     }
   } catch (err) {
@@ -1410,24 +1444,15 @@ export function runMigration_WipePastEventsFromAppOnly(): number {
 // MIGRAZIONE 3: 🧹 DEDUPLICAZIONE EVENTI (stesso titolo + data + tipo)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Normalizzazione titolo per chiave deduplica (stessa logica fuzzy match GCal) */
-function _normDedup(s: string): string {
-  return `${s || ''}`
-    .trim()
-    .toLowerCase()
-    .replace(/[\s\-_.,;:'"!?()\[\]{}]/g, '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
 /** Statistiche live sui duplicati (per UI Profilo). NON modifica nulla.
  *  Restituisce gruppi di eventi duplicati (stessa data + titolo norm. + tipo).
  *  Utile per mostrare "5 gruppi duplicati · 12 eventi superflui da rimuovere".
+ *  ✅ Chiave condivisa: eventFullDedupKey() — STESSA usata in GCal import loop.
  */
 export function analyzeDuplicateStats(): {
   totalEvents: number;
   duplicateGroupsCount: number;
-  duplicateEventsCount: number;       // quanti eventi superflui (N-1 per gruppo)
+  duplicateEventsCount: number;
   groups: { key: string; sampleTitle: string; date: string; count: number; keepCandidateTitle: string; }[];
 } {
   let totalEvents = 0;
@@ -1439,7 +1464,7 @@ export function analyzeDuplicateStats(): {
     const arr: EventDetail[] = Array.isArray(parsed) ? parsed : [];
     totalEvents = arr.length;
     for (const ev of arr) {
-      const k = `${ev.date || ''}|${_normDedup(ev.title || '')}|${ev.type || 'other'}`;
+      const k = eventFullDedupKey(ev.date, ev.title, ev.type);
       const list = buckets.get(k) || [];
       list.push(ev);
       buckets.set(k, list);
@@ -1450,7 +1475,6 @@ export function analyzeDuplicateStats(): {
   let dupCount = 0;
   buckets.forEach((list, key) => {
     if (list.length >= 2) {
-      // Ordina per preferire: (1) con googleEventId, (2) updatedAt piu' recente
       list.sort((a, b) => {
         const aH = a.googleEventId ? 1 : 0;
         const bH = b.googleEventId ? 1 : 0;
@@ -1464,11 +1488,10 @@ export function analyzeDuplicateStats(): {
         count: list.length,
         keepCandidateTitle: list[0].title || ''
       });
-      dupCount += (list.length - 1); // N-1 = superflui
+      dupCount += (list.length - 1);
     }
   });
 
-  // Ordina gruppi: prima quelli con piu' copie
   groupsArr.sort((a, b) => b.count - a.count);
   return {
     totalEvents,
@@ -1480,8 +1503,9 @@ export function analyzeDuplicateStats(): {
 
 /** 🧹 Deduplica eventi con stesso titolo+data+tipo.
  *  Backup preventivo LS, mantiene 1 evento per gruppo (con googleEventId + updatedAt recentissimo).
- *  NON attiva sync outgoing (scrittura LS diretta — come Wipe Past).
- *  Restituisce numero di eventi RIMOSSI dal bucket mm_events.
+ *  ✅ NON scrive direttamente LS → usa writeEventsWithTimestamp per aggiornare updatedAt
+ *     e triggerare correttamente i watcher UI.
+ *  ✅ Chiave condivisa eventFullDedupKey (stessa di import loop / tombstone).
  */
 export function runMigration_DeduplicateEvents(): {
   removedCount: number;
@@ -1498,7 +1522,6 @@ export function runMigration_DeduplicateEvents(): {
   const backupTag = `${y}${m}${d}`;
   const backupKey = `mm_backup_pre_dedup_${backupTag}_${Math.floor(today.getTime() / 1000)}`;
 
-  // 1. Carica eventi
   let allEvents: EventDetail[] = [];
   try {
     const raw = localStorage.getItem(LS_KEY_EVENTS);
@@ -1512,21 +1535,18 @@ export function runMigration_DeduplicateEvents(): {
     return { removedCount: 0, groupsCleaned: 0, backupKey: '', beforeCount: 0, afterCount: 0 };
   }
 
-  // 2. Raggruppa per chiave dedup
   const buckets = new Map<string, EventDetail[]>();
   for (const ev of allEvents) {
-    const k = `${ev.date || ''}|${_normDedup(ev.title || '')}|${ev.type || 'other'}`;
+    const k = eventFullDedupKey(ev.date, ev.title, ev.type);
     const list = buckets.get(k) || [];
     list.push(ev);
     buckets.set(k, list);
   }
 
-  // 3. BACKUP preventivo PRIMA di modifiche
   try {
     const backupPayload = {
       createdAt: new Date().toISOString(),
-      description: 'Backup completo PRIMA di DEDUPLICAZIONE eventi.' +
-                   ' Per ripristinare: localStorage.setItem("' + LS_KEY_EVENTS + '", JSON.stringify(BACKUP.events)) poi F5.',
+      description: 'Backup completo PRIMA di DEDUPLICAZIONE eventi.',
       totalEventsBefore: beforeCount,
       events: allEvents,
     };
@@ -1540,7 +1560,6 @@ export function runMigration_DeduplicateEvents(): {
     return { removedCount: 0, groupsCleaned: 0, backupKey: '', beforeCount, afterCount: beforeCount };
   }
 
-  // 4. Per ogni gruppo: mantieni 1 solo (preferenza: googleEventId presente → più recente)
   let groupsCleaned = 0;
   let removedCount = 0;
   const survivorIds = new Set<string>();
@@ -1550,14 +1569,12 @@ export function runMigration_DeduplicateEvents(): {
       survivorIds.add(list[0].id);
       return;
     }
-    // Ordina per preferenza: (1) con googleEventId, (2) updatedAt piu' recente
     list.sort((a, b) => {
       const aH = a.googleEventId ? 1 : 0;
       const bH = b.googleEventId ? 1 : 0;
       if (bH !== aH) return bH - aH;
       return (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '');
     });
-    // Primo = sopravvissuto
     survivorIds.add(list[0].id);
     groupsCleaned++;
     removedCount += (list.length - 1);
@@ -1567,14 +1584,15 @@ export function runMigration_DeduplicateEvents(): {
   const afterCount = kept.length;
 
   if (removedCount <= 0) {
-    // Nessun duplicato trovato, niente scritture
     return { removedCount: 0, groupsCleaned: 0, backupKey, beforeCount, afterCount };
   }
 
-  // 5. SCRITTURA ATOMICA in LS
   try {
-    // 👉 scrittura DIRETTA per evitare sync outgoing con Google! (come Wipe Past)
-    localStorage.setItem(LS_KEY_EVENTS, JSON.stringify(kept));
+    // ✅ Usa writeEventsWithTimestamp (NON setItem diretto):
+    //    - Aggiorna automaticamente mm_events_updated_at timestamp
+    //    - Consenti a watcher/storage event di rilevare il cambiamento
+    //    - QUALSIASI pagina è in ascolto vedrà l'aggiornamento immediatamente!
+    writeEventsWithTimestamp(kept);
   } catch (err) {
     console.error('[LS Dedup] ❌ Errore scrittura LS:', err);
     return { removedCount: 0, groupsCleaned: 0, backupKey, beforeCount, afterCount: beforeCount };

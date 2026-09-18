@@ -15,6 +15,7 @@ import {
   tombstoneHasDeletedTitleDate,
   normalizeTitleForDedup,
   eventDateTitleDedupKey,
+  eventFullDedupKey,
 } from './local-storage.service';
 
 // ─── Tipi interni ────────────────────────────────────────────────────────────
@@ -102,6 +103,13 @@ export class GoogleCalendarService {
    */
   private readonly _eventsChanged$ = new Subject<void>();
   public readonly eventsChanged$: Observable<void> = this._eventsChanged$.asObservable();
+  /** 🔄 Forza il reload degli eventi in TUTTE le viste (Dashboard, Agenda,
+   *  Lista Concerti, ecc.). Chiamato da componenti dopo operazioni manuali
+   *  che scrivono direttamente LS bypassando il service (es. pulsante Dedup
+   *  locale, Wipe Past, Reset Completo). Senza questo servirebbe F5 manuale. */
+  public triggerEventsRefresh(): void {
+    try { this._eventsChanged$.next(); } catch { /* ignora */ }
+  }
 
   // ─── Stato privato interno ─────────────────────────────────────────────────
   private _config: { clientId: string; scopes: string[] } | null = null;
@@ -1071,13 +1079,12 @@ export class GoogleCalendarService {
       // vengano fuzzy-match-ati TUTTI sullo STESSO evento locale #1 (causa del
       // ciclo 1→2→4→8 duplicati).
       const consumedLocalIds = new Set<string>();
-      // Id degli eventi locali che hanno gia' un googleEventId (link stabile 1:1)
       local.forEach(ev => { if (ev.googleEventId) consumedLocalIds.add(ev.id); });
-      // 🆕 Chiavi dedup date|title_norm GIA' processate in questo loop import
-      //     → evitiamo N copie dello STESSO evento in un solo sync (N duplicati orizzontali)
+      // 🆕 Chiavi dedup COMPLETE (data|norm_title|type) GIA' processate in QUESTO loop.
+      //     ✅ STESSA chiave usata in analyzeDuplicateStats / runMigration_DeduplicateEvents.
       const seenDedupKeys = new Set<string>();
       local.forEach(ev => {
-        const k = eventDateTitleDedupKey(ev.date, ev.title);
+        const k = eventFullDedupKey(ev.date, ev.title, ev.type);
         if (k) seenDedupKeys.add(k);
       });
 
@@ -1086,42 +1093,38 @@ export class GoogleCalendarService {
         if (!gEv.id) { diag.nNoId++; report.skipped++; continue; }
         if (gEv.status === 'cancelled') { diag.nCancelled++; report.skipped++; continue; }
 
-        // ════════════════════════════════════════════════════════════════════
-        // 🧟  FIX TOMBSTONE (IMPEDISCE RI-IMPORTAZIONE EVENTI CANCELLATI!)
-        //     LIVELLO 1: googleEventId specifico (eventi creati dall'app).
-        // ════════════════════════════════════════════════════════════════════
         if (tombstoneHasDeletedGoogleEventId(gEv.id)) {
           diag.nTombstonedId++;
           report.skipped++;
           continue;
         }
 
-        // ⭐ CUTOFF CHECK PRIMA DI TUTTO IL RESTO!
         const parsedDate = this._parseGoogleDateTime(gEv.start, gEv.end);
         if (!this.isEventWithinSyncWindow(parsedDate.date)) {
           nSkippedCutoff++;
           continue;
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        // 🧟  FIX TOMBSTONE LIVELLO 2: chiave data|titolo_norm (PER EVENTI
-        //     SENZA googleEventId = importati/creati direttamente su Google).
-        // ════════════════════════════════════════════════════════════════════
+        // 🧮 Calcola TYPE subito (STESSA regola _fromGoogleEvent!)
         const gTitle = gEv.summary ?? '';
+        const gTypeGuess = this._guessEventType(gTitle);
         const gKeyTD = eventDateTitleDedupKey(parsedDate.date, gTitle);
-        if (tombstoneHasDeletedTitleDate(parsedDate.date, gTitle)) {
+        const gKeyFull = eventFullDedupKey(parsedDate.date, gTitle, gTypeGuess);
+
+        // 🧟 TOMBSTONE composito cross-match: SIA chiave semplice SIA con type
+        if (tombstoneHasDeletedTitleDate(parsedDate.date, gTitle, gTypeGuess)) {
           diag.nTombstonedTD++;
           report.skipped++;
           continue;
         }
-        // 🟡 BARRIERA INTRA-LOOP: se in QUESTO ciclo di import abbiamo GIA'
-        //    visto/importato/linkato un evento con STESSA data + STESSO titolo
-        //    → SKIP! (evita 8 duplicati da 8 eventi Google identici).
-        if (gKeyTD && seenDedupKeys.has(gKeyTD)) {
+        // 💣 BARRIERA INTRA-LOOP 3 parti COMPLETA CON TYPE:
+        if ((gKeyFull && seenDedupKeys.has(gKeyFull)) ||
+            (gKeyTD && seenDedupKeys.has(gKeyTD))) {
           diag.nIntraLoopDedup++;
           report.skipped++;
           continue;
         }
+        if (gKeyFull) seenDedupKeys.add(gKeyFull);
         if (gKeyTD) seenDedupKeys.add(gKeyTD);
 
         const googleTs = gEv.updated ?? now;
@@ -1180,24 +1183,25 @@ export class GoogleCalendarService {
 
       // ══════════════════════════════════════════════════════════════════════
       // 🛡️  DEDUP FINALE DI FINE CICLO (double safety net)
-      //     Elimina copie duplicate se 2 eventi finiscono per caso con:
-      //     (A) stesso googleEventId, oppure
-      //     (B) stessa data+titolo_norm (nel caso eventi creati manualmente)
+      //     Elimina copie duplicate per:
+      //     (A) STESSO googleEventId (importazione ripetuta)
+      //     (B) STESSA chiave COMPLETA eventFullDedupKey = data|title_norm|type
+      //         ✅ STESSA di analyze/run dedup locale.
       // ══════════════════════════════════════════════════════════════════════
       const finalSeenGIds = new Map<string, string>();
-      const finalSeenTDKeys = new Map<string, string>();
+      const finalSeenFullKeys = new Map<string, string>();
       const survivors: EventDetail[] = [];
       let dedupFinalGId = 0;
-      let dedupFinalTD = 0;
+      let dedupFinalFullTD = 0;
       for (const ev of Array.from(localIdx.values())) {
         if (ev.googleEventId) {
           if (finalSeenGIds.has(ev.googleEventId)) { dedupFinalGId++; continue; }
           finalSeenGIds.set(ev.googleEventId, ev.id);
         }
-        const tdK = eventDateTitleDedupKey(ev.date, ev.title);
-        if (tdK) {
-          if (finalSeenTDKeys.has(tdK)) { dedupFinalTD++; continue; }
-          finalSeenTDKeys.set(tdK, ev.id);
+        const fullK = eventFullDedupKey(ev.date, ev.title, ev.type);
+        if (fullK) {
+          if (finalSeenFullKeys.has(fullK)) { dedupFinalFullTD++; continue; }
+          finalSeenFullKeys.set(fullK, ev.id);
         }
         survivors.push(ev);
       }
@@ -1216,9 +1220,9 @@ export class GoogleCalendarService {
         `| cancellati-google=${diag.nCancelled}`,
         `| senza-id=${diag.nNoId}`,
         `| 🧟SKIP-tomb-gId=${diag.nTombstonedId}`,
-        `🧟SKIP-tomb-date/title=${diag.nTombstonedTD}`,
+        `🧟SKIP-tomb-date/title+type=${diag.nTombstonedTD}`,
         `| 💣anti-dup-intra-loop=${diag.nIntraLoopDedup}`,
-        `| dedup-finale-gId=${dedupFinalGId} date/title=${dedupFinalTD}`,
+        `| dedup-finale-gId=${dedupFinalGId} fullTD=${dedupFinalFullTD}`,
         `| in-locale-con-googleEventId=${byGoogleId.size}/${tutti.length}`);
 
       const nowStamp = new Date().toISOString();
@@ -1926,6 +1930,16 @@ export class GoogleCalendarService {
     return parts.slice(1).join(', ');
   }
 
+  /** 🆕 Helper privato: guess event type da titolo (identica regola _fromGoogleEvent,
+   *  usato per dedup chiavi e tombstone check — STESSA REGOLA, NO DRIFT! */
+  private _guessEventType(summary: string | null | undefined): 'concert' | 'lesson' | 'dj_set' | 'other' {
+    const tit = (summary || '').toLowerCase();
+    if (/lezz?ion|ripetizion|scuola|solfe[g5]|armon|maest[ro]/.test(tit)) return 'lesson';
+    if (/\bdj\b|discoteca|consolle|club\b|boiler|deejay/.test(tit))  return 'dj_set';
+    if (/concert|live|serat|show|\bgig\b|prov[ae]?|rehearsal|saggio|fest[ae]|matrim|cresim|comunione|event/.test(tit)) return 'concert';
+    return 'concert';
+  }
+
   /**
    * Fuzzy match per evitare DOPPIONI SOLAMENTE se due eventi sono UGUALI:
    * - STESSA DATA (YYYY-MM-DD)
@@ -1936,30 +1950,17 @@ export class GoogleCalendarService {
    * come nuovo evento importato, generando centinaia di falsi "conflitti").
    */
   private _findFuzzyMatch(local: EventDetail[], candidate: EventDetail, excludeIds?: Set<string>): EventDetail | null {
-    const norm = (s: string) => `${s || ''}`
-      .trim()
-      .toLowerCase()
-      // Normalizza punteggiatura + spazi multipli
-      .replace(/[\s\-_.,;:'"!?()\[\]{}]/g, '')
-      // Rimuovi accenti (alla francese, alla 🎸)
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-    const needle = norm(candidate.title);
+    // ✅ Helper CONDIVISO con dedup locale + tombstone: STESSA funzione normalizeTitleForDedup.
+    //    Zero drift: se cambio da una parte cambiano TUTTE.
+    const needle = normalizeTitleForDedup(candidate.title);
     if (!needle || needle.length < 3) return null;
 
-    // ⭐ FIX #4 (anti-duplicati): consideriamo SOLO gli eventi dello stesso giorno
-    // che NON sono gia' in excludeIds (= gia' linkati a un evento Google nello
-    // stesso ciclo di import). Cosi' 8 eventi Google uguali non si appoggiano
-    // TUTTI sullo STESSO locale #1, ma ognuno sul prossimo disponibile!
     let sameDay = local.filter((e) => e.date === candidate.date);
     if (excludeIds && excludeIds.size) {
       sameDay = sameDay.filter(e => !excludeIds.has(e.id));
     }
     if (!sameDay.length) return null;
 
-    // Ordina mettendo PRIMA quelli SENZA googleEventId (piu' "freschi" da linkare)
-    // — cosi' previligiamo eventi locali gia' esistenti ma NON ancora sincronizzati
-    // invece di creare importati nuovi.
     sameDay.sort((a, b) => {
       const aHas = a.googleEventId ? 1 : 0;
       const bHas = b.googleEventId ? 1 : 0;
@@ -1968,10 +1969,8 @@ export class GoogleCalendarService {
     });
 
     for (const ev of sameDay) {
-      const hay = norm(ev.title);
+      const hay = normalizeTitleForDedup(ev.title);
       if (!hay) continue;
-      // Match SOLO se titolo normalizzato UGUALE, oppure se l'uno è incluso nell'altro
-      // ma ENTRAMBI hanno lunghezza >= 10 caratteri e differenza < 25% (titoli quasi identici)
       if (hay === needle) return ev;
       if (hay.length >= 10 && needle.length >= 10) {
         const minLen = Math.min(hay.length, needle.length);

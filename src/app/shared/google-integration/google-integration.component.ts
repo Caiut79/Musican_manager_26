@@ -601,12 +601,13 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
       this._computeWipeStats();
 
       if (r.removedCount > 0) {
+        // 🔄 Trigger immediato reload UI (Dashboard, Agenda, Concerti, tutti)!
+        try { this.gcal.triggerEventsRefresh(); } catch { /* ignora */ }
         this.dedupMessage =
           `✅ Deduplicazione completata! ` +
           `❌ Rimossi ${r.removedCount} eventi superflui (${r.groupsCleaned} gruppi puliti). ` +
           `✅ Restanti: ${r.afterCount} eventi. ` +
-          `💾 Backup LS: ${(r.backupKey || 'creato').slice(0, 45)}...` +
-          ` ⚠️  RICARICA la pagina (F5) per vedere le liste AGGIORNATE e i badge riallineati!`;
+          `💾 Backup LS: ${(r.backupKey || 'creato').slice(0, 45)}...`;
       } else {
         this.dedupMessage = '⚠️ Nessun evento rimosso (backup fatto, controlla Console DevTools).';
         this.dedupMessageIsError = true;
@@ -683,11 +684,13 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
       await this._refreshGDedupStats();
 
       if (r.deleted > 0) {
+        // 🔄 Trigger immediato reload dopo dedup remoto + riallineamento liste
+        try { this.gcal.triggerEventsRefresh(); } catch { /* ignora */ }
         this.gDedupMessage =
           `✅ Google Calendar pulito! ` +
           `❌ Eliminati ${r.deleted} duplicati (${r.kept} gruppi mantenuti). ` +
           `💾 Backup chiavi ID: ${(r.backupKey || 'creato').slice(0, 48)}... ` +
-          `👉 Ora vai in Dashboard, clicca Sincronizza Google, poi F5 per aggiornare i badge!`;
+          `👉 Lista eventi aggiornata automaticamente.`;
       } else {
         this.gDedupMessage = '⚠️ Nessun evento rimosso da Google (backup salvato comunque).';
         this.gDedupMessageIsError = true;

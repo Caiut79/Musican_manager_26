@@ -588,8 +588,15 @@
 
   </section>
 
-  <!-- ── Step 4: Colori agenda ── -->
+  <!-- ── Step 4 (5 UI): Google Calendar ── -->
   <section *ngIf="currentStep === 4">
+    <h2>Google Calendar</h2>
+    <p class="field-hint field-hint-spaced">Connetti e configura la sincronizzazione bidirezionale con Google Calendar: imposta Client ID, data inizio sincronizzazione, formato delle note e scegli il calendario di destinazione.</p>
+    <app-google-integration></app-google-integration>
+  </section>
+
+  <!-- ── Step 5 (6 UI): Colori agenda ── -->
+  <section *ngIf="currentStep === 5">
     <h2>Colori agenda</h2>
     <p class="field-hint field-hint-spaced" *ngIf="!isTeacher && !isDj">Nessun colore extra da impostare: hai selezionato solo il ruolo musicista.</p>
     <div class="row color-row" *ngIf="isTeacher || isDj">
@@ -649,5 +656,3 @@
 
 </form>
 
-<!-- Integrazione Google Calendar (fuori dal form di profilo) -->
-<app-google-integration></app-google-integration>

@@ -74,6 +74,49 @@
     </div>
   </header>
 
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!-- 📝  BARRA SUPERIORE: MODIFICA / SALVA / ANNULLA preferenze          -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <div class="gcal-edit-bar" [class.gcal-edit-bar--editing]="editingMode">
+    <div class="gcal-edit-bar-left">
+      <span class="gcal-badge-mode" *ngIf="!editingMode">
+        🔒 Sola lettura · clicca <b>MODIFICA</b> per cambiare preferenze
+      </span>
+      <span class="gcal-badge-mode gcal-badge-mode--active" *ngIf="editingMode">
+        ✏️ <b>Modifiche in corso</b> ·
+        <ng-container *ngIf="isDirtyDraft">salva o annulla prima di uscire!</ng-container>
+        <ng-container *ngIf="!isDirtyDraft">nessuna modifica ancora.</ng-container>
+      </span>
+    </div>
+    <div class="gcal-edit-bar-right">
+      <!-- MODALITÀ SOLA LETTURA: solo pulsante MODIFICA -->
+      <button type="button" class="btn-primary btn-primary--edit"
+        *ngIf="!editingMode"
+        (click)="onStartEditGoogle()">
+        🔓 MODIFICA Preferenze Google
+      </button>
+      <!-- MODALITÀ EDITING: SALVA + ANNULLA  -->
+      <ng-container *ngIf="editingMode">
+        <button type="button" class="btn-primary btn-primary--save"
+          (click)="onSaveAllGoogle()"
+          [disabled]="!isDirtyDraft">
+          ✅ SALVA Tutte le Modifiche
+        </button>
+        <button type="button" class="btn-outline btn-outline--cancel"
+          (click)="onCancelEditGoogle()">
+          ↩️ ANNULLA
+        </button>
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- Messaggio SALVATO o ERRORE dopo il salvataggio -->
+  <div class="gcal-save-message" *ngIf="savedMessage"
+    [class.gcal-save-message--error]="savedMessageIsError">
+    <pre>{{ savedMessage }}</pre>
+  </div>
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+
   <div class="gcal-instructions" *ngIf="showInstructions">
     <h3>Come configurare Google Calendar (5 passaggi)</h3>
     <ol>
@@ -117,22 +160,31 @@
           id="gcal-clientid"
           class="gcal-input"
           type="text"
-          [(ngModel)]="clientIdInput"
+          [(ngModel)]="draft.clientId"
+          (ngModelChange)="_markDirty()"
           placeholder="es. 1234567890-abc123.apps.googleusercontent.com"
-          [disabled]="clientIdSaving"
+          [disabled]="!editingMode"
           autocomplete="off"
           spellcheck="false">
         <button
           type="button"
           class="btn-primary"
-          (click)="onSaveClientId()"
-          [disabled]="clientIdSaving || !clientIdInput.trim()">
-          {{ clientIdSaving ? 'Salvataggio…' : 'Salva' }}
+          (click)="onSaveAllGoogle()"
+          [disabled]="!editingMode || !draft.clientId?.trim()"
+          *ngIf="editingMode">
+          💾 SALVA (conferma tutto)
+        </button>
+        <button
+          type="button"
+          class="btn-primary"
+          (click)="onStartEditGoogle()"
+          *ngIf="!editingMode">
+          🔓 MODIFICA
         </button>
       </div>
       <p class="gcal-field-hint" *ngIf="!clientIdMessage">
-        Inserisci l'ID client creato dalla Google Cloud Console. Le impostazioni
-        vengono salvate direttamente nel browser (nessun file da modificare).
+        Inserisci l'ID client creato dalla Google Cloud Console. Le preferenze si
+        confermano con il tasto <b>SALVA in alto</b> dopo ogni modifica.
       </p>
       <p class="gcal-message"
          *ngIf="clientIdMessage"
@@ -149,10 +201,10 @@
         <div class="gcal-field-row">
           <select
             class="gcal-select"
-            [disabled]="loadingCalendars"
-            [value]="selectedCalendarId"
+            [disabled]="loadingCalendars || !editingMode"
+            [value]="draft.selectedCalendarId"
             (change)="onCalendarChange($any($event.target).value)">
-            <option value="" *ngIf="!selectedCalendarId">Carica elenco calendari</option>
+            <option value="" *ngIf="!draft.selectedCalendarId">Carica elenco calendari</option>
             <option *ngFor="let c of calendars" [value]="c.id">
               {{ c.summary }}
             </option>
@@ -165,8 +217,9 @@
             Aggiorna elenco
           </button>
         </div>
-        <p class="gcal-field-hint" *ngIf="selectedCalendarSummary">
-          Attuale: <strong>{{ selectedCalendarSummary }}</strong>
+        <p class="gcal-field-hint">
+          Attuale: <strong *ngIf="selectedCalendarSummary">{{ selectedCalendarSummary }}</strong>
+          <span *ngIf="!selectedCalendarSummary">（nessuno ancora selezionato）</span>
         </p>
         <div class="gcal-warning" *ngIf="!selectedCalendarId">
           <span class="gcal-warning-icon" aria-hidden="true">⚠️</span>
@@ -319,12 +372,14 @@
           <label
             class="gcal-note-check"
             *ngFor="let f of noteFormatFields"
-            [class.gcal-note-check--sensitive]="f.sensitive">
+            [class.gcal-note-check--sensitive]="f.sensitive"
+            [class.gcal-note-check--disabled]="!editingMode">
             <span class="gcal-note-check-box">
               <input
                 type="checkbox"
-                [checked]="noteFormat[f.key]"
+                [checked]="draft.noteFormat[f.key]"
                 (change)="onNoteCheckboxToggle(f.key)"
+                [disabled]="!editingMode"
                 [attr.aria-label]="f.label">
               <span class="gcal-note-check-mark" aria-hidden="true"></span>
             </span>
@@ -339,23 +394,25 @@
           <button
             type="button"
             class="btn-outline gcal-notes-btn"
-            (click)="onNoteFormatClearAll()">
+            (click)="onNoteFormatClearAll()"
+            [disabled]="!editingMode">
             🗑️  Disattiva tutto
           </button>
           <button
             type="button"
             class="btn-outline gcal-notes-btn"
-            (click)="onNoteFormatResetDefaults()">
+            (click)="onNoteFormatResetDefaults()"
+            [disabled]="!editingMode">
             ✅  Ripristina consigliati
           </button>
         </div>
 
         <p class="gcal-notes-privacy-hint">
-          🔒 <strong>Le tue preferenze sono private.</strong> Vengono salvate
+          🔒 <strong>Le tue preferenze sono private.</strong> Si confermano con il
+          pulsante <b>SALVA in alto</b> in questa pagina. Poi vengono salvate
           solo nel <code>localStorage</code> del tuo browser (chiave
           <code>mm_gcal_settings.noteFormat</code>), NON vengono inviate a
-          nessun server, né a Google, né a Supabase. Puoi cambiarle in
-          qualsiasi momento.
+          nessun server, né a Google, né a Supabase.
         </p>
       </div>
 
@@ -428,32 +485,35 @@
           id="gcal-sync-start"
           class="gcal-input gcal-input-date"
           type="date"
-          [(ngModel)]="syncStartDateInput"
-          [disabled]="syncStartDateSaving"
+          [(ngModel)]="draft.syncStartDate"
+          (ngModelChange)="_markDirty()"
+          [disabled]="!editingMode"
           aria-label="Seleziona la data da cui iniziare la sincronizzazione">
         <button
           type="button"
           class="btn-primary"
-          (click)="onSaveSyncStartDate()"
-          [disabled]="syncStartDateSaving || !syncStartDateInput">
-          {{ syncStartDateSaving ? 'Applicazione…' : '✅  Applica filtro' }}
+          (click)="onSaveAllGoogle()"
+          [disabled]="!editingMode || !draft.syncStartDate"
+          *ngIf="editingMode">
+          💾  Conferma con SALVA
         </button>
         <button
           type="button"
           class="btn-outline"
           (click)="onResetSyncStartDateToToday()"
-          [disabled]="syncStartDateSaving"
+          [disabled]="!editingMode"
           title="Riporta il filtro alla data odierna (consigliato per nuovi utenti)">
           📍  Oggi
         </button>
       </div>
-      <p class="gcal-field-hint" *ngIf="syncStartDateDisplay && !syncStartDateMessage">
+      <p class="gcal-field-hint" *ngIf="(draft.syncStartDateDisplay || syncStartDateDisplay) && !syncStartDateMessage">
         ✅  <strong>Attuale:</strong> stai sincronizzando dal
-        <strong>{{ syncStartDateDisplay }}</strong>.
+        <strong>{{ draft.syncStartDateDisplay || syncStartDateDisplay }}</strong>.
         &nbsp;
         <span class="gcal-hint-sep">·</span>&nbsp;
         💡 <em>Consiglio per i nuovi utenti:</em> se è la prima volta che colleghi il calendario,
-        usa il pulsante <strong>"📍 Oggi"</strong> per evitare di importare tutto lo storico passato.
+        entra in MODIFICA e usa il pulsante <strong>"📍 Oggi"</strong> per evitare di importare tutto lo storico passato,
+        poi clicca SALVA.
       </p>
       <p class="gcal-message"
          *ngIf="syncStartDateMessage"

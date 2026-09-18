@@ -127,7 +127,71 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
 
   private readonly _destroy$ = new Subject<void>();
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 📝  PATTERN:  MODIFICA → SALVA / ANNULLA
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Tutte le preferenze (Client ID, cutoff, calendario, checkbox note)
+  // vengono salvate in DRAFT finché l'utente non clicca SALVA (un solo colpo).
+  // ANNULLA ripristina sempre lo snapshot pre-modifica.
+  // ═══════════════════════════════════════════════════════════════════════════
+  editingMode = false;
+  isDirtyDraft = false;
+  savedMessage = '';
+  savedMessageIsError = false;
+  private _snapshot: unknown = null;
+
+  /** Oggetto draft: TUTTI i campi preferenze modificabili passano da QUI. */
+  draft: {
+    clientId: string;
+    syncStartDate: string;
+    syncStartDateDisplay: string;
+    selectedCalendarId: string;
+    selectedCalendarSummary: string;
+    noteFormat: GoogleNoteFormat;
+  } = {
+    clientId: '',
+    syncStartDate: '',
+    syncStartDateDisplay: '',
+    selectedCalendarId: '',
+    selectedCalendarSummary: '',
+    noteFormat: { ...DEFAULT_NOTE_FORMAT },
+  };
+
+  // (nota: syncStartDateMessage / syncStartDateMessageIsError sono dichiarati sopra)
+
   constructor(private readonly gcal: GoogleCalendarService) {}
+
+  /** Inizializza il DRAFT preferenze (sola lettura) dai valori LIVE salvati in LS
+   *  o restituiti dai Subject del service. */
+  private _initDraftFromLiveSettings(): void {
+    try {
+      // Client ID
+      this.draft.clientId = this.gcal.savedClientId || '';
+      // Cutoff
+      const cutoff = this.gcal.syncStartDateSnapshot;
+      this.draft.syncStartDate = cutoff || '';
+      this.draft.syncStartDateDisplay = cutoff ? this._formatSyncStartDateIta(cutoff) : '';
+      // Calendario selezionato
+      this.draft.selectedCalendarId = this.gcal.selectedCalendarIdSnapshot || '';
+      // Nota: summary non ha snapshot nel service, usiamo il subject value del componente
+      this.draft.selectedCalendarSummary = this.selectedCalendarSummary || '';
+      // Note format (11 booleani)
+      try {
+        const svc = new LocalStorageService();
+        const storedNf = svc.getGcalSettings().noteFormat;
+        if (storedNf && typeof storedNf === 'object') {
+          this.draft.noteFormat = { ...DEFAULT_NOTE_FORMAT, ...(storedNf as GoogleNoteFormat) };
+        } else {
+          this.draft.noteFormat = { ...DEFAULT_NOTE_FORMAT };
+        }
+      } catch {
+        this.draft.noteFormat = { ...DEFAULT_NOTE_FORMAT };
+      }
+    } catch { /* ignora */ }
+  }
+
+  /** Imposta dirty flag (chiamato anche dal template con ngModelChange quando modifichi campi). */
+  _markDirty(): void { this.isDirtyDraft = true; }
 
   ngOnInit(): void {
     this.clientIdInput = this.gcal.savedClientId;
@@ -135,10 +199,14 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     const initialCutoff = this.gcal.syncStartDateSnapshot;
     this.syncStartDateInput = initialCutoff;
     this.syncStartDateDisplay = this._formatSyncStartDateIta(initialCutoff);
+    // ★ Popola DRAFT con valori LIVE iniziali (indipendente da UI)
+    this._initDraftFromLiveSettings();
+    // (nota: _loadNoteFormatFromStorage, _computeWipeStats ecc. vengono dopo
+    //  ma adesso li teniamo per compatibilità finché non sistemiamo tutto)
     this._computeWipeStats();
-    this._refreshDedupStats(); // ★ Statistiche deduplica live
-    this._refreshResetStats(); // ★ Statistiche reset completo
-    this._loadNoteFormatFromStorage(); // ★ Preferenze formato note Google
+    this._refreshDedupStats();
+    this._refreshResetStats();
+    this._loadNoteFormatFromStorage();
     this.gcal.connectionState$
       .pipe(takeUntil(this._destroy$))
       .subscribe((s) => {
@@ -152,22 +220,34 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
           this.showInstructions = true;
           if (!this.clientIdInput) this.clientIdInput = this.gcal.savedClientId;
         } else if (s === 'disconnected') {
-          // Appena il Client ID diventa valido (stato passa da not_configured),
-          // ripuliamo messaggi di errore dell'input
           this.clientIdMessage = '';
         }
+        // Quando cambia lo stato connessione, aggiorna anche il draft.display
+        // (le variabili LIVE, non vogliamo sporcare DRAFT se l'utente sta modificando)
+        if (!this.editingMode) { this._initDraftFromLiveSettings(); }
       });
     this.gcal.connectedEmail$.pipe(takeUntil(this._destroy$)).subscribe((v) => (this.connectedEmail = v));
-    this.gcal.selectedCalendarId$.pipe(takeUntil(this._destroy$)).subscribe((v) => (this.selectedCalendarId = v));
-    this.gcal.selectedCalendarSummary$.pipe(takeUntil(this._destroy$)).subscribe((v) => (this.selectedCalendarSummary = v));
+    this.gcal.selectedCalendarId$.pipe(takeUntil(this._destroy$)).subscribe((v) => {
+      this.selectedCalendarId = v;
+      // Aggiorna DRAFT solo se NON siamo in editing (altrimenti perdiamo modifiche utente!)
+      if (!this.editingMode) { this.draft.selectedCalendarId = v || ''; }
+    });
+    this.gcal.selectedCalendarSummary$.pipe(takeUntil(this._destroy$)).subscribe((v) => {
+      this.selectedCalendarSummary = v;
+      if (!this.editingMode) { this.draft.selectedCalendarSummary = v || ''; }
+    });
     this.gcal.lastSyncAt$.pipe(takeUntil(this._destroy$)).subscribe((v) => (this.lastSyncAt = v));
     this.gcal.lastSyncReport$.pipe(takeUntil(this._destroy$)).subscribe((v) => (this.lastSyncReport = v));
-    // Aggiorna INPUT/DISPLAY data cutoff in tempo reale quando cambia nel service
     this.gcal.syncStartDate$.pipe(takeUntil(this._destroy$)).subscribe((v) => {
       const val = v || this.gcal.syncStartDateSnapshot;
       if (val) {
         this.syncStartDateInput = val;
         this.syncStartDateDisplay = this._formatSyncStartDateIta(val);
+        // Aggiorna DRAFT solo se NON editing
+        if (!this.editingMode) {
+          this.draft.syncStartDate = val;
+          this.draft.syncStartDateDisplay = this._formatSyncStartDateIta(val);
+        }
       }
     });
   }
@@ -175,6 +255,139 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this._destroy$.next();
     this._destroy$.complete();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  🔓  PATTERN: MODIFICA / SALVA / ANNULLA  — Handler principali
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** 🔓 Inizia la modifica: sblocca tutti i campi preferenze e fai snapshot. */
+  public onStartEditGoogle(): void {
+    // Se siamo già in editing, non facciamo niente (non dovrebbe succedere)
+    if (this.editingMode) return;
+    // Aggiorna draft ai valori LIVE (nel frattempo Subject potrebbero aver cambiato qualcosa)
+    this._initDraftFromLiveSettings();
+    // Backup SNAPSHOT deep-clone per ANNULLA (structuredClone è nativo browser, deep clone)
+    try { this._snapshot = structuredClone(this.draft); }
+    catch { this._snapshot = JSON.parse(JSON.stringify(this.draft)); }
+    this.isDirtyDraft = false;
+    this.savedMessage = '';
+    this.savedMessageIsError = false;
+    this.editingMode = true;
+  }
+
+  /** ✅ Salva TUTTE le preferenze modificate in UN COLPO SOLO. */
+  public async onSaveAllGoogle(): Promise<void> {
+    if (!this.editingMode) return;
+    if (!this.isDirtyDraft) {
+      // Nessuna modifica, esci direttamente
+      this.editingMode = false;
+      this.savedMessage = 'Nessuna modifica da salvare.';
+      setTimeout(() => (this.savedMessage = ''), 3500);
+      return;
+    }
+    this.savedMessage = '💾 Salvataggio preferenze Google in corso…';
+    this.savedMessageIsError = false;
+    const saved: string[] = [];
+    const errors: string[] = [];
+
+    try {
+      // ── 1) Client ID ────────────────────────────────────────────
+      try {
+        const rClient = await this.gcal.saveClientId(this.draft.clientId);
+        if (rClient.ok) saved.push('✅ Client ID OAuth');
+        else errors.push(`❌ Client ID: ${rClient.message}`);
+      } catch (e) { errors.push(`❌ Client ID errore: ${String(e)}`); }
+
+      // ── 2) Cutoff syncStartDate ─────────────────────────────────
+      try {
+        if (this.draft.syncStartDate) {
+          const rCut = await this.gcal.setSyncStartDate(this.draft.syncStartDate);
+          if (rCut.ok) saved.push('✅ Data inizio sincronizzazione');
+          else errors.push(`❌ Data: ${rCut.message}`);
+        }
+      } catch (e) { errors.push(`❌ Data errore: ${String(e)}`); }
+
+      // ── 3) Calendario selezionato ───────────────────────────────
+      try {
+        if (this.draft.selectedCalendarId) {
+          await this.gcal.setSelectedCalendarId(
+            this.draft.selectedCalendarId,
+            this.draft.selectedCalendarSummary || undefined
+          );
+          saved.push('✅ Calendario di destinazione');
+        }
+      } catch (e) { errors.push(`❌ Calendario errore: ${String(e)}`); }
+
+      // ── 4) NoteFormat (11 checkbox) ─────────────────────────────
+      try {
+        const svc = new LocalStorageService();
+        svc.patchGcalSettings({ noteFormat: { ...this.draft.noteFormat } });
+        // Aggiorna anche this.noteFormat per retrocompatibilità (se ci sono riferimenti UI residui)
+        this.noteFormat = { ...this.draft.noteFormat };
+        saved.push('✅ Preferenze formato note (11 checkbox)');
+      } catch (e) { errors.push(`❌ Formato note: ${String(e)}`); }
+
+      // ── Report riassuntivo ──────────────────────────────────────
+      this.savedMessage = (
+        (saved.length ? `🎉 Salvato con successo ${saved.length} gruppi preferenze:\n   ${saved.join(' · ')}` : '') +
+        (errors.length ? `\n\n⚠️ Problemi (${errors.length}):\n   ${errors.join('\n   ')}` : '')
+      );
+      this.savedMessageIsError = errors.length > 0 && saved.length === 0;
+      setTimeout(() => (this.savedMessage = ''), 14000);
+
+      // Ripristina stato UI → sola lettura
+      this.editingMode = false;
+      this.isDirtyDraft = false;
+      this._snapshot = null;
+      // Aggiorna la label formato ITA del cutoff (se è cambiata)
+      if (this.draft.syncStartDate) {
+        this.draft.syncStartDateDisplay = this._formatSyncStartDateIta(this.draft.syncStartDate);
+      }
+    } catch (err) {
+      console.error('[UI-GCal] onSaveAllGoogle errore:', err);
+      this.savedMessage = `❌ Salvataggio fallito: ${String(err)}`;
+      this.savedMessageIsError = true;
+    }
+  }
+
+  /** ↩️ Annulla TUTTE le modifiche: ripristina snapshot e torna in sola lettura. */
+  public onCancelEditGoogle(): void {
+    if (!this.editingMode) return;
+
+    if (this.isDirtyDraft) {
+      // Dirty: chiedi conferma perché perdiamo modifiche
+      const ok = window.confirm(
+        '⚠️  Hai modificato alcune preferenze ma non le hai ancora salvate!\n\n' +
+        '👉 Clicca OK per ANNULLARE TUTTE le modifiche (torna come prima)\n' +
+        '👉 Clicca ANNULLA per continuare a modificare.'
+      );
+      if (!ok) return;
+    }
+
+    // Ripristina SNAPSHOT (structuredClone → no riferimenti condivisi!)
+    try {
+      if (this._snapshot) {
+        const snap = this._snapshot as typeof this.draft;
+        this.draft = {
+          clientId: snap.clientId || '',
+          syncStartDate: snap.syncStartDate || '',
+          syncStartDateDisplay: snap.syncStartDateDisplay || '',
+          selectedCalendarId: snap.selectedCalendarId || '',
+          selectedCalendarSummary: snap.selectedCalendarSummary || '',
+          noteFormat: { ...DEFAULT_NOTE_FORMAT, ...(snap.noteFormat || {}) },
+        };
+        this.noteFormat = { ...this.draft.noteFormat }; // retrocompatibilità
+      } else {
+        // Nessuno snapshot per sicurezza: ricarica da LS
+        this._initDraftFromLiveSettings();
+      }
+    } catch { this._initDraftFromLiveSettings(); }
+
+    this.editingMode = false;
+    this.isDirtyDraft = false;
+    this._snapshot = null;
+    this.savedMessage = '';
   }
 
   // ─── Azioni UI ─────────────────────────────────────────────────────────────
@@ -196,62 +409,41 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     this.showInstructions = !this.showInstructions;
   }
 
-  /** Salva il Client ID OAuth 2.0 inserito nella casella direttamente in LS. */
+  /** ⚠️ Metodo retrocompatibile: non usarlo più! Le modifiche Client ID si
+   *  confermano adesso tramite il SALVA GLOBALE (onSaveAllGoogle) in cima alla card. */
   public async onSaveClientId(): Promise<void> {
-    this.clientIdSaving = true;
-    this.clientIdMessage = '';
+    this.clientIdMessage = '💡 Modifica il Client ID qui sopra e poi clicca SALVA in alto a destra per confermare!';
     this.clientIdMessageIsError = false;
-    try {
-      const res = await this.gcal.saveClientId(this.clientIdInput);
-      this.clientIdMessage = res.message;
-      this.clientIdMessageIsError = !res.ok;
-      if (res.ok) {
-        // Ricarica valore per sicurezza (normalizza whitespace)
-        this.clientIdInput = this.gcal.savedClientId;
-        setTimeout(() => (this.clientIdMessage = ''), 6000);
-      }
-    } catch (err) {
-      console.error('[UI-GCal] saveClientId fallito:', err);
-      this.clientIdMessage = 'Errore durante il salvataggio (vedi console)';
-      this.clientIdMessageIsError = true;
-    } finally {
-      this.clientIdSaving = false;
-    }
+    this._markDirty();
+    setTimeout(() => (this.clientIdMessage = ''), 6000);
   }
 
-  /** Salva la DATA DI INIZIO SINCRO (cutoff YYYY-MM-DD) tramite service. */
+  /** ⚠️ Retrocompatibile: modifiche al cutoff si confermano con SALVA globale. */
   public async onSaveSyncStartDate(): Promise<void> {
-    this.syncStartDateSaving = true;
-    this.syncStartDateMessage = '';
+    this.syncStartDateMessage = '💡 Applica eventuali modifiche e poi SALVA in alto a destra per rendere definitive!';
     this.syncStartDateMessageIsError = false;
-    try {
-      const res = await this.gcal.setSyncStartDate(this.syncStartDateInput);
-      this.syncStartDateMessage = res.message;
-      this.syncStartDateMessageIsError = !res.ok;
-      if (res.ok) {
-        const cur = this.gcal.syncStartDateSnapshot;
-        this.syncStartDateInput = cur;
-        this.syncStartDateDisplay = this._formatSyncStartDateIta(cur);
-        this._computeWipeStats();
-        setTimeout(() => (this.syncStartDateMessage = ''), 9000);
-      }
-    } catch (err) {
-      console.error('[UI-GCal] setSyncStartDate fallito:', err);
-      this.syncStartDateMessage = 'Errore salvataggio (vedi console DevTools).';
-      this.syncStartDateMessageIsError = true;
-    } finally {
-      this.syncStartDateSaving = false;
-    }
+    this._markDirty();
+    setTimeout(() => (this.syncStartDateMessage = ''), 8000);
   }
 
-  /** Ripristina il filtro data al valore SUGGERITO automatico (data di oggi).
-   *  Utile per gli utenti che vogliono tornare a un comportamento standard
-   *  (sincronizza da oggi in poi) senza dover scegliere manualmente una data. */
-  public async onResetSyncStartDateToToday(): Promise<void> {
+  /** 📍 Shortcut: imposta cutoff a DATA ODIERNA (sul DRAFT, NON salva). */
+  public onResetSyncStartDateToToday(): void {
+    if (!this.editingMode) return; // bloccato se non in modifica
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    this.syncStartDateInput = today;
-    await this.onSaveSyncStartDate();
+    this.draft.syncStartDate = today;
+    this.draft.syncStartDateDisplay = this._formatSyncStartDateIta(today);
+    this._markDirty();
+  }
+
+  /** Quando cambia selezione calendario dalla tendina: scrivi su DRAFT, NON salva. */
+  public onCalendarChange(id: string): void {
+    const chosen = this.calendars.find((c) => c.id === id);
+    this.draft.selectedCalendarId = id || '';
+    this.draft.selectedCalendarSummary = chosen?.summary || '';
+    this._markDirty();
+    // NOTA: gcal.setSelectedCalendarId NON viene più chiamato qui!
+    //       Verrà salvato in onSaveAllGoogle() quando confermi.
   }
 
   /** Formatta YYYY-MM-DD → "Giorno 17 Settembre 2026 (ITA)" per label UI. */
@@ -284,11 +476,6 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     } finally {
       this.loadingCalendars = false;
     }
-  }
-
-  public async onCalendarChange(id: string): Promise<void> {
-    const chosen = this.calendars.find((c) => c.id === id);
-    await this.gcal.setSelectedCalendarId(id, chosen?.summary);
   }
 
   public async runSyncFromGoogle(): Promise<void> {
@@ -692,45 +879,47 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     } catch { /* ignora e usa default */ }
   }
 
-  /** 📝 Toggle singolo checkbox e salvataggio immediato in LS. */
+  /** 🔁 Switch singolo checkbox formato note — SOLO su DRAFT. Confermato da SALVA globale. */
   public onNoteCheckboxToggle(key: keyof GoogleNoteFormat): void {
-    this.noteFormat = { ...this.noteFormat, [key]: !this.noteFormat[key] };
-    this._saveNoteFormat();
+    if (!this.editingMode) return; // bloccato fuori da modalità modifica
+    this.draft.noteFormat = { ...this.draft.noteFormat, [key]: !this.draft.noteFormat[key] };
+    // Retrocompatibilità: aggiornato anche this.noteFormat per evitare riferimenti
+    this.noteFormat = { ...this.draft.noteFormat };
+    this._markDirty();
   }
 
-  /** 📝 Ripristina formato note al DEFAULT del piano (tutti true tranne footer). */
+  /** 🔁 Ripristina note al DEFAULT — solo DRAFT, poi SALVA globale. */
   public onNoteFormatResetDefaults(): void {
-    this.noteFormat = { ...DEFAULT_NOTE_FORMAT };
-    this._saveNoteFormat();
+    if (!this.editingMode) return;
+    this.draft.noteFormat = { ...DEFAULT_NOTE_FORMAT };
+    this.noteFormat = { ...this.draft.noteFormat };
+    this._markDirty();
   }
 
-  /** 📝 Disattiva TUTTE le checkbox (nessuna nota su Google). Utile per
-   *  utenti che vogliono il sync solo di title/date/orari e niente altro. */
+  /** 🔁 Disattiva TUTTE le preferenze note — solo DRAFT, poi SALVA globale. */
   public onNoteFormatClearAll(): void {
-    this.noteFormat = {
+    if (!this.editingMode) return;
+    this.draft.noteFormat = {
       includeVenue: false, includeAddress: false, includeBand: false,
       includeType: false,  includeStatus: false, includeGrossFee: false,
       includeNetFee: false, includeCompensoType: false, includeTimes: false,
       includeNotes: false, includeAppFooter: false,
     };
-    this._saveNoteFormat();
+    this.noteFormat = { ...this.draft.noteFormat };
+    this._markDirty();
   }
 
-  /** 📝 Salva GoogleNoteFormat in LS GcalSettings.noteFormat (patch). */
-  private _saveNoteFormat(): void {
-    try {
-      const svc = new LocalStorageService();
-      svc.patchGcalSettings({ noteFormat: { ...this.noteFormat } });
-    } catch (err) {
-      console.error('[UI NoteFormat] patchGcalSettings fallito:', err);
-    }
-  }
+  /** Nota: il salvataggio GcalSettings.noteFormat ora è dentro onSaveAllGoogle. */
 
-  /** 📝 Getter per anteprima HTML: stringa formattata come la vedremo su
-   *  Google Calendar (stessa funzione usata in produzione da GCal service). */
+  /** 📝 Getter anteprima LIVE — legge SEMPRE da DRAFT (anche in sola lettura,
+   *  perché initDraftFromLiveSettings riempie draft con valori salvati).
+   *  Così l'anteprima è sempre coerente. */
   public get notePreviewText(): string {
     try {
-      const text = this.gcal.buildGoogleDescriptionFromFormat(this.previewSampleEvent, this.noteFormat);
+      const fmt = (this.editingMode || this.draft?.noteFormat?.includeTimes !== undefined)
+        ? this.draft.noteFormat
+        : this.noteFormat;
+      const text = this.gcal.buildGoogleDescriptionFromFormat(this.previewSampleEvent, fmt);
       return text && text.trim().length ? text.trim() : '(nessuna nota — descrizione Google sarà vuota)';
     } catch {
       return '(errore generazione anteprima)';

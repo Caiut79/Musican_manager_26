@@ -55,7 +55,8 @@ export class MusicianFormComponent {
   styles      = STYLES;
   enpalsCategories = ENPALS_CATEGORIES;
 
-  steps = ['Anagrafica', 'Profilo musicale', 'Social', 'ENPALS & Fiscale', 'Colori agenda'];
+  // Sequenza step: 1 Anagrafica → 2 Profilo musicale → 3 Social → 4 ENPALS → 5 Google Calendar → 6 Colori agenda
+  steps = ['Anagrafica', 'Profilo musicale', 'Social', 'ENPALS & Fiscale', 'Google Calendar', 'Colori agenda'];
   currentStep = 0;
   submitting  = false;
   resultCode: string | null = null;

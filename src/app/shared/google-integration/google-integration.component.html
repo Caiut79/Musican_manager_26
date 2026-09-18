@@ -225,9 +225,163 @@
   </footer>
 
   <!-- ══════════════════════════════════════════════════════════════════════════
-       SEZIONE FILTRO: SINCRO DA (cutoff) — Sempre visibile, impostazioni generiche
-       per UTENTE FINALE (distribuzione app)
+       1️⃣ 📡 GRUPPO 1: Connessione Google & Credenziali
+       (tutto quello che serve per collegarsi: istruzioni, client id, tendina calendari)
        ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="gcal-section-group" aria-label="Gruppo 1 - Connessione e credenziali Google">
+    <header class="gcal-section-header gcal-section-header--blue">
+      <div class="gcal-section-icon" aria-hidden="true">📡</div>
+      <div class="gcal-section-title-wrap">
+        <h3 class="gcal-section-title">Connessione Google &amp; Credenziali</h3>
+        <p class="gcal-section-subtitle">
+          Configura OAuth, collega il tuo account e scegli il calendario dove
+          l'app scriverà i tuoi eventi.
+        </p>
+      </div>
+    </header>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       2️⃣ 🔄 GRUPPO 2: Sincronizzazione & Manutenzione
+       (Cutoff, Pulizia Passato, Deduplica, Reset)
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="gcal-section-group" aria-label="Gruppo 2 - Sincronizzazione e strumenti manutenzione">
+    <header class="gcal-section-header gcal-section-header--green">
+      <div class="gcal-section-icon" aria-hidden="true">🔄</div>
+      <div class="gcal-section-title-wrap">
+        <h3 class="gcal-section-title">Sincronizzazione &amp; Manutenzione</h3>
+        <p class="gcal-section-subtitle">
+          Filtra la data di inizio sincronizzazione, pulisci lo storico
+          passato, rimuovi duplicati o resetta completamente per un nuovo
+          calendario Google.
+        </p>
+      </div>
+    </header>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       3️⃣ 📝 GRUPPO 3: Formato Note Google Calendar
+       (11 checkbox filtro cosa includere in description + ANTEPRIMA LIVE)
+       ══════════════════════════════════════════════════════════════════════════ -->
+  <section
+    class="gcal-notes-section"
+    aria-label="Formato delle note che vengono inviate a Google Calendar">
+
+    <header class="gcal-notes-head">
+      <div class="gcal-notes-icon" aria-hidden="true">
+        <!-- SVG Calendario con PENNINO / documento (gradient verde/azzurro, no emoji) -->
+        <svg viewBox="0 0 48 48" width="40" height="40" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Formato note">
+          <defs>
+            <linearGradient id="notesVioletGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#7c3aed"/>
+              <stop offset="100%" stop-color="#4f46e5"/>
+            </linearGradient>
+            <linearGradient id="notesYellowGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fde68a"/>
+              <stop offset="100%" stop-color="#f59e0b"/>
+            </linearGradient>
+          </defs>
+          <!-- Calendario di sfondo -->
+          <rect x="4" y="8" width="40" height="34" rx="5.5" fill="#fff7ed" stroke="#4f46e5" stroke-width="2.2"/>
+          <rect x="4" y="8" width="40" height="9" rx="5.5" fill="url(#notesVioletGrad)"/>
+          <rect x="10" y="3" width="4" height="12" rx="2" fill="#fff"/>
+          <rect x="34" y="3" width="4" height="12" rx="2" fill="#fff"/>
+          <!-- Righe mini evento nel calendario -->
+          <rect x="10" y="22" width="20" height="3" rx="1.5" fill="#4f46e5" opacity="0.65"/>
+          <rect x="10" y="28" width="28" height="3" rx="1.5" fill="#4f46e5" opacity="0.45"/>
+          <rect x="10" y="34" width="14" height="3" rx="1.5" fill="#4f46e5" opacity="0.35"/>
+          <!-- Pennino angolo (simbolo "formato note / edit") -->
+          <g transform="translate(32, 20) rotate(-12)">
+            <path d="M 0 12 L 12 0 L 18 6 L 6 18 Z" fill="url(#notesYellowGrad)" stroke="#92400e" stroke-width="1.4" stroke-linejoin="round"/>
+            <path d="M -1 13 L 7 13 L 7 20 L -1 20 Z" fill="#111827"/>
+          </g>
+        </svg>
+      </div>
+      <div class="gcal-notes-head-copy">
+        <h3 class="gcal-notes-title">📝  Formato Note Google Calendar</h3>
+        <p class="gcal-notes-subtitle">
+          Decidi <strong>cosa includere nel campo &quot;Note / Descrizione&quot;</strong> degli
+          eventi inviati a Google. Modificando una qualsiasi spunta,
+          l&apos;anteprima sulla destra si <strong>aggiorna istantaneamente</strong>.
+          &nbsp;⚠️&nbsp; Se condividi il calendario con persone esterne al team,
+          disattiva &quot;Compenso Netto&quot; per motivi di privacy.
+        </p>
+      </div>
+    </header>
+
+    <!-- Corpo sezione Note: 2 colonne (checkbox · anteprima) -->
+    <div class="gcal-notes-body">
+
+      <!-- Colonna SX: 11 Checkbox + pulsanti "Svuota" / "Default" -->
+      <div class="gcal-notes-col-checks">
+
+        <div class="gcal-notes-checks-grid" role="group" aria-label="11 checkbox preferenze note Google">
+          <label
+            class="gcal-note-check"
+            *ngFor="let f of noteFormatFields"
+            [class.gcal-note-check--sensitive]="f.sensitive">
+            <span class="gcal-note-check-box">
+              <input
+                type="checkbox"
+                [checked]="noteFormat[f.key]"
+                (change)="onNoteCheckboxToggle(f.key)"
+                [attr.aria-label]="f.label">
+              <span class="gcal-note-check-mark" aria-hidden="true"></span>
+            </span>
+            <span class="gcal-note-check-copy">
+              <span class="gcal-note-check-label">{{ f.label }}</span>
+              <span class="gcal-note-check-desc" *ngIf="f.desc">{{ f.desc }}</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="gcal-notes-quick-actions">
+          <button
+            type="button"
+            class="btn-outline gcal-notes-btn"
+            (click)="onNoteFormatClearAll()">
+            🗑️  Disattiva tutto
+          </button>
+          <button
+            type="button"
+            class="btn-outline gcal-notes-btn"
+            (click)="onNoteFormatResetDefaults()">
+            ✅  Ripristina consigliati
+          </button>
+        </div>
+
+        <p class="gcal-notes-privacy-hint">
+          🔒 <strong>Le tue preferenze sono private.</strong> Vengono salvate
+          solo nel <code>localStorage</code> del tuo browser (chiave
+          <code>mm_gcal_settings.noteFormat</code>), NON vengono inviate a
+          nessun server, né a Google, né a Supabase. Puoi cambiarle in
+          qualsiasi momento.
+        </p>
+      </div>
+
+      <!-- Colonna DX: ANTEPRIMA LIVE card stile Google -->
+      <div class="gcal-notes-col-preview">
+        <div class="gcal-note-preview" role="region" aria-label="Anteprima nota Google di esempio">
+          <header class="gcal-note-preview-head">
+            <div class="gcal-note-preview-head-icon" aria-hidden="true">📝</div>
+            <div>
+              <p class="gcal-note-preview-kicker">Anteprima Nota Google</p>
+              <p class="gcal-note-preview-title">{{ previewSampleEvent.title }}</p>
+            </div>
+          </header>
+          <pre class="gcal-note-preview-body" aria-label="Versione testuale anteprima nota Google">{{ notePreviewText }}</pre>
+          <footer class="gcal-note-preview-foot">
+            <p>
+              🎯 <strong>Stesso formato 1:1</strong> che vedrai dentro Google
+              Calendar. Ogni evento creato o modificato da adesso in poi
+              userà questa configurazione.
+            </p>
+          </footer>
+        </div>
+      </div>
+
+    </div>
+  </section>
   <div class="gcal-cutoff-section" aria-label="Filtro data di inizio sincronizzazione con Google Calendar">
     <header class="gcal-cutoff-head">
       <div class="gcal-cutoff-icon" aria-hidden="true">

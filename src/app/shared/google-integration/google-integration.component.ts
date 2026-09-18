@@ -9,8 +9,12 @@ import {
   runMigration_WipePastEventsFromAppOnly,
   analyzeDuplicateStats,
   runMigration_DeduplicateEvents,
-  runMigration_WipeAllLocalForNewCalendar
+  runMigration_WipeAllLocalForNewCalendar,
+  GoogleNoteFormat,
+  DEFAULT_NOTE_FORMAT,
+  LocalStorageService,
 } from '../../core/local-storage.service';
+import { EventDetail } from '../../models/event-detail';
 import { Subject, takeUntil } from 'rxjs';
 
 // --- Tipo per voce calendario mostrato in dropdown --------------------------
@@ -134,6 +138,7 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     this._computeWipeStats();
     this._refreshDedupStats(); // ★ Statistiche deduplica live
     this._refreshResetStats(); // ★ Statistiche reset completo
+    this._loadNoteFormatFromStorage(); // ★ Preferenze formato note Google
     this.gcal.connectionState$
       .pipe(takeUntil(this._destroy$))
       .subscribe((s) => {
@@ -620,6 +625,115 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
       this.resetMessageIsError = true;
     } finally {
       this.resetRunning = false;
+    }
+  }
+
+  // ─── 📝 Formato Note Google Calendar (11 checkbox + anteprima) ─────────────
+
+  /** 📝 Stato 11 checkbox del formato note. */
+  noteFormat: GoogleNoteFormat = { ...DEFAULT_NOTE_FORMAT };
+
+  /** 📝 Evento demo usato per l'ANTEPRIMA LIVE nella sezione note (non viene
+   *  mai salvato da nessuna parte, è solo un esempio per visualizzare il
+   *  formato prima che l'utente decida le preferenze). */
+  readonly previewSampleEvent: EventDetail = {
+    id: 'preview-sample-abc123',
+    title: 'Concerto al Verdi con i JazzFunk',
+    date: new Date().toISOString().slice(0, 10),
+    timeStart: '21:00',
+    timeEnd: '23:30',
+    venue: 'Teatro Verdi',
+    address: 'Via Giuseppe Verdi 12, 20121 Milano MI',
+    type: 'concert',
+    band: [
+      { name: 'Claudio Zampa', instrument: 'Chitarra' },
+      { name: 'Luca Bianchi', instrument: 'Batteria' },
+    ],
+    grossFee: 600,
+    netFee: 480,
+    compensoType: 'fuori_fattura',
+    notes: 'Ricordati le provette nuove e le ultime 3 canzoni aggiunte nel set. Fare soundcheck alle 18:30 con il fonico Roberto.',
+    status: 'confirmed',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  /** 📝 Helper array per renderizzare 11 checkbox in HTML senza duplicare
+   *  template. Ogni entry mappa chiave GoogleNoteFormat → label umana. */
+  readonly noteFormatFields: {
+    key: keyof GoogleNoteFormat;
+    label: string;
+    desc?: string;
+    sensitive?: boolean;
+  }[] = [
+    { key: 'includeVenue',       label: '🎭 Teatro / Locale' },
+    { key: 'includeAddress',     label: '📍 Indirizzo (via + CAP)' },
+    { key: 'includeTimes',       label: '⌚ Orari inizio · fine' },
+    { key: 'includeType',        label: '🎶 Tipo evento (Concerto/Lezione/DJ)' },
+    { key: 'includeStatus',      label: '✅ Stato evento (Confermato/Attesa)' },
+    { key: 'includeBand',        label: '👥 Musicisti (Componenti Band)' },
+    { key: 'includeGrossFee',    label: '💵 Compenso Lordo €',
+      sensitive: true, desc: '⚠️ Disattivalo se condividi il calendario con persone non del team.' },
+    { key: 'includeNetFee',      label: '💰 Compenso Netto €',
+      sensitive: true, desc: '⚠️ Dato privato. Disattivalo se il calendario è condiviso.' },
+    { key: 'includeCompensoType',label: '🍀 Tipo compenso (In/Fuori fattura)' },
+    { key: 'includeNotes',       label: '📝 Note libere (campo note evento)' },
+    { key: 'includeAppFooter',   label: '🎵 Footer "Musicista Manager"' },
+  ];
+
+  /** 📝 Inizializza noteFormat dalle preference salvate in LS GcalSettings. */
+  private _loadNoteFormatFromStorage(): void {
+    try {
+      const svc = new LocalStorageService();
+      const stored = svc.getGcalSettings().noteFormat;
+      if (stored && typeof stored === 'object') {
+        this.noteFormat = { ...DEFAULT_NOTE_FORMAT, ...(stored as GoogleNoteFormat) };
+      }
+    } catch { /* ignora e usa default */ }
+  }
+
+  /** 📝 Toggle singolo checkbox e salvataggio immediato in LS. */
+  public onNoteCheckboxToggle(key: keyof GoogleNoteFormat): void {
+    this.noteFormat = { ...this.noteFormat, [key]: !this.noteFormat[key] };
+    this._saveNoteFormat();
+  }
+
+  /** 📝 Ripristina formato note al DEFAULT del piano (tutti true tranne footer). */
+  public onNoteFormatResetDefaults(): void {
+    this.noteFormat = { ...DEFAULT_NOTE_FORMAT };
+    this._saveNoteFormat();
+  }
+
+  /** 📝 Disattiva TUTTE le checkbox (nessuna nota su Google). Utile per
+   *  utenti che vogliono il sync solo di title/date/orari e niente altro. */
+  public onNoteFormatClearAll(): void {
+    this.noteFormat = {
+      includeVenue: false, includeAddress: false, includeBand: false,
+      includeType: false,  includeStatus: false, includeGrossFee: false,
+      includeNetFee: false, includeCompensoType: false, includeTimes: false,
+      includeNotes: false, includeAppFooter: false,
+    };
+    this._saveNoteFormat();
+  }
+
+  /** 📝 Salva GoogleNoteFormat in LS GcalSettings.noteFormat (patch). */
+  private _saveNoteFormat(): void {
+    try {
+      const svc = new LocalStorageService();
+      svc.patchGcalSettings({ noteFormat: { ...this.noteFormat } });
+    } catch (err) {
+      console.error('[UI NoteFormat] patchGcalSettings fallito:', err);
+    }
+  }
+
+  /** 📝 Getter per anteprima HTML: stringa formattata come la vedremo su
+   *  Google Calendar (stessa funzione usata in produzione da GCal service). */
+  public get notePreviewText(): string {
+    try {
+      const text = this.gcal.buildGoogleDescriptionFromFormat(this.previewSampleEvent, this.noteFormat);
+      return text && text.trim().length ? text.trim() : '(nessuna nota — descrizione Google sarà vuota)';
+    } catch {
+      return '(errore generazione anteprima)';
     }
   }
 

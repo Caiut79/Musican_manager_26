@@ -12,6 +12,41 @@ import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 import { EventDetail } from '../models/event-detail';
 
+/** 📝 Formato delle note che vengono inviate a Google Calendar nel campo
+ *  `description` di ogni evento. Ogni flag booleano decide se includere
+ *  o meno la rispettiva riga. Se tutti sono false, la description non
+ *  viene impostata proprio. */
+export type GoogleNoteFormat = {
+  includeVenue: boolean;
+  includeAddress: boolean;
+  includeBand: boolean;
+  includeType: boolean;
+  includeStatus: boolean;
+  includeGrossFee: boolean;
+  includeNetFee: boolean;
+  includeCompensoType: boolean;
+  includeTimes: boolean;
+  includeNotes: boolean;
+  includeAppFooter: boolean;
+};
+
+/** Valore di default usato quando l'utente non ha ancora salvato una
+ *  preferenza personale (backward compat). Tutti true tranne il
+ *  footer "Musicista Manager" che è disattivato di default. */
+export const DEFAULT_NOTE_FORMAT: GoogleNoteFormat = {
+  includeVenue: true,
+  includeAddress: true,
+  includeBand: true,
+  includeType: true,
+  includeStatus: true,
+  includeGrossFee: true,
+  includeNetFee: true,
+  includeCompensoType: true,
+  includeTimes: true,
+  includeNotes: true,
+  includeAppFooter: false,
+};
+
 export type GcalSettings = {
   selectedCalendarId?: string;
   selectedCalendarSummary?: string;
@@ -43,6 +78,10 @@ export type GcalSettings = {
    *  dal calendario google e da li in poi fanno la sincronizzazione tra uno e l'altro"
    */
   syncStartDate?: string;
+  /** 📝 Formato Note Google: decide quali righe includere nel campo
+   *  description di ogni evento inviato a Google Calendar.
+   *  Contiene 11 booleani (GoogleNoteFormat). Se undefined → default. */
+  noteFormat?: GoogleNoteFormat;
 };
 
 // ─── Key registry ─────────────────────────────────────────────────────────────

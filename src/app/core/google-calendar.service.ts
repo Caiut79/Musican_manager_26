@@ -5,6 +5,8 @@ import { EventDetail } from '../models/event-detail';
 import {
   LocalStorageService,
   GcalSettings,
+  GoogleNoteFormat,
+  DEFAULT_NOTE_FORMAT,
   readEventsWithBackfill,
   writeEventsWithTimestamp,
   registerGlobalOutgoingSyncHandler
@@ -1391,7 +1393,118 @@ export class GoogleCalendarService {
 
   // ─── Mapping campi App ↔ Google ────────────────────────────────────────────
 
-  /** App EventDetail → Google Calendar v3 Event (solo campi base). */
+  /** 📝 Legge il formato note salvato in GcalSettings LS (se esiste) oppure
+   *  ritorna DEFAULT_NOTE_FORMAT. Utile per UI anteprima e per _toGoogleEvent.
+   *  Garantisce backward compat anche se l'utente non ha mai salvato niente. */
+  resolveNoteFormatOrDefault(overrideSettings?: GcalSettings | null): GoogleNoteFormat {
+    try {
+      const settings = overrideSettings ?? this.ls.getGcalSettings() ?? {};
+      if (settings && settings.noteFormat && typeof settings.noteFormat === 'object') {
+        return { ...DEFAULT_NOTE_FORMAT, ...(settings.noteFormat as GoogleNoteFormat) };
+      }
+    } catch { /* ignora, ritorna default */ }
+    return { ...DEFAULT_NOTE_FORMAT };
+  }
+
+  /** 📝 Costruisce la stringa che andrà nel campo `description` Google Calendar
+   *  a partire dal formato 11 checkbox scelto dall'utente.
+   *  Salta automaticamente le righe con dati vuoti/zero per non appesantire.
+   *  Ritorna stringa vuota se non c'è nessuna informazione da mostrare. */
+  buildGoogleDescriptionFromFormat(e: EventDetail, fmt: GoogleNoteFormat): string {
+    if (!e) return '';
+    const lines: string[] = [];
+
+    // 📅 Data + orari
+    if (fmt.includeTimes) {
+      const prettyDate = e.date
+        ? new Intl.DateTimeFormat('it-IT', {
+            weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+          }).format(new Date(e.date + 'T00:00:00'))
+        : '';
+      const orari: string[] = [];
+      if (e.timeStart) orari.push(e.timeStart);
+      if (e.timeEnd)   orari.push(e.timeEnd);
+      const orariStr = orari.length === 2 ? `${orari[0]} → ${orari[1]}` : orari[0] ?? '';
+      const parts = [prettyDate, orariStr].filter(Boolean);
+      if (parts.length) lines.push(`📅 ${parts.join(' · ')}`);
+    }
+
+    // 🎭 Teatro / Locale
+    if (fmt.includeVenue && e.venue?.trim()) {
+      lines.push(`🎭 ${e.venue.trim()}`);
+    }
+
+    // 📍 Indirizzo
+    if (fmt.includeAddress && e.address?.trim()) {
+      lines.push(`📍 ${e.address.trim()}`);
+    }
+
+    // 🎶 Tipo evento + Stato
+    const tp: string[] = [];
+    if (fmt.includeType && e.type) {
+      const tmap: Record<EventDetail['type'], string> = {
+        concert: 'Concerto',
+        lesson: 'Lezione',
+        dj_set: 'DJ Set',
+        rehearsal: 'Prova',
+        other: 'Altro',
+      };
+      tp.push(`🎶 ${tmap[e.type] ?? e.type}`);
+    }
+    if (fmt.includeStatus && e.status) {
+      const smap: Record<EventDetail['status'], string> = {
+        confirmed: '✅ Confermato',
+        pending: '⏳ In attesa',
+        cancelled: '❌ Annullato',
+      };
+      tp.push(smap[e.status] ?? e.status);
+    }
+    if (tp.length) lines.push(tp.join(' · '));
+
+    // 👥 Musicisti (Band)
+    if (fmt.includeBand && Array.isArray(e.band) && e.band.length > 0) {
+      const memb = e.band
+        .map((m) => `${m.name || ''}${m.instrument ? ` (${m.instrument})` : ''}`)
+        .filter((x) => x.length > 0);
+      if (memb.length) lines.push(`👥 Musicisti: ${memb.join(', ')}`);
+    }
+
+    // 💰 Compensi
+    const feeLine: string[] = [];
+    if (fmt.includeGrossFee && typeof e.grossFee === 'number' && e.grossFee > 0) {
+      feeLine.push(`Lordo: ${new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(e.grossFee)}`);
+    }
+    if (fmt.includeNetFee && typeof e.netFee === 'number' && e.netFee > 0) {
+      feeLine.push(`Netto: ${new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(e.netFee)}`);
+    }
+    if (feeLine.length) {
+      lines.push(`💰 ${feeLine.join(' · ')}`);
+    }
+    if (fmt.includeCompensoType && e.compensoType) {
+      const cmap: Record<string, string> = {
+        fuori_fattura: '🍀 Fuori fattura',
+        in_fattura: '📄 In fattura',
+      };
+      lines.push(`   ${cmap[e.compensoType] ?? e.compensoType}`);
+    }
+
+    // 📝 Note libere evento
+    if (fmt.includeNotes && e.notes?.trim()) {
+      lines.push('');
+      lines.push(`📝 Note: ${e.notes.trim()}`);
+    }
+
+    // 🎵 Footer Musicista Manager (default off)
+    if (fmt.includeAppFooter) {
+      lines.push('');
+      lines.push(`🎵 Musicista Manager · Evento #${e.id?.slice(0, 8) ?? ''}`);
+    }
+
+    return lines.join('\n').trim();
+  }
+
+  /** App EventDetail → Google Calendar v3 Event (solo campi base).
+   *  Ora description usa il formato check-boxabile definito in GcalSettings.noteFormat. */
   private _toGoogleEvent(local: EventDetail): Record<string, unknown> {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Rome';
     const start = this._buildGoogleDateTime(local.date, local.timeStart, tz);
@@ -1403,7 +1516,8 @@ export class GoogleCalendarService {
       start,
       end,
     };
-    if (local.notes) payload['description'] = local.notes;
+    const description = this.buildGoogleDescriptionFromFormat(local, this.resolveNoteFormatOrDefault());
+    if (description && description.length > 0) payload['description'] = description;
     if (local.status === 'cancelled') payload['status'] = 'cancelled';
     return payload;
   }

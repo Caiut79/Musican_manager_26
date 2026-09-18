@@ -661,6 +661,168 @@ export class GoogleCalendarService {
     }
   }
 
+  /* ═══════════════════════════════════════════════════════════════════════
+   *  🔴 DEDUPLICAZIONE GOOGLE REMOTA
+   *  Analizza eventi sul TUO Google Calendar (non locale!) e cancella
+   *  le N copie SUPERFLUE mantenendo 1 solo per gruppo (stessa data + titolo norm).
+   *  Backup automatico in localStorage PRIMA di DELETE.
+   * ═══════════════════════════════════════════════════════════════════════ */
+
+  /** Normalizzazione titolo per chiave raggruppamento duplicati remoti */
+  private _normTitleDedup(s: string): string {
+    return `${s || ''}`
+      .trim().toLowerCase()
+      .replace(/[\s\-_.,;:'"!?()\[\]{}]/g, '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  /** 📊 Analizza eventi SUL GOOGLE REMOTO e restituisce gruppi duplicati.
+   *  (NON tocca il locale, non tocca Google — solo READ). */
+  public async analyzeGoogleDuplicatesRemote(): Promise<{
+    totalEvents: number; groups: number; superflui: number;
+    samples: Array<{ date: string; title: string; count: number; keptId: string; deleteIds: string[] }>;
+  }> {
+    const empty = { totalEvents: 0, groups: 0, superflui: 0, samples: [] };
+    try {
+      const { token, calendarId } = await this._ensureContext();
+      if (!token || !calendarId) return empty;
+
+      const syncCutoff = this.syncStartDateSnapshot;
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Rome';
+      const timeMinIso = this._toIsoWithTimezone(syncCutoff, '00:00', tz);
+
+      const params = new URLSearchParams({
+        maxResults: '2500',
+        singleEvents: 'true',
+        orderBy: 'startTime',
+        showDeleted: 'false',
+        timeMin: timeMinIso,
+      });
+      const url = `${this.GOOGLE_API_BASE}/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`;
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (resp.status === 401) { this._onUnauthorized(); return empty; }
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        console.error(`[GCal Dedup Google] list HTTP ${resp.status}:`, text);
+        return empty;
+      }
+      const json = await resp.json();
+      const items: any[] = Array.isArray(json?.items) ? json.items : [];
+
+      // Raggruppamento per chiave = data ISO (YYYY-MM-DD) | titolo_norm
+      type GrpItem = { id: string; title: string; updatedAtNum: number; raw: any };
+      const groupsMap = new Map<string, GrpItem[]>();
+
+      for (const gEv of items) {
+        const parsed = this._parseGoogleDateTime(gEv.start, gEv.end);
+        if (!parsed.date) continue;
+        const key = `${parsed.date}|${this._normTitleDedup(gEv.summary || '(senza titolo)')}`;
+        const el: GrpItem = {
+          id: `${gEv.id}`,
+          title: gEv.summary || '(senza titolo)',
+          updatedAtNum: gEv.updated ? new Date(gEv.updated).getTime() : 0,
+          raw: gEv,
+        };
+        if (!groupsMap.has(key)) groupsMap.set(key, []);
+        groupsMap.get(key)!.push(el);
+      }
+
+      let totalGroups = 0;
+      let superflui = 0;
+      const samples: any[] = [];
+
+      for (const [key, arr] of groupsMap.entries()) {
+        if (arr.length <= 1) continue;
+        totalGroups++;
+        const extra = arr.length - 1;
+        superflui += extra;
+
+        // Ordiniamo: updatedAt DESC (primo = più recente = teniamo)
+        arr.sort((a, b) => b.updatedAtNum - a.updatedAtNum);
+        const kept = arr[0];
+        const toDelete = arr.slice(1).map((x) => x.id);
+
+        const [datePart] = key.split('|');
+        samples.push({
+          date: datePart,
+          title: kept.title,
+          count: arr.length,
+          keptId: kept.id,
+          deleteIds: toDelete,
+        });
+      }
+      samples.sort((a, b) => b.count - a.count);
+
+      return {
+        totalEvents: items.length,
+        groups: totalGroups,
+        superflui,
+        samples: samples.slice(0, 10),
+      };
+    } catch (err) {
+      console.error('[GCal Dedup Google] analyze fallito:', err);
+      return { totalEvents: 0, groups: 0, superflui: 0, samples: [] };
+    }
+  }
+
+  /** 🗑️ Esegue DELETE REMOTO su Google Calendar delle copie superflue.
+   *  MANTIENE 1 evento per gruppo (il più recente). Prima salva backup. */
+  public async deduplicateGoogleEventsRemote(): Promise<{ deleted: number; kept: number; backupKey: string; error?: string }> {
+    try {
+      const analysis = await this.analyzeGoogleDuplicatesRemote();
+      if (analysis.superflui <= 0) {
+        return { deleted: 0, kept: analysis.groups, backupKey: '' };
+      }
+      const { token, calendarId } = await this._ensureContext();
+      if (!token || !calendarId) return { deleted: 0, kept: 0, backupKey: '', error: 'Google non connesso' };
+
+      // 1️⃣ BACKUP preventivo in LS di TUTTI i gruppi analizzati (per rollback)
+      const stamp = `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}_${Date.now()}`;
+      const backupKey = `mm_backup_pre_gcal_dedup_${stamp}`;
+      try {
+        localStorage.setItem(backupKey, JSON.stringify({
+          createdAt: new Date().toISOString(),
+          groups: analysis.samples.map((s) => ({
+            date: s.date, title: s.title, count: s.count,
+            keptGoogleId: s.keptId, deletedGoogleIds: s.deleteIds,
+          })),
+          note: 'Backup pre-deduplicazione Google — chiavi event da eliminare',
+        }));
+      } catch (e) { console.warn('[GCal Dedup] backup LS non salvato:', e); }
+
+      let deleted = 0;
+      let kept = 0;
+
+      for (const group of analysis.samples) {
+        kept++;
+        for (const gId of group.deleteIds) {
+          try {
+            const delUrl = `${this.GOOGLE_API_BASE}/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(gId)}`;
+            const resp = await fetch(delUrl, {
+              method: 'DELETE',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (resp.status === 401) { this._onUnauthorized(); throw new Error('Unauthorized'); }
+            if (resp.status === 404 || resp.status === 410) { deleted++; continue; }
+            if (!resp.ok) {
+              const txt = await resp.text().catch(() => '');
+              console.warn(`[GCal Dedup] DELETE fallito id=${gId} HTTP ${resp.status}:`, txt);
+              continue;
+            }
+            deleted++;
+          } catch (err) {
+            console.error(`[GCal Dedup] DELETE errore id=${gId}:`, err);
+          }
+        }
+      }
+
+      return { deleted, kept, backupKey };
+    } catch (err) {
+      console.error('[GCal Dedup] deduplicazione fallita:', err);
+      return { deleted: 0, kept: 0, backupKey: '', error: String(err) };
+    }
+  }
+
   /**
    * Importa eventi da Google Calendar → locale applicando Last-Write-Wins.
    * Vince la modifica più recente (local.updatedAt vs google.updated).

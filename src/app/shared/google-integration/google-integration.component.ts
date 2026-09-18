@@ -69,7 +69,7 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     } catch { /* ignora */ }
   }
 
-  // --- Campi per DEDUPLICAZIONE EVENTI (stesso titolo + data + tipo) ---
+  // --- Campi per DEDUPLICAZIONE EVENTI LOCALE (stesso titolo + data + tipo) ---
   dedupRunning = false;
   dedupMessage = '';
   dedupMessageIsError = false;
@@ -92,6 +92,34 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
     } catch { /* ignora */ }
   }
 
+  // --- Campi per DEDUPLICAZIONE GOOGLE REMOTA (sul Google Calendar) ---
+  gDedupLoading = false;
+  gDedupRunning = false;
+  gDedupMessage = '';
+  gDedupMessageIsError = false;
+  gDedupStats = {
+    totalEvents: 0,
+    groups: 0,
+    superflui: 0,
+    samples: [] as { date: string; title: string; count: number; keptId: string; deleteIds: string[] }[],
+    lastDeleted: 0,
+    lastKept: 0,
+    lastBackupKey: '',
+  };
+  private async _refreshGDedupStats(): Promise<void> {
+    if (this.state !== 'connected') return;
+    this.gDedupLoading = true;
+    try {
+      const s = await this.gcal.analyzeGoogleDuplicatesRemote();
+      this.gDedupStats.totalEvents = s.totalEvents;
+      this.gDedupStats.groups = s.groups;
+      this.gDedupStats.superflui = s.superflui;
+      this.gDedupStats.samples = s.samples.slice(0, 8);
+    } catch { /* ignora */ } finally {
+      this.gDedupLoading = false;
+    }
+  }
+
   private readonly _destroy$ = new Subject<void>();
 
   constructor(private readonly gcal: GoogleCalendarService) {}
@@ -112,6 +140,7 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
           if (!this.selectedCalendarId) {
             void this.loadCalendarsAndAutoPick();
           }
+          void this._refreshGDedupStats();
         } else if (s === 'not_configured') {
           this.showInstructions = true;
           if (!this.clientIdInput) this.clientIdInput = this.gcal.savedClientId;
@@ -394,6 +423,87 @@ export class GoogleIntegrationComponent implements OnInit, OnDestroy {
       this.dedupMessageIsError = true;
     } finally {
       this.dedupRunning = false;
+    }
+  }
+
+  // ─── Azione: DEDUPLICAZIONE GOOGLE CALENDAR REMOTO ────────────────────────
+  public async onDedupGoogleCalendarClick(): Promise<void> {
+    if (this.gDedupRunning) return;
+    await this._refreshGDedupStats();
+    if (this.state !== 'connected') {
+      this.gDedupMessage = '⚠️ Connetti prima Google Calendar per eseguire deduplica remota.';
+      this.gDedupMessageIsError = true;
+      return;
+    }
+    this.gDedupRunning = true;
+    this.gDedupMessage = '';
+    this.gDedupMessageIsError = false;
+
+    const superflui = this.gDedupStats.superflui;
+    if (superflui === 0) {
+      this.gDedupMessage = '✅ Perfetto! Nessun duplicato sul tuo Google Calendar.';
+      this.gDedupRunning = false;
+      return;
+    }
+
+    // Conferma (1a fase) — riassunto numeri
+    const msg1 =
+      `🚨 STAI PER ELIMINARE EVENTI DA GOOGLE CALENDAR (REALE, NON SOLO LOCALE)!\n\n` +
+      `📦  Eventi Google (da cutoff): ${this.gDedupStats.totalEvents}\n` +
+      `🔍  Gruppi duplicati:             ${this.gDedupStats.groups}\n` +
+      `🗑️  Copie SUPERFLUE (da CANCELLARE):  ${superflui}\n` +
+      `✅  Eventi mantenuti (1 per grp):   ${this.gDedupStats.groups}\n\n` +
+      (this.gDedupStats.samples.length ?
+        `💡 Esempi di gruppi trovati:\n${this.gDedupStats.samples.slice(0, 4).map((g: any) =>
+          `   · ${g.date}: "${g.title.slice(0, 40)}" ×${g.count}`).join('\n')}\n\n` : '') +
+      `💾  BACKUP AUTOMATICO in localStorage prima delle API DELETE.\n` +
+      `🎯  Per ogni gruppo terrò l'evento più RECENTE (ultimo aggiornamento).\n\n` +
+      `Confermi di voler procedere? (CONFERMA 1/2)`;
+
+    const ok1 = window.confirm(msg1);
+    if (!ok1) { this.gDedupRunning = false; return; }
+
+    // Conferma 2a fase — enfasi IRREVERSIBILITA' Google
+    const msg2 =
+      `⚠️  ULTIMA CONFERMA — AZIONE DIRETTAMENTE SU GOOGLE.\n\n` +
+      `Eliminerò ${superflui} copie duplicate DAL TUO GOOGLE CALENDAR.\n` +
+      `Questo rimuoverà anche le notifiche push sui tuoi dispositivi per quelle copie.\n\n` +
+      `👉 Se invece vuoi prima controllare manualmente su google.com/calendar,\n` +
+      `   clicca ANNULLA e poi torna qui quando sei pronto.\n\n` +
+      `PROSEGUIRE? (CONFERMA 2/2)`;
+
+    const ok2 = window.confirm(msg2);
+    if (!ok2) { this.gDedupRunning = false; return; }
+
+    try {
+      const r = await this.gcal.deduplicateGoogleEventsRemote();
+      if (r.error) {
+        this.gDedupMessage = `❌ Errore: ${r.error}`;
+        this.gDedupMessageIsError = true;
+        this.gDedupRunning = false;
+        return;
+      }
+      this.gDedupStats.lastDeleted = r.deleted;
+      this.gDedupStats.lastKept = r.kept;
+      this.gDedupStats.lastBackupKey = r.backupKey;
+      await this._refreshGDedupStats();
+
+      if (r.deleted > 0) {
+        this.gDedupMessage =
+          `✅ Google Calendar pulito! ` +
+          `❌ Eliminati ${r.deleted} duplicati (${r.kept} gruppi mantenuti). ` +
+          `💾 Backup chiavi ID: ${(r.backupKey || 'creato').slice(0, 48)}... ` +
+          `👉 Ora vai in Dashboard, clicca Sincronizza Google, poi F5 per aggiornare i badge!`;
+      } else {
+        this.gDedupMessage = '⚠️ Nessun evento rimosso da Google (backup salvato comunque).';
+        this.gDedupMessageIsError = true;
+      }
+    } catch (err) {
+      console.error('[UI] dedup Google fallito:', err);
+      this.gDedupMessage = `❌ Errore durante deduplica Google: ${String(err)}`;
+      this.gDedupMessageIsError = true;
+    } finally {
+      this.gDedupRunning = false;
     }
   }
 

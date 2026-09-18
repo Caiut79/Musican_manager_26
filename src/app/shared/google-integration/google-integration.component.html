@@ -424,59 +424,134 @@
       </div>
     </header>
 
-    <div class="gcal-wipe-stats">
-      <div class="gcal-wipe-stat stat-total">
-        <span class="ws-num">{{ dedupStats.totalEvents }}</span>
-        <span class="ws-label">📦 Eventi TOTALI</span>
+    <!-- 🔵 BLOCCO A: DEDUPLICAZIONE LOCALE (solo App, bypass sync Google) -->
+    <div class="dedup-block dedup-local-block">
+      <h4 class="dedup-block-title">💾 Locale — Memoria Browser</h4>
+      <div class="gcal-dedup-stats">
+        <div class="gcal-dedup-stat stat-total">
+          <span class="ds-num">{{ dedupStats.totalEvents }}</span>
+          <span class="ds-label">📦 Eventi totali (App)</span>
+        </div>
+        <div class="gcal-dedup-stat stat-groups" [class.has-dup]="dedupStats.duplicateGroupsCount > 0">
+          <span class="ds-num">{{ dedupStats.duplicateGroupsCount }}</span>
+          <span class="ds-label">🔍 Gruppi duplicati</span>
+        </div>
+        <div class="gcal-dedup-stat stat-superf" [class.has-dup]="dedupStats.duplicateEventsCount > 0">
+          <span class="ds-num">{{ dedupStats.duplicateEventsCount }}</span>
+          <span class="ds-label">🗑️ Superflui (N-1)</span>
+        </div>
       </div>
-      <div class="gcal-wipe-stat stat-past" [class.has-dup]="dedupStats.duplicateGroupsCount > 0">
-        <span class="ws-num">{{ dedupStats.duplicateGroupsCount }}</span>
-        <span class="ws-label">🔍 GRUPPI duplicati</span>
+
+      <ng-container *ngIf="dedupStats.groups.length > 0 && !dedupMessage">
+        <div class="gcal-dedup-samples">
+          <p class="gcal-dedup-samples-title">💡 Anteprima gruppi (solo app):</p>
+          <ul class="gcal-dedup-samples-list">
+            <li class="gcal-dedup-sample" *ngFor="let g of dedupStats.groups">
+              <span class="dup-count" [class.dup-low]="g.count <= 2">×{{ g.count }}</span>
+              <span class="dup-date">{{ g.date }}</span>
+              <span class="dup-title">{{ g.sampleTitle.length > 48 ? g.sampleTitle.slice(0, 48) + '…' : g.sampleTitle }}</span>
+            </li>
+          </ul>
+        </div>
+      </ng-container>
+
+      <div class="gcal-dedup-actions">
+        <button
+          type="button"
+          class="btn-primary btn-dedup-events"
+          (click)="onDedupEventsClick()"
+          [disabled]="dedupRunning || dedupStats.duplicateEventsCount === 0">
+          {{ dedupRunning ? 'Deduplica App in corso…' : '🧬  Deduplica SOLO App locale' }}
+        </button>
+        <p class="gcal-dedup-hint" *ngIf="dedupStats.duplicateEventsCount === 0 && !dedupMessage">
+          🎉 Nessun duplicato locale. Il calendario in App è già pulito.
+        </p>
+        <p class="gcal-dedup-hint" *ngIf="dedupStats.duplicateEventsCount > 0 && !dedupMessage">
+          💾 Backup automatico <code>mm_backup_pre_dedup_*</code>. &nbsp;🔒&nbsp; Google Calendar
+          <strong>NON viene toccato</strong>.
+        </p>
       </div>
-      <div class="gcal-wipe-stat stat-future" [class.has-dup]="dedupStats.duplicateEventsCount > 0">
-        <span class="ws-num">{{ dedupStats.duplicateEventsCount }}</span>
-        <span class="ws-label">🗑️  SUPERFLUI (N-1)</span>
-      </div>
+
+      <p class="gcal-message"
+         *ngIf="dedupMessage"
+         [class.is-error]="dedupMessageIsError"
+         style="white-space: pre-line;">
+        {{ dedupMessage }}
+      </p>
     </div>
 
-    <!-- Esempi primi 4 gruppi duplicati (diagnostica utente) -->
-    <ng-container *ngIf="dedupStats.groups.length > 0 && !dedupMessage">
-      <div class="gcal-dedup-samples">
-        <p class="gcal-dedup-samples-title">💡 Anteprima gruppi che verranno riuniti:</p>
-        <ul class="gcal-dedup-list">
-          <li *ngFor="let g of dedupStats.groups">
-            <span class="dup-count">×{{ g.count }}</span>
-            <span class="dup-date">{{ g.date }}</span>
-            <span class="dup-title">{{ g.sampleTitle.length > 48 ? g.sampleTitle.slice(0, 48) + '…' : g.sampleTitle }}</span>
-          </li>
-        </ul>
-      </div>
-    </ng-container>
-
-    <div class="gcal-wipe-actions">
-      <button
-        type="button"
-        class="btn-primary btn-wipe-past"
-        style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border-color: #1e40af;"
-        (click)="onDedupEventsClick()"
-        [disabled]="dedupRunning || dedupStats.duplicateEventsCount === 0">
-        {{ dedupRunning ? 'Deduplicazione in corso…' : '🧬  Deduplica eventi (Solo dalla App!)' }}
-      </button>
-      <p class="gcal-wipe-hint" *ngIf="dedupStats.duplicateEventsCount === 0 && !dedupMessage">
-        🎉 Nessun evento duplicato. Il tuo calendario è già pulito.
-      </p>
-      <p class="gcal-wipe-hint" *ngIf="dedupStats.duplicateEventsCount > 0 && !dedupMessage">
-        💾 Prima della deduplicazione viene creato un <strong>backup completo</strong> in
-        <code>localStorage</code> chiave <code>mm_backup_pre_dedup_*</code> (ripristinabile in 1 clic).
-        &nbsp;🔒&nbsp; Google Calendar <strong>NON viene toccato</strong>.
-      </p>
+    <!-- ➖ Separatore visuale tra Locale e Remoto -->
+    <div class="dedup-block-separator" aria-hidden="true">
+      <span class="dedup-sep-dot"></span>
+      <span class="dedup-sep-text">ANCHE SU GOOGLE</span>
+      <span class="dedup-sep-dot"></span>
     </div>
 
-    <p class="gcal-message"
-       *ngIf="dedupMessage"
-       [class.is-error]="dedupMessageIsError"
-       style="white-space: pre-line;">
-      {{ dedupMessage }}
-    </p>
+    <!-- 🔴 BLOCCO B: DEDUPLICAZIONE GOOGLE REMOTA (cancella eventi su Google!) -->
+    <div class="dedup-block dedup-remote-block">
+      <h4 class="dedup-block-title dedup-block-title-red">🌐 Remoto — Tuo Google Calendar</h4>
+      <div class="gcal-dedup-stats gcal-dedup-stats-remote">
+        <div class="gcal-dedup-stat stat-total">
+          <span class="ds-num">{{ gDedupStats.totalEvents }}</span>
+          <span class="ds-label">📦 Eventi su Google</span>
+        </div>
+        <div class="gcal-dedup-stat stat-groups" [class.has-dup]="gDedupStats.groups > 0">
+          <span class="ds-num">{{ gDedupStats.groups }}</span>
+          <span class="ds-label">🔍 Gruppi duplicati</span>
+        </div>
+        <div class="gcal-dedup-stat stat-superf" [class.has-dup]="gDedupStats.superflui > 0">
+          <span class="ds-num">{{ gDedupStats.superflui }}</span>
+          <span class="ds-label">🗑️ Copie da ELIMINARE</span>
+        </div>
+      </div>
+
+      <ng-container *ngIf="gDedupStats.samples.length > 0 && !gDedupMessage">
+        <div class="gcal-dedup-samples">
+          <p class="gcal-dedup-samples-title">🔥 Gruppi duplicati trovati su Google:</p>
+          <ul class="gcal-dedup-samples-list">
+            <li class="gcal-dedup-sample" *ngFor="let g of gDedupStats.samples">
+              <span class="dup-count">×{{ g.count }}</span>
+              <span class="dup-date">{{ g.date }}</span>
+              <span class="dup-title">{{ g.title.length > 48 ? g.title.slice(0, 48) + '…' : g.title }}</span>
+            </li>
+          </ul>
+        </div>
+      </ng-container>
+
+      <div class="gcal-dedup-actions">
+        <button
+          type="button"
+          class="btn-primary btn-dedup-google"
+          (click)="onDedupGoogleCalendarClick()"
+          [disabled]="gDedupLoading || gDedupRunning || state !== 'connected' || gDedupStats.superflui === 0">
+          <span *ngIf="gDedupLoading">🔍 Analisi Google in corso…</span>
+          <span *ngIf="gDedupRunning">🗑️ Cancellazione copie su Google…</span>
+          <span *ngIf="!gDedupLoading && !gDedupRunning">
+            🔥 Elimina duplicati DA GOOGLE CALENDAR (rimuove {{ gDedupStats.superflui }} copie)
+          </span>
+        </button>
+        <p class="gcal-dedup-hint gcal-dedup-hint-red"
+           *ngIf="gDedupStats.superflui === 0 && !gDedupMessage && state === 'connected'">
+          ✅ Ottimo! Nessun duplicato sul tuo Google Calendar.
+        </p>
+        <p class="gcal-dedup-hint gcal-dedup-hint-red"
+           *ngIf="state !== 'connected' && !gDedupMessage">
+          ⚠️ Prima connetti Google Calendar (pulsante in alto) per analizzare duplicati sul remoto.
+        </p>
+        <p class="gcal-dedup-hint gcal-dedup-hint-red" *ngIf="gDedupStats.superflui > 0 && !gDedupMessage">
+          🚨 <strong>AZIONE REALE SU GOOGLE!</strong> Elimina le N-1 copie su Google Calendar.
+          &nbsp;💾&nbsp; Backup automatico <code>mm_backup_pre_gcal_dedup_*</code>
+          con tutti gli googleEventId cancellati. &nbsp;🎯&nbsp; Mantengo l'evento
+          <strong>più recente</strong> (ultimo aggiornamento).
+        </p>
+      </div>
+
+      <p class="gcal-message"
+         *ngIf="gDedupMessage"
+         [class.is-error]="gDedupMessageIsError"
+         style="white-space: pre-line;">
+        {{ gDedupMessage }}
+      </p>
+    </div>
   </div>
 </section>

@@ -1051,3 +1051,182 @@
   }
 }
 
+/* ─── Blocchi separati Locale / Remoto ─────────────────────────────────── */
+.dedup-block {
+  padding: 18px 16px 16px;
+  border-radius: 16px;
+  border: 1.5px solid;
+  margin-bottom: 8px;
+}
+.dedup-block.dedup-local-block {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: #bfdbfe;
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.07);
+}
+.dedup-block.dedup-remote-block {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: #fecaca;
+  box-shadow: 0 8px 22px rgba(239, 68, 68, 0.12);
+}
+
+.dedup-block-title {
+  margin: 0 0 14px 0;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #dbeafe;
+  color: #1e3a8a;
+  border: 1.2px solid #93c5fd;
+}
+.dedup-block-title.dedup-block-title-red {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fca5a5;
+}
+
+/* Separatore visuale tra i due blocchi */
+.dedup-block-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 26px 0 22px 0;
+}
+.dedup-sep-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #94a3b8;
+  opacity: 0.65;
+}
+.dedup-sep-text {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #64748b;
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.6);
+  border: 1.2px solid #cbd5e1;
+}
+
+/* ─── Pulsante DEDUPLICA GOOGLE (rosso fuoco) ──────────────────────────── */
+.btn-dedup-google {
+  min-height: 46px !important; /* WCAG */
+  padding: 10px 20px !important;
+  border-radius: 14px !important;
+  font-weight: 700 !important;
+  font-size: 15px !important;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 60%, #b91c1c 100%) !important;
+  color: #ffffff !important;
+  border: 1.5px solid #991b1b !important;
+  box-shadow: 0 10px 28px rgba(239, 68, 68, 0.32),
+              inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: transform 0.1s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  cursor: pointer;
+  width: 100%;
+  letter-spacing: 0.2px;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.btn-dedup-google:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  box-shadow: 0 14px 32px rgba(239, 68, 68, 0.4),
+              inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.btn-dedup-google:active:not(:disabled) {
+  transform: translateY(0px);
+  filter: brightness(0.97);
+}
+.btn-dedup-google:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%) !important;
+  border-color: #475569 !important;
+}
+
+/* Hint specifico blocco remoto (rosso) */
+.gcal-dedup-hint-red {
+  background: #fff1f2 !important;
+  border-color: #fecaca !important;
+  color: #991b1b !important;
+  font-weight: 600 !important;
+}
+.gcal-dedup-hint-red code {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  color: #991b1b !important;
+}
+
+/* Statistiche blocco remoto (leggermente più calde) */
+.gcal-dedup-stats-remote .gcal-dedup-stat {
+  border-color: #fecaca;
+}
+.gcal-dedup-stats-remote .stat-groups .ds-num { color: #c2410c !important; }
+.gcal-dedup-stats-remote .stat-superf .ds-num { color: #b91c1c !important; }
+
+/* Tema scuro blocchi separati */
+@media (prefers-color-scheme: dark) {
+  .dedup-block.dedup-local-block {
+    background: rgba(15, 23, 42, 0.55);
+    border-color: #1e40af;
+  }
+  .dedup-block.dedup-remote-block {
+    background: rgba(15, 23, 42, 0.5);
+    border-color: #7f1d1d;
+    box-shadow: 0 8px 22px rgba(127, 29, 29, 0.3);
+  }
+  .dedup-block-title {
+    background: #1e3a8a;
+    color: #bfdbfe;
+    border-color: #2563eb;
+  }
+  .dedup-block-title.dedup-block-title-red {
+    background: #7f1d1d;
+    color: #fecaca;
+    border-color: #b91c1c;
+  }
+  .dedup-sep-text {
+    background: rgba(15, 23, 42, 0.6);
+    border-color: #334155;
+    color: #94a3b8;
+  }
+  .gcal-dedup-hint-red {
+    background: #450a0a !important;
+    border-color: #7f1d1d !important;
+    color: #fecaca !important;
+  }
+  .gcal-dedup-hint-red code {
+    background: #7f1d1d !important;
+    border-color: #991b1b !important;
+    color: #fecaca !important;
+  }
+  .gcal-dedup-stats-remote .gcal-dedup-stat {
+    border-color: #334155;
+  }
+  .gcal-dedup-stats-remote .stat-groups .ds-num { color: #fb923c !important; }
+  .gcal-dedup-stats-remote .stat-superf .ds-num { color: #f87171 !important; }
+}
+
+/* Responsive mobile per blocchi separati */
+@media (max-width: 820px) {
+  .dedup-block {
+    padding: 14px 12px 12px;
+  }
+  .dedup-block-title {
+    font-size: 13px;
+    letter-spacing: 0.01em;
+  }
+  .btn-dedup-google {
+    font-size: 14px !important;
+  }
+}
+

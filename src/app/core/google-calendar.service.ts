@@ -12,6 +12,9 @@ import {
   registerGlobalOutgoingSyncHandler,
   tombstoneAddDeletedGoogleEventId,
   tombstoneHasDeletedGoogleEventId,
+  tombstoneHasDeletedTitleDate,
+  normalizeTitleForDedup,
+  eventDateTitleDedupKey,
 } from './local-storage.service';
 
 // ─── Tipi interni ────────────────────────────────────────────────────────────
@@ -1060,7 +1063,8 @@ export class GoogleCalendarService {
       );
 
       // Contatori diagnostici distribuzione match (console DevTools)
-      const diag = { nMatchGoogleId: 0, nFuzzy: 0, nNewEvent: 0, nCancelled: 0, nNoId: 0, nTombstoned: 0 };
+      const diag = { nMatchGoogleId: 0, nFuzzy: 0, nNewEvent: 0, nCancelled: 0, nNoId: 0,
+        nTombstonedId: 0, nTombstonedTD: 0, nIntraLoopDedup: 0 };
 
       // ⭐ FIX ANTI-DUPLICATI #3: Set degli eventi locali GIA' "consumati" (linkati
       // a un evento Google nel ciclo attuale) — evitiamo che 8 eventi Google identici
@@ -1069,6 +1073,13 @@ export class GoogleCalendarService {
       const consumedLocalIds = new Set<string>();
       // Id degli eventi locali che hanno gia' un googleEventId (link stabile 1:1)
       local.forEach(ev => { if (ev.googleEventId) consumedLocalIds.add(ev.id); });
+      // 🆕 Chiavi dedup date|title_norm GIA' processate in questo loop import
+      //     → evitiamo N copie dello STESSO evento in un solo sync (N duplicati orizzontali)
+      const seenDedupKeys = new Set<string>();
+      local.forEach(ev => {
+        const k = eventDateTitleDedupKey(ev.date, ev.title);
+        if (k) seenDedupKeys.add(k);
+      });
 
       const now = new Date().toISOString();
       for (const gEv of items) {
@@ -1077,13 +1088,10 @@ export class GoogleCalendarService {
 
         // ════════════════════════════════════════════════════════════════════
         // 🧟  FIX TOMBSTONE (IMPEDISCE RI-IMPORTAZIONE EVENTI CANCELLATI!)
-        // Se questo GoogleEventId è stato marcato come CANCELLATO VOLUTAMENTE
-        // dall'utente (Set TOMBSTONE, persistito in LS) → SKIPPA ASSOLUTAMENTE.
-        // Anche se Google ce l'ha ancora: l'utente lo ha rimosso in app,
-        // non deve tornare, mai!
+        //     LIVELLO 1: googleEventId specifico (eventi creati dall'app).
         // ════════════════════════════════════════════════════════════════════
-        if (this._tombstoneHas(gEv.id)) {
-          diag.nTombstoned++;
+        if (tombstoneHasDeletedGoogleEventId(gEv.id)) {
+          diag.nTombstonedId++;
           report.skipped++;
           continue;
         }
@@ -1094,6 +1102,27 @@ export class GoogleCalendarService {
           nSkippedCutoff++;
           continue;
         }
+
+        // ════════════════════════════════════════════════════════════════════
+        // 🧟  FIX TOMBSTONE LIVELLO 2: chiave data|titolo_norm (PER EVENTI
+        //     SENZA googleEventId = importati/creati direttamente su Google).
+        // ════════════════════════════════════════════════════════════════════
+        const gTitle = gEv.summary ?? '';
+        const gKeyTD = eventDateTitleDedupKey(parsedDate.date, gTitle);
+        if (tombstoneHasDeletedTitleDate(parsedDate.date, gTitle)) {
+          diag.nTombstonedTD++;
+          report.skipped++;
+          continue;
+        }
+        // 🟡 BARRIERA INTRA-LOOP: se in QUESTO ciclo di import abbiamo GIA'
+        //    visto/importato/linkato un evento con STESSA data + STESSO titolo
+        //    → SKIP! (evita 8 duplicati da 8 eventi Google identici).
+        if (gKeyTD && seenDedupKeys.has(gKeyTD)) {
+          diag.nIntraLoopDedup++;
+          report.skipped++;
+          continue;
+        }
+        if (gKeyTD) seenDedupKeys.add(gKeyTD);
 
         const googleTs = gEv.updated ?? now;
         const existing = byGoogleId.get(gEv.id);
@@ -1114,11 +1143,15 @@ export class GoogleCalendarService {
           }
         } else {
           const nuovo = this._fromGoogleEvent(gEv, now);
-          // ⭐ FIX #3b: passa consumedLocalIds a _findFuzzyMatch cosi' non riprende eventi locali gia' linkati!
-          const dup = this._findFuzzyMatch(local, nuovo, consumedLocalIds);
+          // 🟡 IMPORTANTE FIX DEDUP ORIZZONTALE: workingLocal include ANCHE
+          //    tutti gli eventi creati in precedenza nello STESSO ciclo import
+          //    (altrimenti local[] = array iniziale, non vede i nuovi creati
+          //    → lo stesso fuzzy-match non trova "cugini" creati 3 righe prima!)
+          const workingLocal = Array.from(localIdx.values());
+          const dup = this._findFuzzyMatch(workingLocal, nuovo, consumedLocalIds);
           if (dup) {
             diag.nFuzzy++;
-            consumedLocalIds.add(dup.id); // IMPORTANTE: marca come PRESO adesso! (prossimo evento Google non lo riuscira')
+            consumedLocalIds.add(dup.id); // IMPORTANTE: marca come PRESO adesso!
             const localTs = dup.updatedAt || dup.createdAt || now;
             if (googleTs > localTs) {
               const merged = this._mergeBaseFields(dup, gEv);
@@ -1145,19 +1178,47 @@ export class GoogleCalendarService {
         }
       }
 
+      // ══════════════════════════════════════════════════════════════════════
+      // 🛡️  DEDUP FINALE DI FINE CICLO (double safety net)
+      //     Elimina copie duplicate se 2 eventi finiscono per caso con:
+      //     (A) stesso googleEventId, oppure
+      //     (B) stessa data+titolo_norm (nel caso eventi creati manualmente)
+      // ══════════════════════════════════════════════════════════════════════
+      const finalSeenGIds = new Map<string, string>();
+      const finalSeenTDKeys = new Map<string, string>();
+      const survivors: EventDetail[] = [];
+      let dedupFinalGId = 0;
+      let dedupFinalTD = 0;
+      for (const ev of Array.from(localIdx.values())) {
+        if (ev.googleEventId) {
+          if (finalSeenGIds.has(ev.googleEventId)) { dedupFinalGId++; continue; }
+          finalSeenGIds.set(ev.googleEventId, ev.id);
+        }
+        const tdK = eventDateTitleDedupKey(ev.date, ev.title);
+        if (tdK) {
+          if (finalSeenTDKeys.has(tdK)) { dedupFinalTD++; continue; }
+          finalSeenTDKeys.set(tdK, ev.id);
+        }
+        survivors.push(ev);
+      }
+      localIdx.clear();
+      survivors.forEach(e => localIdx.set(e.id, e));
+
       // Persisto e aggiorno stato + notifico viste
       const tutti = Array.from(localIdx.values());
       writeEventsWithTimestamp(tutti);
 
       // Stampa diagnostica: quanti eventi matchano in modo esatto / fuzzy / nuovi
       console.info('[GCal] Diagnostica distribuzione match:',
-        `match-per-google-id=${diag.nMatchGoogleId}`,
-        `(già linkati 1:1, nessun nuovo import)`,
+        `match-per-google-id=${diag.nMatchGoogleId} (già linkati 1:1)`,
         `| fuzzy-match-associazione=${diag.nFuzzy}`,
         `| eventi-nuovi-da-google=${diag.nNewEvent}`,
         `| cancellati-google=${diag.nCancelled}`,
         `| senza-id=${diag.nNoId}`,
-        `| 🧟SKIP-tombstone-eventi-cancellati-definitivamente=${diag.nTombstoned}`,
+        `| 🧟SKIP-tomb-gId=${diag.nTombstonedId}`,
+        `🧟SKIP-tomb-date/title=${diag.nTombstonedTD}`,
+        `| 💣anti-dup-intra-loop=${diag.nIntraLoopDedup}`,
+        `| dedup-finale-gId=${dedupFinalGId} date/title=${dedupFinalTD}`,
         `| in-locale-con-googleEventId=${byGoogleId.size}/${tutti.length}`);
 
       const nowStamp = new Date().toISOString();

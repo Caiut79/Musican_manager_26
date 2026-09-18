@@ -889,14 +889,32 @@ export type OutgoingSyncDeltaFn = (prev: EventDetail[], next: EventDetail[]) => 
 
 let _globalOutgoingSyncFn: OutgoingSyncDeltaFn | null = null;
 
-// 🧟 Chiave tombstone condivisa (stesso ID GCal che NON DEVONO MAI essere ri-importati.
+// 🧟 Chiave tombstone condivisa (stesso ID GCal che NON DEVONO MAI essere ri-importati).
 // Nota: la logica di lookup/addizione è SPEDITA in 3 posti diversi (defense in depth):
-//   (A) [MORIRE persistEventsWithSync — entry point SEMPRE (LS 100% — GARANTITO
+//   (A) [ENTRY POINT] persistEventsWithSync — entry point SEMPRE (LS 100% — GARANTITO)
 //   (B) deleteGoogleEvent funzione syncOutgoingDelta delete loop — ridondanza
 //   (C) service.deleteGoogleEvent — ultima barriera prima di fetch API
 const GCAL_TOMBSTONE_KEY = 'mm_gcal_tombstones_deleted_ids';
+// 🧟 Chiave TOMBSTONE COMPOSITA (x eventi senza googleEventId: creati direttamente su Google,
+//      oppure importati prima di questo fix). Formato `${ev.date}|${norm(ev.title)}`.
+const GCAL_TOMBSTONE_KEY_TITLEDATE = 'mm_gcal_tombstones_deleted_titledate';
 
-/** 🧟 Carica TOMBSTONE dal LS come Set<string> (helper condiviso tra LS service e GCal service. */
+/** Normalizzazione titolo (IDENTICA a _findFuzzyMatch in google-calendar.service.ts
+ *  — NO DRIFT, DEVE ESSERE UGUALE per non rompere match chiave composita). */
+export function normalizeTitleForDedup(title: string | null | undefined): string {
+  if (!title || typeof title !== 'string') return '';
+  return title
+    .toLowerCase()
+    .replace(/[\s\-_.,;:'"!?()\[\]{}]/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+/** Chiave composita per dedup (data ISO YYYY-MM-DD + titolo normalizzato). */
+export function eventDateTitleDedupKey(date: string | null | undefined, title: string | null | undefined): string {
+  const d = (date && typeof date === 'string') ? date : '';
+  return `${d}|${normalizeTitleForDedup(title)}`;
+}
+
+/** Carica TOMBSTONE ID Google dal LS come Set<string> (helper condiviso). */
 function _tombstoneLoadIds(): Set<string> {
   try {
     const raw = localStorage.getItem(GCAL_TOMBSTONE_KEY);
@@ -925,6 +943,38 @@ export function tombstoneAddDeletedGoogleEventId(gId: string | null | undefined)
 export function tombstoneHasDeletedGoogleEventId(gId: string | null | undefined): boolean {
   if (!gId || typeof gId !== 'string') return false;
   return _tombstoneLoadIds().has(gId);
+}
+
+// ─── Tombstone composito data|titolo_norm (per eventi SENZA googleEventId) ───
+function _tombstoneTDLoadKeys(): Set<string> {
+  try {
+    const raw = localStorage.getItem(GCAL_TOMBSTONE_KEY_TITLEDATE);
+    if (!raw) return new Set<string>();
+    const p = JSON.parse(raw);
+    const set = new Set<string>();
+    if (Array.isArray(p)) p.forEach(k => { if (typeof k === 'string') set.add(k); });
+    return set;
+  } catch { return new Set<string>(); }
+}
+function _tombstoneTDPersistKeys(set: Set<string>): void {
+  try { localStorage.setItem(GCAL_TOMBSTONE_KEY_TITLEDATE, JSON.stringify(Array.from(set))); }
+  catch { /* ignora */ }
+}
+/** Aggiungi chiave `${date}|${norm(title)}` ai tombstone compositi x eventi no gId. */
+export function tombstoneAddDeletedTitleDate(date: string | null | undefined, title: string | null | undefined): boolean {
+  const k = eventDateTitleDedupKey(date, title);
+  if (!k || k.length < 12) return false; // almeno data (10char) + 2 char titolo
+  const set = _tombstoneTDLoadKeys();
+  if (set.has(k)) return false;
+  set.add(k);
+  _tombstoneTDPersistKeys(set);
+  return true;
+}
+/** Skip tassativo import: chiave data|titolo_norm è marcata cancellata? */
+export function tombstoneHasDeletedTitleDate(date: string | null | undefined, title: string | null | undefined): boolean {
+  const k = eventDateTitleDedupKey(date, title);
+  if (!k) return false;
+  return _tombstoneTDLoadKeys().has(k);
 }
 
 /**
@@ -962,17 +1012,24 @@ export function persistEventsWithSync(events: EventDetail[]): EventDetail[] {
     previous.forEach(ev => { if (ev && ev.id) prevMap.set(ev.id, ev); });
     const writtenIds = new Set<string>();
     written.forEach(ev => { if (ev && ev.id) writtenIds.add(ev.id); });
-    let tombCount = 0;
+    let tombIdCount = 0;
+    let tombTDCount = 0;
     for (const prevEv of prevMap.values()) {
       if (writtenIds.has(prevEv.id)) continue;
       // evento CANCELLATO dall'utente
       if (prevEv.googleEventId) {
-        const added = tombstoneAddDeletedGoogleEventId(prevEv.googleEventId);
-        if (added) tombCount++;
+        const addedId = tombstoneAddDeletedGoogleEventId(prevEv.googleEventId);
+        if (addedId) tombIdCount++;
       }
+      // 🆕 Sempre, ANCHE (soprattutto!) SE NON C'È googleEventId
+      //     → (evento importato da Google, creato manualmente sul calendario,
+      //        o esisteva prima dell'integrazione).
+      //     Chiave data|titolo_norm.
+      const addedTD = tombstoneAddDeletedTitleDate(prevEv.date, prevEv.title);
+      if (addedTD) tombTDCount++;
     }
-    if (tombCount > 0) {
-      console.info(`%c[persistEventsWithSync] 🧟 ${tombCount} ID Google aggiunti a TOMBSTONE (cancellazioni utente)`,
+    if (tombIdCount + tombTDCount > 0) {
+      console.info(`%c[persistEventsWithSync] 🧟 ${tombIdCount} ID Google + ${tombTDCount} date/title aggiunti a TOMBSTONE (cancellazioni utente)`,
         'background:#7c3aed;color:#fff;padding:2px 8px;border-radius:4px;');
     }
   } catch (err) {

@@ -159,6 +159,123 @@ export class GoogleCalendarService {
 
   private readonly GOOGLE_API_BASE = 'https://www.googleapis.com';
   private readonly GSI_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  🔁  RETRY AUTOMATICO + THROTTLE + CIRCUIT BREAKER rateLimit 403
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // Problema Claudio: HTTP 403 "Rate Limit Exceeded" in cascata durante
+  // le modifiche/cancellazioni. Soluzione:
+  //
+  // 1) fetchWithRetry(): wrapper fetch con backoff esponenziale 2s → 4s → 8s
+  //    (max 3 tentativi) per TUTTE le chiamate API CRUD
+  // 2) throttle 180ms: aspetta 180ms TRA OGNI CHIAMATA, cosi' non saturiamo
+  //    il bucket di Google Calendar (~100 richieste / 100s utente)
+  // 3) Circuit breaker: ogni volta che tocchiamo rateLimit 403,
+  //    aspettiamo 30 secondi PRIMA di fare qualsiasi altra chiamata
+  //    (break tutte le code pending)
+  // 4) Tombstone GUARIGIONE: deleteGoogleEvent ANCHE SE FALLISCE aggiorna
+  //    il Set tombstone (lo aggiungiamo comunque ai marcati cancellati)
+  //
+  private _throttleLastCall = 0;
+  private readonly THROTTLE_MS = 180;
+  private _circuitBreakUntil = 0;
+  private readonly CIRCUIT_BREAK_MS_403 = 30_000; // 30 sec pausa se 403 rateLimit
+
+  /** Attesa sincrona (delay). */
+  private _sleep(ms: number): Promise<void> {
+    return new Promise<void>((res) => setTimeout(res, ms));
+  }
+
+  /** Controlla circuit breaker e throttle PRIMA di ogni fetch. */
+  private async _throttleAndCircuitCheck(label: string): Promise<void> {
+    // 1) Circuit breaker: se siamo in pausa per rate limit, aspettiamo!
+    const now = Date.now();
+    if (this._circuitBreakUntil > now) {
+      const waitMs = this._circuitBreakUntil - now + 100;
+      console.warn(`[GCal] 🔌 CIRCUIT BREAKER: rateLimitExceeded prima, pausa ${Math.round(waitMs / 1000)}s prima di "${label}"...`);
+      await this._sleep(waitMs);
+    }
+    // 2) Throttle: attendi quanto basta tra le chiamate
+    const throttleDiff = this._throttleLastCall + this.THROTTLE_MS - Date.now();
+    if (throttleDiff > 0) await this._sleep(throttleDiff);
+    this._throttleLastCall = Date.now();
+  }
+
+  /** Wrapper fetch universale:
+   *  - max 3 tentativi con backoff 2s, 4s, 8s su 429/500/502/503/504
+   *  - su 403 rateLimit → attiva circuit breaker 30s (ritenta comunque un ultimo tentativo)
+   *  - su 401 chiama _onUnauthorized
+   *  - applica throttle 180ms tra chiamate
+   *  Ritorna Response (chiamante decide come parsare). */
+  private async _fetchWithRetry(url: string, opts: RequestInit, label: string): Promise<Response> {
+    let lastErr: unknown = null;
+    let lastResp: Response | null = null;
+    const maxTries = 3;
+    for (let attempt = 0; attempt < maxTries; attempt++) {
+      // Throttle + circuit breaker prima di OGNI tentativo
+      await this._throttleAndCircuitCheck(`${label} [${attempt + 1}/${maxTries}]`);
+      try {
+        lastResp = await fetch(url, opts);
+        // Gestisci 401 Unauthorized (token scaduto / invalido)
+        if (lastResp.status === 401) {
+          this._onUnauthorized();
+          return lastResp;
+        }
+        // 403 Forbidden → controlla se è rateLimit
+        if (lastResp.status === 403) {
+          const body = await lastResp.clone().text().catch(() => '');
+          const isRateLimit =
+            /rateLimitExceeded/i.test(body) ||
+            /quotaExceeded/i.test(body) ||
+            /usageLimits/i.test(body) ||
+            /User Rate Limit Exceeded/i.test(body);
+          if (isRateLimit) {
+            // ATTIVA CIRCUIT BREAKER
+            this._circuitBreakUntil = Date.now() + this.CIRCUIT_BREAK_MS_403;
+            console.warn(`[GCal] ⚠️ rateLimitExceeded "${label}" [${attempt + 1}/${maxTries}] → circuit breaker: pausa ${Math.round(this.CIRCUIT_BREAK_MS_403 / 1000)}s`);
+          }
+          // Se è ultimo tentativo → ritorna errore 403 al chiamante
+          if (attempt === maxTries - 1) return lastResp;
+          // Altrimenti: fallback nel catch del delay per backoff
+          const delay = 2000 * Math.pow(2, attempt);
+          console.info(`[GCal] Retry ${attempt + 2}/${maxTries} "${label}" tra ${delay / 1000}s per 403 rateLimit...`);
+          await this._sleep(delay);
+          continue;
+        }
+        // 429 Too Many Requests: ritenta con delay + backoff
+        if (lastResp.status === 429) {
+          if (attempt === maxTries - 1) return lastResp;
+          const delay = 2000 * Math.pow(2, attempt);
+          console.info(`[GCal] 429 TooMany "${label}" [${attempt + 1}/${maxTries}] → retry tra ${delay / 1000}s...`);
+          await this._sleep(delay);
+          continue;
+        }
+        // 5xx server error: ritenta
+        if (lastResp.status >= 500 && lastResp.status < 600) {
+          if (attempt === maxTries - 1) return lastResp;
+          const delay = 2000 * Math.pow(2, attempt);
+          console.info(`[GCal] 5xx Server "${label}" [${attempt + 1}/${maxTries}] → retry tra ${delay / 1000}s...`);
+          await this._sleep(delay);
+          continue;
+        }
+        // OK (200-299), 304, 404 Not Found, 400 validation → ritorna
+        return lastResp;
+      } catch (err) {
+        // Errore rete fetch (offline / DNS / CORS). Retry con backoff.
+        lastErr = err;
+        if (attempt === maxTries - 1) {
+          throw err;
+        }
+        const delay = 2000 * Math.pow(2, attempt);
+        console.warn(`[GCal] Fetch errore rete "${label}" [${attempt + 1}/${maxTries}]: ${String(err)} → retry tra ${delay / 1000}s...`);
+        await this._sleep(delay);
+      }
+    }
+    // Fine tentativi: se abbiamo una response la ritorniamo al chiamante, altrimenti throw
+    if (lastResp) return lastResp;
+    throw lastErr || new Error(`_fetchWithRetry fallito senza risposta per "${label}"`);
+  }
   /** Scope OAuth: `calendar` (ampio) permette sia:
    *  - leggere la lista calendari /users/me/calendarList
    *  - CRUD eventi calendar/v3/events
@@ -560,7 +677,7 @@ export class GoogleCalendarService {
 
     const payload = this._toGoogleEvent(local);
     try {
-      const resp = await fetch(
+      const resp = await this._fetchWithRetry(
         `${this.GOOGLE_API_BASE}/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
         {
           method: 'POST',
@@ -569,9 +686,10 @@ export class GoogleCalendarService {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
-        }
+        },
+        `createEvent "${local.title || '(senza titolo)'}"`
       );
-      if (resp.status === 401) { this._onUnauthorized(); return ''; }
+      if (resp.status === 401) { return ''; }
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
         console.error(`[GCal] createEvent HTTP ${resp.status}:`, text);
@@ -580,7 +698,7 @@ export class GoogleCalendarService {
       const json = await resp.json();
       return `${json?.id || ''}`;
     } catch (err) {
-      console.error('[GCal] createEvent fallito:', err);
+      console.error('[GCal] createEvent fallito (dopo retry):', err);
       return '';
     }
   }
@@ -615,8 +733,12 @@ export class GoogleCalendarService {
         showDeleted: 'false',
       });
       const url = `${this.GOOGLE_API_BASE}/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`;
-      const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (resp.status === 401) { this._onUnauthorized(); return ''; }
+      const resp = await this._fetchWithRetry(
+        url,
+        { headers: { Authorization: `Bearer ${token}` } },
+        `findExisting title="${title.slice(0, 40)}" date=${dateStr}`
+      );
+      if (resp.status === 401) { return ''; }
       if (!resp.ok) return '';
       const json = await resp.json();
       const items: any[] = Array.isArray(json?.items) ? json.items : [];
@@ -663,7 +785,7 @@ export class GoogleCalendarService {
 
     const payload = this._toGoogleEvent(local);
     try {
-      const resp = await fetch(
+      const resp = await this._fetchWithRetry(
         `${this.GOOGLE_API_BASE}/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(gId)}`,
         {
           method: 'PUT',
@@ -672,44 +794,62 @@ export class GoogleCalendarService {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
-        }
+        },
+        `updateEvent "${local.title || '(no title)'}" (${gId.slice(0, 12)}...)`
       );
-      if (resp.status === 401) { this._onUnauthorized(); return; }
+      if (resp.status === 401) { return; }
       if (resp.status === 404 || resp.status === 410) {
-        // Evento non esiste più su Google: lo ricreo al prossimo push.
-        console.warn('[GCal] updateEvent evento non trovato (404/410):', gId);
+        console.warn('[GCal] updateEvent evento non trovato (404/410) — verrà ricreato al prossimo push:', gId);
         return;
       }
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
-        console.error(`[GCal] updateEvent HTTP ${resp.status}:`, text);
+        console.error(`[GCal] updateEvent HTTP ${resp.status} DOPO 3 RETRY:`, text);
       }
     } catch (err) {
-      console.error('[GCal] updateEvent fallito:', err);
+      console.error('[GCal] updateEvent fallito (dopo retry):', err);
     }
   }
 
   public async deleteGoogleEvent(local: EventDetail): Promise<void> {
     const gId = local.googleEventId;
     if (!gId) return;
+    // ══════════════════════════════════════════════════════════════════════
+    // 🧟  AGGIUNGI SEMPRE AL TOMBSTONE — PRIMA ANCORA DI FARE LA DELETE!
+    // Anche se:
+    //  (a) DELETE fallirà per 403 rateLimit / offline / rete
+    //  (b) DELETE è skippata per il cutoff syncOutgoingDelta
+    //  (c) DELETE restituisce qualsiasi errore
+    // L'utente ha CANCELLATO VOLUTAMENTE in locale: NON DEVE RIAPPARIRE MAI.
+    // ══════════════════════════════════════════════════════════════════════
+    this._tombstoneAdd(gId);
+
     const { token, calendarId } = await this._ensureContext();
     if (!token || !calendarId) return;
     try {
-      const resp = await fetch(
+      const resp = await this._fetchWithRetry(
         `${this.GOOGLE_API_BASE}/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(gId)}`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
+        `deleteEvent "${local.title || '(no title)'}" (${gId.slice(0, 12)}...)`
       );
-      if (resp.status === 401) { this._onUnauthorized(); return; }
-      if (resp.status === 404 || resp.status === 410) return; // già cancellato
+      if (resp.status === 401) { return; }
+      if (resp.status === 404 || resp.status === 410) {
+        return; // già cancellato su Google: OK
+      }
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
-        console.error(`[GCal] deleteEvent HTTP ${resp.status}:`, text);
+        console.error(`[GCal] deleteEvent HTTP ${resp.status} DOPO 3 RETRY:`, text,
+          '→ Ma è già marcato tombstone, non tornerà in app. ✅');
+        // Non throware: è sufficiente che il tombstone ci sia!
       }
     } catch (err) {
-      console.error('[GCal] deleteEvent fallito:', err);
+      // Offline, DNS error... l'evento rimarrà su Google ma il TOMBSTONE già settato
+      // impedirà la ri-importazione la prossima volta che torniamo online.
+      console.warn(`[GCal] deleteEvent fallito rete/dopo retry:`, String(err),
+        '→ ID già marcato come 🧟tombstone, non ritornerà in app. ✅');
     }
   }
 

@@ -109,6 +109,54 @@ export class GoogleCalendarService {
   /** Preventivi per refresh loop infiniti: contatore refresh falliti consecutivi */
   private _consecutiveRefreshFails = 0;
 
+  // 🧟  Set TOMBSTONE: googleEventId di eventi che l'utente ha CANCELLATO VOLUTAMENTE
+  //      nell'app. Questi ID NON DEVONO MAI essere RE-importati da Google,
+  //      anche se per qualche motivo (cutoff, offline, API fallita ecc.)
+  //      esistessero ancora sul calendario Google remoto.
+  //      Persistiti in: localStorage chiave `mm_gcal_tombstones_deleted_ids`.
+  /** Chiave LS per il tombstone set */
+  private readonly TOMBSTONE_KEY = 'mm_gcal_tombstones_deleted_ids';
+  /** Set in memoria caricato all'avvio */
+  private readonly _deletedGoogleEventIds = new Set<string>();
+  /** true = almeno un ID aggiunto durante questa sessione e non salvato */
+  private _tombstoneDirty = false;
+
+  /** Carica in memoria il Set TOMBSTONE da LS. */
+  private _tombstoneLoad(): void {
+    try {
+      const raw = localStorage.getItem(this.TOMBSTONE_KEY);
+      if (!raw) { this._deletedGoogleEventIds.clear(); return; }
+      const parsed = JSON.parse(raw);
+      const ids = Array.isArray(parsed) ? parsed : [];
+      this._deletedGoogleEventIds.clear();
+      ids.forEach((id) => { if (typeof id === 'string') this._deletedGoogleEventIds.add(id); });
+    } catch { this._deletedGoogleEventIds.clear(); }
+  }
+  /** Persiste il TOMBSTONE su LS (write-through: chiamato spesso quando si aggiunge un id). */
+  private _tombstonePersist(): void {
+    try {
+      const arr = Array.from(this._deletedGoogleEventIds);
+      localStorage.setItem(this.TOMBSTONE_KEY, JSON.stringify(arr));
+      this._tombstoneDirty = false;
+    } catch (err) {
+      console.error('[GCal Tombstone] Persist fallito:', err);
+    }
+  }
+  /** Aggiunge un googleEventId ai tombstone + persiste. */
+  private _tombstoneAdd(googleEventId: string | null | undefined): boolean {
+    if (!googleEventId || typeof googleEventId !== 'string') return false;
+    if (this._deletedGoogleEventIds.has(googleEventId)) return false;
+    this._deletedGoogleEventIds.add(googleEventId);
+    this._tombstoneDirty = true;
+    this._tombstonePersist();
+    return true;
+  }
+  /** Verifica se un googleEventId è marcato come cancellato definitivamente. */
+  private _tombstoneHas(googleEventId: string | null | undefined): boolean {
+    if (!googleEventId || typeof googleEventId !== 'string') return false;
+    return this._deletedGoogleEventIds.has(googleEventId);
+  }
+
   private readonly GOOGLE_API_BASE = 'https://www.googleapis.com';
   private readonly GSI_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
   /** Scope OAuth: `calendar` (ampio) permette sia:
@@ -118,6 +166,8 @@ export class GoogleCalendarService {
   private readonly REQUIRED_SCOPE = 'https://www.googleapis.com/auth/calendar';
 
   constructor(private readonly ls: LocalStorageService) {
+    // 1) Carica subito il TOMBSTONE in memoria (PRIMA di qualsiasi sync!)
+    this._tombstoneLoad();
     // All'avvio carico la configurazione e lo stato salvato
     void this._initFromStorage();
     // Registro hook globale per push automatico app -> Google dopo scritture
@@ -895,7 +945,7 @@ export class GoogleCalendarService {
       );
 
       // Contatori diagnostici distribuzione match (console DevTools)
-      const diag = { nMatchGoogleId: 0, nFuzzy: 0, nNewEvent: 0, nCancelled: 0, nNoId: 0 };
+      const diag = { nMatchGoogleId: 0, nFuzzy: 0, nNewEvent: 0, nCancelled: 0, nNoId: 0, nTombstoned: 0 };
 
       // ⭐ FIX ANTI-DUPLICATI #3: Set degli eventi locali GIA' "consumati" (linkati
       // a un evento Google nel ciclo attuale) — evitiamo che 8 eventi Google identici
@@ -909,6 +959,19 @@ export class GoogleCalendarService {
       for (const gEv of items) {
         if (!gEv.id) { diag.nNoId++; report.skipped++; continue; }
         if (gEv.status === 'cancelled') { diag.nCancelled++; report.skipped++; continue; }
+
+        // ════════════════════════════════════════════════════════════════════
+        // 🧟  FIX TOMBSTONE (IMPEDISCE RI-IMPORTAZIONE EVENTI CANCELLATI!)
+        // Se questo GoogleEventId è stato marcato come CANCELLATO VOLUTAMENTE
+        // dall'utente (Set TOMBSTONE, persistito in LS) → SKIPPA ASSOLUTAMENTE.
+        // Anche se Google ce l'ha ancora: l'utente lo ha rimosso in app,
+        // non deve tornare, mai!
+        // ════════════════════════════════════════════════════════════════════
+        if (this._tombstoneHas(gEv.id)) {
+          diag.nTombstoned++;
+          report.skipped++;
+          continue;
+        }
 
         // ⭐ CUTOFF CHECK PRIMA DI TUTTO IL RESTO!
         const parsedDate = this._parseGoogleDateTime(gEv.start, gEv.end);
@@ -979,6 +1042,7 @@ export class GoogleCalendarService {
         `| eventi-nuovi-da-google=${diag.nNewEvent}`,
         `| cancellati-google=${diag.nCancelled}`,
         `| senza-id=${diag.nNoId}`,
+        `| 🧟SKIP-tombstone-eventi-cancellati-definitivamente=${diag.nTombstoned}`,
         `| in-locale-con-googleEventId=${byGoogleId.size}/${tutti.length}`);
 
       const nowStamp = new Date().toISOString();
@@ -1778,9 +1842,19 @@ export class GoogleCalendarService {
 
       // --- Eventi da CANCELLARE: in prev ma non in next, con googleEventId ---
       const toDelete: EventDetail[] = [];
+      let nTomb = 0; // quanti ID aggiunti ai tombstone (debug sampling)
       for (const [id, prevEv] of prevMap) {
         if (nextMap.has(id)) continue;
         if (prevEv.googleEventId) {
+          // =========================================================
+          // 🧟  FIX TOMBSTONE (sempre, senza eccezioni):
+          // Anche se saltiamo DELETE per CUTOFF o per altri motivi,
+          // l'utente ha RIMOSSO volutamente l'evento dall'app!
+          // Quindi aggiungiamo googleEventId al TOMBSTONE SET
+          // PER SEMPRE: non lo ri-importerà MAI da Google.
+          // =========================================================
+          const added = this._tombstoneAdd(prevEv.googleEventId);
+          if (added) nTomb++;
           // ⭐ CUTOFF: se l'evento cancellato è precedente a syncCutoff →
           // NON inviamo la DELETE a Google (non ci interessa sincronizzare il
           // passato). Anche se è stato rimosso in locale, lasciamolo su Google.
@@ -1792,6 +1866,8 @@ export class GoogleCalendarService {
         nDel++;
         void this.deleteGoogleEvent(ev).catch((e) => {
           console.error(`[GCal push delete fallito ${ev.id}]:`, e);
+          // Nota: l'evento è GIA' nel TOMBSTONE, quindi anche se la DELETE API
+          // fallisce non lo ri-importiamo al prossimo sync import. OK!
         });
       }
 
@@ -1865,12 +1941,13 @@ export class GoogleCalendarService {
         });
       }
 
-      if (nDel + nCre + nUpd + nCutSkip > 0) {
+      if (nDel + nCre + nUpd + nCutSkip + nTomb > 0) {
         const lines = [];
         if (nCre) lines.push(`crea=${nCre}`);
         if (nUpd) lines.push(`aggiorna=${nUpd}`);
         if (nDel) lines.push(`cancella=${nDel}`);
         if (nCutSkip) lines.push(`🟡SKIP_cutoff_<${syncCutoff}=${nCutSkip} (non invio a Google: dati storici)`);
+        if (nTomb) lines.push(`🧟TOMBSTONE=${nTomb} (ID Google marcati come "cancellati definitivamente")`);
         console.info(`[GCal push] delta triggerato: ${lines.join(' ')} calendario=${calendarId}`);
       }
     } catch (err) {
